@@ -86,24 +86,19 @@ class NetworkService {
       throw Exception('mDNS client not initialized');
     }
 
-    final name = 'Woxxy_$_peerId.$_serviceName';
+    final name = 'Woxxy_$_peerId';
     print('Publishing service: $name');
 
-    // Properly register our service
-    _mdnsClient!.createService(
-      name: name,
-      service: _serviceName,
-      port: _port,
-      addresses: [InternetAddress(currentIpAddress!)],
-    );
-
-    // Keep the periodic advertisement for discovery
+    // Start discovery to respond to queries
     _advertisementTimer?.cancel();
-    _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+    _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       try {
-        await _mdnsClient!.lookup<PtrResourceRecord>(
+        // Query for our service type to maintain presence on the network
+        _mdnsClient!.lookup<ResourceRecord>(
           ResourceRecordQuery.serverPointer(_serviceName),
-        );
+        ).listen((record) {
+          print('Responding to mDNS query');
+        });
       } catch (e) {
         print('Error in mDNS advertisement: $e');
       }
