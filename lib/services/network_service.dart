@@ -22,10 +22,10 @@ class NetworkService {
 
   Future<void> start() async {
     try {
-      currentIpAddress = await NetworkInfo().getWifiIP();
+      // Try to get IP address with multiple fallback methods
+      currentIpAddress = await _getIpAddress();
       print('Starting network service on IP: $currentIpAddress');
 
-      // Initialize mDNS client first
       _mdnsClient = MDnsClient();
       await _mdnsClient!.start();
       print('mDNS client started successfully');
@@ -39,6 +39,42 @@ class NetworkService {
     }
   }
 
+  Future<String> _getIpAddress() async {
+    try {
+      // Try network_info_plus first
+      final wifiIP = await NetworkInfo().getWifiIP();
+      if (wifiIP != null && wifiIP.isNotEmpty) {
+        return wifiIP;
+      }
+    } catch (e) {
+      print('NetworkInfo failed: $e');
+    }
+
+    // Fallback: Find network interfaces manually
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+
+      for (var interface in interfaces) {
+        // Skip loopback
+        if (interface.name.toLowerCase().contains('lo')) continue;
+
+        for (var addr in interface.addresses) {
+          // Look for a non-loopback IPv4 address
+          if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+            return addr.address;
+          }
+        }
+      }
+    } catch (e) {
+      print('Network interface lookup failed: $e');
+    }
+
+    throw Exception('Could not determine IP address');
+  }
+
   Future<void> _startServer() async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _port);
     _server!.listen(_handleConnection);
@@ -50,14 +86,24 @@ class NetworkService {
       throw Exception('mDNS client not initialized');
     }
 
+    final name = 'Woxxy_$_peerId.$_serviceName';
+    print('Publishing service: $name');
+
+    // Properly register our service
+    _mdnsClient!.createService(
+      name: name,
+      service: _serviceName,
+      port: _port,
+      addresses: [InternetAddress(currentIpAddress!)],
+    );
+
+    // Keep the periodic advertisement for discovery
     _advertisementTimer?.cancel();
     _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      print('Broadcasting mDNS advertisement...');
       try {
         await _mdnsClient!.lookup<PtrResourceRecord>(
           ResourceRecordQuery.serverPointer(_serviceName),
         );
-        print('Published mDNS query successfully');
       } catch (e) {
         print('Error in mDNS advertisement: $e');
       }
