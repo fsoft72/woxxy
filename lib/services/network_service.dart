@@ -226,20 +226,6 @@ class NetworkService {
     }
   }
 
-  Future<void> sendFile(String filePath, Peer receiver) async {
-    final file = File(filePath);
-    final socket = await Socket.connect(receiver.address, receiver.port);
-
-    final metadata = {
-      'name': file.path.split('/').last,
-      'size': await file.length(),
-    };
-
-    socket.write(json.encode(metadata) + '\n');
-    await socket.addStream(file.openRead());
-    await socket.close();
-  }
-
   Future<String> _getDownloadsPath() async {
     if (Platform.isLinux || Platform.isMacOS) {
       final home = Platform.environment['HOME'];
@@ -252,7 +238,51 @@ class NetworkService {
     return Directory.systemTemp.path;
   }
 
+  Future<void> sendFile(String filePath, Peer receiver) async {
+    print('📤 NetworkService.sendFile() started');
+    print('📁 File path: $filePath');
+    print('👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
+
+    final file = File(filePath);
+    if (!await file.exists()) {
+      print('❌ File does not exist: $filePath');
+      throw Exception('File does not exist: $filePath');
+    }
+
+    print('📏 File size: ${await file.length()} bytes');
+
+    try {
+      print('🔌 Attempting to connect to peer...');
+      final socket = await Socket.connect(receiver.address, receiver.port);
+      print('✅ Connected to peer successfully');
+
+      final metadata = {
+        'name': file.path.split('/').last,
+        'size': await file.length(),
+      };
+      print('📋 Sending metadata: $metadata');
+
+      socket.write(json.encode(metadata) + '\n');
+      print('✅ Metadata sent');
+
+      print('📨 Starting file stream...');
+      await socket.addStream(file.openRead());
+      print('✅ File stream completed');
+
+      print('🔒 Closing connection...');
+      await socket.close();
+      print('✅ Connection closed successfully');
+
+      print('🎉 File transfer completed successfully');
+    } catch (e, stackTrace) {
+      print('❌ Error in sendFile: $e');
+      print('📑 Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
   void _handleConnection(Socket socket) async {
+    print('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
     String metadata = '';
     StreamSubscription? subscription;
     File? receiveFile;
@@ -261,40 +291,61 @@ class NetworkService {
       (data) async {
         if (receiveFile == null) {
           metadata += String.fromCharCodes(data);
+          print('📋 Received metadata chunk: $metadata');
+
           if (metadata.contains('\n')) {
+            print('📋 Complete metadata received');
             final info = json.decode(metadata.substring(0, metadata.indexOf('\n')));
+            print('📋 Parsed metadata: $info');
+
             final downloadsPath = await _getDownloadsPath();
+            print('📁 Downloads path: $downloadsPath');
+
             final dir = Directory(downloadsPath);
             if (!await dir.exists()) {
+              print('📁 Creating downloads directory');
               await dir.create(recursive: true);
             }
 
             String fileName = info['name'];
             String filePath = '${dir.path}/$fileName';
+            print('📄 Initial file path: $filePath');
 
             // Handle duplicate filenames
             int counter = 1;
             while (await File(filePath).exists()) {
+              print('⚠️ File already exists, trying alternative name');
               final extension = fileName.contains('.') ?
                 '.${fileName.split('.').last}' : '';
               final nameWithoutExt = fileName.contains('.') ?
                 fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
               fileName = '$nameWithoutExt ($counter)$extension';
               filePath = '${dir.path}/$fileName';
+              print('📄 Trying new file path: $filePath');
               counter++;
             }
 
             receiveFile = File(filePath);
             await receiveFile!.create();
+            print('📄 Created file: $filePath');
           }
         } else {
+          print('📥 Receiving data chunk: ${data.length} bytes');
           await receiveFile!.writeAsBytes(data, mode: FileMode.append);
         }
       },
       onDone: () {
+        print('✅ File transfer completed');
         if (receiveFile != null) {
+          print('📁 Final file saved at: ${receiveFile!.path}');
           _fileReceivedController.add(receiveFile!.path);
         }
+        subscription?.cancel();
+        socket.close();
+      },
+      onError: (error, stackTrace) {
+        print('❌ Error during file reception: $error');
+        print('📑 Stack trace: $stackTrace');
         subscription?.cancel();
         socket.close();
       },

@@ -105,7 +105,10 @@ class _HomePageState extends State<HomePage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => PeerDetailPage(peer: peer),
+                      builder: (context) => PeerDetailPage(
+                        peer: peer,
+                        networkService: _networkService,
+                      ),
                     ),
                   );
                 },
@@ -120,8 +123,13 @@ class _HomePageState extends State<HomePage> {
 
 class PeerDetailPage extends StatelessWidget {
   final Peer peer;
+  final NetworkService networkService; // Add network service parameter
 
-  const PeerDetailPage({super.key, required this.peer});
+  const PeerDetailPage({
+    super.key,
+    required this.peer,
+    required this.networkService, // Add to constructor
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -151,9 +159,15 @@ class PeerDetailPage extends StatelessWidget {
               child: DragTarget<String>(
                 onWillAccept: (data) => true,
                 onAccept: (filePath) async {
+                  print('📤 Starting file transfer process');
+                  print('📁 File to send: $filePath');
+                  print('👤 Sending to peer: ${peer.name} (${peer.address.address}:${peer.port})');
+
                   try {
-                    final networkService = NetworkService();
+                    print('🔄 Initiating file transfer...');
                     await networkService.sendFile(filePath, peer);
+                    print('✅ File transfer completed successfully');
+
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -161,7 +175,10 @@ class PeerDetailPage extends StatelessWidget {
                         ),
                       );
                     }
-                  } catch (e) {
+                  } catch (e, stackTrace) {
+                    print('❌ Error during file transfer: $e');
+                    print('📑 Stack trace: $stackTrace');
+
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
