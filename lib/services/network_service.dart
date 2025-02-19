@@ -87,19 +87,30 @@ class NetworkService {
     }
 
     final name = 'Woxxy_$_peerId';
-    print('Publishing service: $name');
+    final String serviceName = '$name.$_serviceName.local';
+    print('Publishing service: $serviceName');
 
-    // Start discovery to respond to queries
     _advertisementTimer?.cancel();
-    _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _advertisementTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       try {
-        // Query for our service type to maintain presence on the network
+        // Query for our service type and respond to queries
         _mdnsClient!
-            .lookup<ResourceRecord>(
+            .lookup<PtrResourceRecord>(
           ResourceRecordQuery.serverPointer(_serviceName),
         )
-            .listen((record) {
-          print('Responding to mDNS query');
+            .listen((ptr) {
+          // Send individual resource records as responses
+          _mdnsClient!.lookup<PtrResourceRecord>(
+            ResourceRecordQuery.serverPointer(_serviceName),
+          );
+
+          _mdnsClient!.lookup<SrvResourceRecord>(
+            ResourceRecordQuery.service(serviceName),
+          );
+
+          _mdnsClient!.lookup<IPAddressResourceRecord>(
+            ResourceRecordQuery.addressIPv4(name),
+          );
         });
       } catch (e) {
         print('Error in mDNS advertisement: $e');
@@ -114,7 +125,7 @@ class NetworkService {
     }
 
     try {
-      print('Looking for other Woxxy instances');
+      print('Looking for other Woxxy instances...');
 
       // Add our own peer info first
       _addPeer(Peer(
@@ -124,29 +135,45 @@ class NetworkService {
         port: _port,
       ));
 
-      await for (final PtrResourceRecord ptr in _mdnsClient!.lookup<PtrResourceRecord>(
-        ResourceRecordQuery.serverPointer(_serviceName),
-      )) {
-        print('Found PTR record: ${ptr.domainName}');
+      // Start continuous discovery
+      Timer.periodic(const Duration(seconds: 5), (_) async {
+        try {
+          // Query for PTR records
+          _mdnsClient!
+              .lookup<PtrResourceRecord>(
+            ResourceRecordQuery.serverPointer(_serviceName),
+          )
+              .listen((ptr) async {
+            print('Found PTR record: ${ptr.domainName}');
 
-        await for (final SrvResourceRecord srv in _mdnsClient!.lookup<SrvResourceRecord>(
-          ResourceRecordQuery.service(ptr.domainName),
-        )) {
-          print('Found SRV record: ${srv.target} on port ${srv.port}');
+            // Query for SRV records for this service
+            _mdnsClient!
+                .lookup<SrvResourceRecord>(
+              ResourceRecordQuery.service(ptr.domainName),
+            )
+                .listen((srv) {
+              print('Found SRV record: ${srv.target} on port ${srv.port}');
 
-          await for (final IPAddressResourceRecord ip in _mdnsClient!.lookup<IPAddressResourceRecord>(
-            ResourceRecordQuery.addressIPv4(srv.target),
-          )) {
-            print('Found IP record: ${ip.address.address}');
-            _addPeer(Peer(
-              name: ptr.domainName.split('.').first,
-              id: srv.target,
-              address: ip.address,
-              port: srv.port,
-            ));
-          }
+              // Query for IP address
+              _mdnsClient!
+                  .lookup<IPAddressResourceRecord>(
+                ResourceRecordQuery.addressIPv4(srv.target),
+              )
+                  .listen((ip) {
+                print('Found IP record: ${ip.address.address}');
+                _addPeer(Peer(
+                  name: ptr.domainName.split('.').first,
+                  id: srv.target,
+                  address: ip.address,
+                  port: srv.port,
+                ));
+              });
+            });
+          });
+        } catch (e) {
+          print('Error during discovery cycle: $e');
         }
-      }
+      });
     } catch (e) {
       print('Error in peer discovery: $e');
       print('Error details: ${e.toString()}');
