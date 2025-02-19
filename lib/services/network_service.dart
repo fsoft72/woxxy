@@ -242,6 +242,7 @@ class NetworkService {
     print('📤 NetworkService.sendFile() started');
     print('📁 File path: $filePath');
     print('👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
+    print('🔍 Current IP: $currentIpAddress');
 
     final file = File(filePath);
     if (!await file.exists()) {
@@ -249,25 +250,48 @@ class NetworkService {
       throw Exception('File does not exist: $filePath');
     }
 
-    print('📏 File size: ${await file.length()} bytes');
+    final fileSize = await file.length();
+    print('📏 File size: $fileSize bytes');
 
     try {
-      print('🔌 Attempting to connect to peer...');
-      final socket = await Socket.connect(receiver.address, receiver.port);
+      print('🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
+      final socket = await Socket.connect(
+        receiver.address,
+        receiver.port,
+      ).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          print('⏰ Connection attempt timed out');
+          throw Exception('Connection timed out');
+        },
+      );
       print('✅ Connected to peer successfully');
 
       final metadata = {
         'name': file.path.split('/').last,
-        'size': await file.length(),
+        'size': fileSize,
+        'sender': currentIpAddress,
       };
       print('📋 Sending metadata: $metadata');
 
-      socket.write(json.encode(metadata) + '\n');
-      print('✅ Metadata sent');
+      final metadataStr = json.encode(metadata) + '\n';
+      socket.write(metadataStr);
+      print('✅ Metadata sent (${metadataStr.length} bytes)');
 
       print('📨 Starting file stream...');
-      await socket.addStream(file.openRead());
-      print('✅ File stream completed');
+      final stopwatch = Stopwatch()..start();
+
+      await socket.addStream(file.openRead()).timeout(
+        Duration(seconds: (fileSize / 1024 / 100).ceil()), // 100KB/s minimum speed
+        onTimeout: () {
+          print('⏰ File transfer timed out');
+          throw Exception('File transfer timed out');
+        },
+      );
+
+      stopwatch.stop();
+      final speed = (fileSize / 1024 / stopwatch.elapsed.inSeconds).round();
+      print('✅ File stream completed in ${stopwatch.elapsed.inSeconds}s ($speed KB/s)');
 
       print('🔒 Closing connection...');
       await socket.close();
@@ -276,7 +300,7 @@ class NetworkService {
       print('🎉 File transfer completed successfully');
     } catch (e, stackTrace) {
       print('❌ Error in sendFile: $e');
-      print('📑 Stack trace: $stackTrace');
+      print('📑 Stack trace:\n$stackTrace');
       rethrow;
     }
   }
@@ -315,10 +339,9 @@ class NetworkService {
             int counter = 1;
             while (await File(filePath).exists()) {
               print('⚠️ File already exists, trying alternative name');
-              final extension = fileName.contains('.') ?
-                '.${fileName.split('.').last}' : '';
-              final nameWithoutExt = fileName.contains('.') ?
-                fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+              final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
+              final nameWithoutExt =
+                  fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
               fileName = '$nameWithoutExt ($counter)$extension';
               filePath = '${dir.path}/$fileName';
               print('📄 Trying new file path: $filePath');

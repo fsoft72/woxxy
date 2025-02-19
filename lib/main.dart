@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'services/network_service.dart';
 import 'models/peer.dart';
 
@@ -121,15 +122,22 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class PeerDetailPage extends StatelessWidget {
+class PeerDetailPage extends StatefulWidget {
   final Peer peer;
-  final NetworkService networkService; // Add network service parameter
+  final NetworkService networkService;
 
   const PeerDetailPage({
     super.key,
     required this.peer,
-    required this.networkService, // Add to constructor
+    required this.networkService,
   });
+
+  @override
+  State<PeerDetailPage> createState() => _PeerDetailPageState();
+}
+
+class _PeerDetailPageState extends State<PeerDetailPage> {
+  bool _isDragging = false;
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +147,7 @@ class PeerDetailPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(peer.name),
+        title: Text(widget.peer.name),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -151,24 +159,27 @@ class PeerDetailPage extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 16),
-            Text('Name: ${peer.name}'),
-            Text('IP Address: ${peer.address.address}'),
-            Text('Port: ${peer.port}'),
+            Text('Name: ${widget.peer.name}'),
+            Text('IP Address: ${widget.peer.address.address}'),
+            Text('Port: ${widget.peer.port}'),
             const SizedBox(height: 32),
             Expanded(
-              child: DragTarget<String>(
-                onWillAccept: (data) => true,
-                onAccept: (filePath) async {
+              child: DropTarget(
+                onDragDone: (details) async {
+                  setState(() => _isDragging = false);
+                  if (details.files.isEmpty) return;
+                  final file = details.files.first;
+
                   print('📤 Starting file transfer process');
-                  print('📁 File to send: $filePath');
-                  print('👤 Sending to peer: ${peer.name} (${peer.address.address}:${peer.port})');
+                  print('📁 File to send: ${file.path}');
+                  print('👤 Sending to peer: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
 
                   try {
                     print('🔄 Initiating file transfer...');
-                    await networkService.sendFile(filePath, peer);
+                    await widget.networkService.sendFile(file.path, widget.peer);
                     print('✅ File transfer completed successfully');
 
-                    if (context.mounted) {
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('File sent successfully'),
@@ -179,7 +190,7 @@ class PeerDetailPage extends StatelessWidget {
                     print('❌ Error during file transfer: $e');
                     print('📑 Stack trace: $stackTrace');
 
-                    if (context.mounted) {
+                    if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Error sending file: $e'),
@@ -189,31 +200,43 @@ class PeerDetailPage extends StatelessWidget {
                     }
                   }
                 },
-                builder: (context, candidateData, rejectedData) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary : Colors.grey,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.file_upload,
-                            size: 48,
-                            color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary : Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text('Drag and drop a file here to send'),
-                        ],
-                      ),
-                    ),
-                  );
+                onDragEntered: (details) {
+                  print('🎯 File drag entered');
+                  setState(() => _isDragging = true);
                 },
+                onDragExited: (details) {
+                  print('🎯 File drag exited');
+                  setState(() => _isDragging = false);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+                      width: _isDragging ? 3 : 2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    color: _isDragging ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.file_upload,
+                          size: 48,
+                          color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Drag and drop a file here to send',
+                          style: TextStyle(
+                            color: _isDragging ? Theme.of(context).colorScheme.primary : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
