@@ -94,9 +94,11 @@ class NetworkService {
     _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       try {
         // Query for our service type to maintain presence on the network
-        _mdnsClient!.lookup<ResourceRecord>(
+        _mdnsClient!
+            .lookup<ResourceRecord>(
           ResourceRecordQuery.serverPointer(_serviceName),
-        ).listen((record) {
+        )
+            .listen((record) {
           print('Responding to mDNS query');
         });
       } catch (e) {
