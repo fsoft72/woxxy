@@ -14,14 +14,29 @@ class NetworkService {
   final Map<String, Peer> _peers = {};
   ServerSocket? _server;
   Timer? _advertisementTimer;
+  String? currentIpAddress;
+  MDnsClient? _mdnsClient;
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
   List<Peer> get currentPeers => _peers.values.toList();
 
   Future<void> start() async {
-    await _startServer();
-    _startAdvertising();
-    _startDiscovery();
+    try {
+      currentIpAddress = await NetworkInfo().getWifiIP();
+      print('Starting network service on IP: $currentIpAddress');
+
+      // Initialize mDNS client first
+      _mdnsClient = MDnsClient();
+      await _mdnsClient!.start();
+      print('mDNS client started successfully');
+
+      await _startServer();
+      await _startAdvertising();
+      _startDiscovery();
+    } catch (e) {
+      print('Error starting network service: $e');
+      rethrow;
+    }
   }
 
   Future<void> _startServer() async {
@@ -29,34 +44,59 @@ class NetworkService {
     _server!.listen(_handleConnection);
   }
 
-  void _startAdvertising() {
-    final mdns = MDnsClient();
-    mdns.start();
+  Future<void> _startAdvertising() async {
+    print('Starting mDNS advertising...');
+    if (_mdnsClient == null) {
+      throw Exception('mDNS client not initialized');
+    }
 
     _advertisementTimer?.cancel();
     _advertisementTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      await mdns.lookup<PtrResourceRecord>(
-        ResourceRecordQuery.serverPointer(_serviceName),
-      );
+      print('Broadcasting mDNS advertisement...');
+      try {
+        await _mdnsClient!.lookup<PtrResourceRecord>(
+          ResourceRecordQuery.serverPointer(_serviceName),
+        );
+        print('Published mDNS query successfully');
+      } catch (e) {
+        print('Error in mDNS advertisement: $e');
+      }
     });
   }
 
   void _startDiscovery() async {
-    final mdns = MDnsClient();
-    await mdns.start();
+    print('Starting peer discovery...');
+    if (_mdnsClient == null) {
+      throw Exception('mDNS client not initialized');
+    }
 
-    await for (final PtrResourceRecord ptr in mdns.lookup<PtrResourceRecord>(
-      ResourceRecordQuery.serverPointer(_serviceName),
-    )) {
-      await for (final SrvResourceRecord srv in mdns.lookup<SrvResourceRecord>(
-        ResourceRecordQuery.service(ptr.domainName),
+    try {
+      print('Looking for other Woxxy instances');
+
+      // Add our own peer info first
+      _addPeer(Peer(
+        name: 'Woxxy_$_peerId',
+        id: _peerId,
+        address: InternetAddress(currentIpAddress!),
+        port: _port,
+      ));
+
+      await for (final PtrResourceRecord ptr in _mdnsClient!.lookup<PtrResourceRecord>(
+        ResourceRecordQuery.serverPointer(_serviceName),
       )) {
-        await for (final IPAddressResourceRecord ip in mdns.lookup<IPAddressResourceRecord>(
-          ResourceRecordQuery.addressIPv4(srv.target),
+        print('Found PTR record: ${ptr.domainName}');
+
+        await for (final SrvResourceRecord srv in _mdnsClient!.lookup<SrvResourceRecord>(
+          ResourceRecordQuery.service(ptr.domainName),
         )) {
-          if (ip.address.address != await NetworkInfo().getWifiIP()) {
+          print('Found SRV record: ${srv.target} on port ${srv.port}');
+
+          await for (final IPAddressResourceRecord ip in _mdnsClient!.lookup<IPAddressResourceRecord>(
+            ResourceRecordQuery.addressIPv4(srv.target),
+          )) {
+            print('Found IP record: ${ip.address.address}');
             _addPeer(Peer(
-              name: srv.name,
+              name: ptr.domainName.split('.').first,
               id: srv.target,
               address: ip.address,
               port: srv.port,
@@ -64,6 +104,9 @@ class NetworkService {
           }
         }
       }
+    } catch (e) {
+      print('Error in peer discovery: $e');
+      print('Error details: ${e.toString()}');
     }
   }
 
@@ -118,6 +161,7 @@ class NetworkService {
   void dispose() {
     _server?.close();
     _advertisementTimer?.cancel();
+    _mdnsClient?.stop();
     _peerController.close();
   }
 }
