@@ -1,35 +1,20 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
 import '../models/peer.dart';
-
-// Helper class to track peer status
-class _PeerStatus {
-  final Peer peer;
-  DateTime lastSeen;
-
-  _PeerStatus(this.peer) : lastSeen = DateTime.now();
-
-  void updateLastSeen() {
-    lastSeen = DateTime.now();
-  }
-
-  bool isStale() {
-    return DateTime.now().difference(lastSeen) > const Duration(seconds: 15);
-  }
-}
 
 class NetworkService {
   static const int _port = 8090;
   static const int _discoveryPort = 8091;
   static const Duration _pingInterval = Duration(seconds: 5);
   static const Duration _peerTimeout = Duration(seconds: 15);
-  // Move buffer size to class level
   static const int _bufferSize = 1024 * 32; // 32KB buffer size
 
   final String _peerId = DateTime.now().millisecondsSinceEpoch.toString();
   final _peerController = StreamController<List<Peer>>.broadcast();
+  final _fileReceivedController = StreamController<String>.broadcast();
   final Map<String, _PeerStatus> _peers = {};
   ServerSocket? _server;
   Timer? _discoveryTimer;
@@ -37,10 +22,8 @@ class NetworkService {
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
 
-  final _fileReceivedController = StreamController<String>.broadcast();
-  Stream<String> get fileReceived => _fileReceivedController.stream;
-
   Stream<List<Peer>> get peerStream => _peerController.stream;
+  Stream<String> get fileReceived => _fileReceivedController.stream;
   List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
 
   Future<void> start() async {
@@ -48,7 +31,6 @@ class NetworkService {
       currentIpAddress = await _getIpAddress();
       print('Starting network service on IP: $currentIpAddress');
 
-      // Start UDP discovery socket
       _discoverySocket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
         _discoveryPort,
@@ -71,7 +53,6 @@ class NetworkService {
 
   Future<String> _getIpAddress() async {
     try {
-      // Try network_info_plus first
       final wifiIP = await NetworkInfo().getWifiIP();
       if (wifiIP != null && wifiIP.isNotEmpty) {
         return wifiIP;
@@ -80,19 +61,14 @@ class NetworkService {
       print('NetworkInfo failed: $e');
     }
 
-    // Fallback: Find network interfaces manually
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLinkLocal: false,
       );
-
       for (var interface in interfaces) {
-        // Skip loopback
         if (interface.name.toLowerCase().contains('lo')) continue;
-
         for (var addr in interface.addresses) {
-          // Look for a non-loopback IPv4 address
           if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
             return addr.address;
           }
@@ -101,8 +77,18 @@ class NetworkService {
     } catch (e) {
       print('Network interface lookup failed: $e');
     }
-
     throw Exception('Could not determine IP address');
+  }
+
+  Future<String> _getDownloadsPath() async {
+    if (Platform.isLinux || Platform.isMacOS) {
+      final home = Platform.environment['HOME'];
+      return '$home/Downloads';
+    } else if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      return '$userProfile\\Downloads';
+    }
+    return Directory.systemTemp.path;
   }
 
   Future<void> _startServer() async {
@@ -117,7 +103,6 @@ class NetworkService {
       throw Exception('Discovery socket not initialized');
     }
 
-    // Add ourselves to the peer list
     _addPeer(Peer(
       name: 'woxxy-$_peerId',
       id: _peerId,
@@ -125,19 +110,15 @@ class NetworkService {
       port: _port,
     ));
 
-    // Start periodic discovery
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (_) {
       _broadcastDiscovery();
     });
-
-    // Initial discovery broadcast
     _broadcastDiscovery();
   }
 
   void _broadcastDiscovery() {
     try {
-      // Broadcast discovery message
       final message = utf8.encode('WOXXY_ANNOUNCE:$_peerId:$currentIpAddress:$_port');
       _discoverySocket?.send(
         message,
@@ -170,9 +151,7 @@ class NetworkService {
         final peerId = parts[1];
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
-
         if (peerId != _peerId) {
-          // Don't add ourselves
           final peer = Peer(
             name: 'woxxy-$peerId',
             id: peerId,
@@ -204,7 +183,6 @@ class NetworkService {
       }
       return false;
     });
-
     if (hasRemovals) {
       _peerController.add(currentPeers);
     }
@@ -216,28 +194,13 @@ class NetworkService {
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
     } else {
-      // Update last seen time
       _peers[peer.id]?.updateLastSeen();
-
-      // Update peer IP if changed
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
         print('Updating peer IP: ${peer.name} (${peer.address.address}:${peer.port})');
         _peers[peer.id] = _PeerStatus(peer);
         _peerController.add(currentPeers);
       }
     }
-  }
-
-  Future<String> _getDownloadsPath() async {
-    if (Platform.isLinux || Platform.isMacOS) {
-      final home = Platform.environment['HOME'];
-      return '$home/Downloads';
-    } else if (Platform.isWindows) {
-      final userProfile = Platform.environment['USERPROFILE'];
-      return '$userProfile\\Downloads';
-    }
-    // Fallback to temp directory if we can't determine downloads
-    return Directory.systemTemp.path;
   }
 
   Future<void> sendFile(String filePath, Peer receiver) async {
@@ -277,10 +240,16 @@ class NetworkService {
       };
       print('📋 Sending metadata: $metadata');
 
-      // Send metadata with explicit newline in UTF8
-      final metadataBytes = utf8.encode(json.encode(metadata) + '\n');
+      // Send metadata length first (4 bytes), then metadata
+      final metadataBytes = utf8.encode(json.encode(metadata));
+      final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+      socket.add(lengthBytes.buffer.asUint8List());
+      await socket.flush();
       socket.add(metadataBytes);
       await socket.flush();
+
+      // Small delay to ensure metadata is processed
+      await Future.delayed(const Duration(milliseconds: 100));
       print('✅ Metadata sent (${metadataBytes.length} bytes)');
 
       print('📨 Starting file stream...');
@@ -312,7 +281,6 @@ class NetworkService {
         final elapsedSeconds = stopwatch.elapsed.inSeconds;
         final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
         print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
-
       } finally {
         await input.close();
       }
@@ -332,7 +300,9 @@ class NetworkService {
   void _handleConnection(Socket socket) async {
     print('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
     List<int> buffer = [];
+    bool metadataLengthReceived = false;
     bool metadataReceived = false;
+    int metadataLength = 0;
     StreamSubscription? subscription;
     IOSink? fileSink;
     File? receiveFile;
@@ -342,20 +312,32 @@ class NetworkService {
     subscription = socket.listen(
       (List<int> data) async {
         try {
-          if (!metadataReceived) {
-            // Look for newline in this chunk
-            int? newlineIndex;
-            for (int i = 0; i < data.length; i++) {
-              if (data[i] == 10) { // newline character
-                newlineIndex = i;
-                break;
-              }
-            }
+          if (!metadataLengthReceived) {
+            // First 4 bytes contain metadata length
+            if (buffer.length + data.length >= 4) {
+              buffer.addAll(data.take(4 - buffer.length));
+              final lengthBytes = ByteData.sublistView(Uint8List.fromList(buffer));
+              metadataLength = lengthBytes.getUint32(0);
+              print('📋 Expected metadata length: $metadataLength bytes');
+              metadataLengthReceived = true;
+              buffer.clear();
 
-            if (newlineIndex != null) {
-              // We found the metadata delimiter
-              buffer.addAll(data.sublist(0, newlineIndex));
-              final metadataStr = utf8.decode(buffer);
+              // Process remaining data as metadata
+              if (data.length > 4) {
+                final remaining = data.sublist(4);
+                buffer.addAll(remaining);
+              }
+            } else {
+              buffer.addAll(data);
+            }
+            return;
+          }
+
+          if (!metadataReceived) {
+            buffer.addAll(data);
+            if (buffer.length >= metadataLength) {
+              final metadataBytes = buffer.take(metadataLength).toList();
+              final metadataStr = utf8.decode(metadataBytes);
               print('📋 Complete metadata received: $metadataStr');
               final info = json.decode(metadataStr);
               expectedSize = info['size'] as int;
@@ -388,16 +370,14 @@ class NetworkService {
               print('📄 Created file: $filePath');
               metadataReceived = true;
 
-              // Process remaining data after newline if any
-              if (newlineIndex < data.length - 1) {
-                final remainingData = data.sublist(newlineIndex + 1);
+              // Process any remaining data as file content
+              if (buffer.length > metadataLength) {
+                final remainingData = buffer.sublist(metadataLength);
                 fileSink!.add(remainingData);
                 receivedBytes += remainingData.length;
                 print('📥 Written initial chunk: ${remainingData.length} bytes');
               }
-            } else {
-              // Still collecting metadata
-              buffer.addAll(data);
+              buffer.clear();
             }
           } else {
             // Direct binary write for file data
@@ -454,30 +434,39 @@ class NetworkService {
     try {
       _discoveryTimer?.cancel();
       _cleanupTimer?.cancel();
-
       if (_server != null) {
         await _server!.close();
         _server = null;
       }
-
       if (_discoverySocket != null) {
         _discoverySocket!.close();
         _discoverySocket = null;
       }
-
       if (!_peerController.isClosed) {
-        _peerController.close();
+        await _peerController.close();
       }
-
       if (!_fileReceivedController.isClosed) {
         await _fileReceivedController.close();
       }
-
       _peers.clear();
-
       print('NetworkService disposed successfully');
     } catch (e) {
       print('Error during NetworkService disposal: $e');
     }
+  }
+}
+
+class _PeerStatus {
+  final Peer peer;
+  DateTime lastSeen;
+
+  _PeerStatus(this.peer) : lastSeen = DateTime.now();
+
+  void updateLastSeen() {
+    lastSeen = DateTime.now();
+  }
+
+  bool isStale() {
+    return DateTime.now().difference(lastSeen) > const Duration(seconds: 15);
   }
 }
