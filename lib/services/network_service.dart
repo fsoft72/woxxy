@@ -255,9 +255,10 @@ class NetworkService {
     final fileSize = await file.length();
     print('📏 File size: $fileSize bytes');
 
+    Socket? socket;
     try {
       print('🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
-      final socket = await Socket.connect(
+      socket = await Socket.connect(
         receiver.address,
         receiver.port,
       ).timeout(
@@ -270,7 +271,7 @@ class NetworkService {
       print('✅ Connected to peer successfully');
 
       final metadata = {
-        'name': file.path.split('/').last,
+        'name': file.path.split(Platform.pathSeparator).last,
         'size': fileSize,
         'sender': currentIpAddress,
       };
@@ -279,55 +280,59 @@ class NetworkService {
       // Send metadata with explicit newline in UTF8
       final metadataBytes = utf8.encode(json.encode(metadata) + '\n');
       socket.add(metadataBytes);
+      await socket.flush();
       print('✅ Metadata sent (${metadataBytes.length} bytes)');
 
       print('📨 Starting file stream...');
       final stopwatch = Stopwatch()..start();
 
-      // Read file in fixed-size chunks
-      final stream = file.openRead().transform(
-        StreamTransformer<List<int>, List<int>>.fromHandlers(
-          handleData: (data, sink) {
-            // Split large chunks into buffer-sized pieces
-            for (var i = 0; i < data.length; i += _bufferSize) {
-              final end = (i + _bufferSize < data.length) ? i + _bufferSize : data.length;
-              sink.add(data.sublist(i, end));
-            }
-          },
-        ),
-      );
-
+      // Read and send file in chunks
+      final input = await file.open();
       int sentBytes = 0;
-      await for (final List<int> chunk in stream) {
-        socket.add(chunk);
-        await socket.flush(); // Ensure each chunk is sent
-        sentBytes += chunk.length;
-        print('📤 Sent chunk: ${chunk.length} bytes (Total: $sentBytes/${fileSize} bytes - ${((sentBytes / fileSize) * 100).toStringAsFixed(1)}%)');
+
+      try {
+        while (sentBytes < fileSize) {
+          final remaining = fileSize - sentBytes;
+          final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
+          final buffer = await input.read(chunkSize);
+
+          if (buffer.isEmpty) {
+            throw Exception('Unexpected end of file');
+          }
+
+          socket.add(buffer);
+          await socket.flush();
+
+          sentBytes += buffer.length;
+          final percentage = ((sentBytes / fileSize) * 100).toStringAsFixed(1);
+          print('📤 Sent chunk: ${buffer.length} bytes (Total: $sentBytes/$fileSize bytes - $percentage%)');
+        }
+
+        stopwatch.stop();
+        final elapsedSeconds = stopwatch.elapsed.inSeconds;
+        final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
+        print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
+
+      } finally {
+        await input.close();
       }
-
-      // Final flush to ensure all data is sent
-      await socket.flush();
-
-      stopwatch.stop();
-      final elapsedSeconds = stopwatch.elapsed.inSeconds;
-      final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
-      print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
 
       print('🔒 Closing connection...');
       await socket.close();
       print('✅ Connection closed successfully');
-
       print('🎉 File transfer completed successfully');
     } catch (e, stackTrace) {
       print('❌ Error in sendFile: $e');
       print('📑 Stack trace:\n$stackTrace');
+      socket?.destroy();
       rethrow;
     }
   }
 
   void _handleConnection(Socket socket) async {
     print('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
-    List<int> metadataBuffer = [];
+    List<int> buffer = [];
+    bool metadataReceived = false;
     StreamSubscription? subscription;
     IOSink? fileSink;
     File? receiveFile;
@@ -337,63 +342,78 @@ class NetworkService {
     subscription = socket.listen(
       (List<int> data) async {
         try {
-          if (receiveFile == null) {
-            // Collect metadata until we find a newline
-            for (int byte in data) {
-              if (byte == 10) { // newline character
-                final metadataStr = utf8.decode(metadataBuffer);
-                print('📋 Complete metadata received: $metadataStr');
-                final info = json.decode(metadataStr);
-                expectedSize = info['size'] as int;
-                print('📋 Expected file size: $expectedSize bytes');
-
-                final downloadsPath = await _getDownloadsPath();
-                final dir = Directory(downloadsPath);
-                if (!await dir.exists()) {
-                  print('📁 Creating downloads directory');
-                  await dir.create(recursive: true);
-                }
-
-                String fileName = info['name'];
-                String filePath = '${dir.path}/$fileName';
-
-                // Handle duplicate filenames
-                int counter = 1;
-                while (await File(filePath).exists()) {
-                  final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-                  final nameWithoutExt = fileName.contains('.')
-                    ? fileName.substring(0, fileName.lastIndexOf('.'))
-                    : fileName;
-                  fileName = '$nameWithoutExt ($counter)$extension';
-                  filePath = '${dir.path}/$fileName';
-                  counter++;
-                }
-
-                receiveFile = File(filePath);
-                fileSink = receiveFile!.openWrite();
-                print('📄 Created file: $filePath');
-
-                // Process remaining data after metadata
-                final remainingData = data.sublist(metadataBuffer.length + 1);
-                if (remainingData.isNotEmpty) {
-                  fileSink!.add(remainingData);
-                  receivedBytes += remainingData.length;
-                  print('📥 Written initial chunk: ${remainingData.length} bytes');
-                }
-                return;
+          if (!metadataReceived) {
+            // Look for newline in this chunk
+            int? newlineIndex;
+            for (int i = 0; i < data.length; i++) {
+              if (data[i] == 10) { // newline character
+                newlineIndex = i;
+                break;
               }
-              metadataBuffer.add(byte);
+            }
+
+            if (newlineIndex != null) {
+              // We found the metadata delimiter
+              buffer.addAll(data.sublist(0, newlineIndex));
+              final metadataStr = utf8.decode(buffer);
+              print('📋 Complete metadata received: $metadataStr');
+              final info = json.decode(metadataStr);
+              expectedSize = info['size'] as int;
+              print('📋 Expected file size: $expectedSize bytes');
+
+              final downloadsPath = await _getDownloadsPath();
+              final dir = Directory(downloadsPath);
+              if (!await dir.exists()) {
+                print('📁 Creating downloads directory');
+                await dir.create(recursive: true);
+              }
+
+              String fileName = info['name'];
+              String filePath = '${dir.path}${Platform.pathSeparator}$fileName';
+
+              // Handle duplicate filenames
+              int counter = 1;
+              while (await File(filePath).exists()) {
+                final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
+                final nameWithoutExt = fileName.contains('.')
+                  ? fileName.substring(0, fileName.lastIndexOf('.'))
+                  : fileName;
+                fileName = '$nameWithoutExt ($counter)$extension';
+                filePath = '${dir.path}${Platform.pathSeparator}$fileName';
+                counter++;
+              }
+
+              receiveFile = File(filePath);
+              fileSink = receiveFile!.openWrite(mode: FileMode.writeOnly);
+              print('📄 Created file: $filePath');
+              metadataReceived = true;
+
+              // Process remaining data after newline if any
+              if (newlineIndex < data.length - 1) {
+                final remainingData = data.sublist(newlineIndex + 1);
+                fileSink!.add(remainingData);
+                receivedBytes += remainingData.length;
+                print('📥 Written initial chunk: ${remainingData.length} bytes');
+              }
+            } else {
+              // Still collecting metadata
+              buffer.addAll(data);
             }
           } else {
+            // Direct binary write for file data
             fileSink!.add(data);
             receivedBytes += data.length;
-            final progress = expectedSize != null ?
-              ' (${((receivedBytes / expectedSize!) * 100).toStringAsFixed(1)}%)' : '';
-            print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes$progress)');
+            if (expectedSize != null) {
+              final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
+              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+            } else {
+              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes)');
+            }
           }
         } catch (e, stack) {
           print('❌ Error processing chunk: $e');
           print('📑 Stack trace: $stack');
+          await fileSink?.flush();
           await fileSink?.close();
           subscription?.cancel();
           socket.destroy();
@@ -412,7 +432,6 @@ class NetworkService {
 
           if (expectedSize != null && finalSize != expectedSize) {
             print('⚠️ Warning: File size mismatch!');
-            // Consider handling the error case here
           }
           _fileReceivedController.add(receiveFile!.path);
         }
@@ -422,6 +441,7 @@ class NetworkService {
       onError: (error, stackTrace) async {
         print('❌ Error during file reception: $error');
         print('📑 Stack trace: $stackTrace');
+        await fileSink?.flush();
         await fileSink?.close();
         subscription?.cancel();
         socket.destroy();
