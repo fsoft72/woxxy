@@ -1,61 +1,65 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'package:multicast_dns/multicast_dns.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import '../models/peer.dart';
 
+// Helper class to track peer status
+class _PeerStatus {
+  final Peer peer;
+  DateTime lastSeen;
+
+  _PeerStatus(this.peer) : lastSeen = DateTime.now();
+
+  void updateLastSeen() {
+    lastSeen = DateTime.now();
+  }
+
+  bool isStale() {
+    return DateTime.now().difference(lastSeen) > const Duration(seconds: 15);
+  }
+}
+
 class NetworkService {
-  // Change service name to follow standard mDNS format
-  static const String _serviceName = '_woxxy._tcp.local';
   static const int _port = 8090;
+  static const int _discoveryPort = 8091;
+  static const Duration _pingInterval = Duration(seconds: 5);
+  static const Duration _peerTimeout = Duration(seconds: 15);
 
   final String _peerId = DateTime.now().millisecondsSinceEpoch.toString();
   final _peerController = StreamController<List<Peer>>.broadcast();
-  final Map<String, Peer> _peers = {};
+  final Map<String, _PeerStatus> _peers = {};
   ServerSocket? _server;
-  Timer? _advertisementTimer;
+  Timer? _discoveryTimer;
+  Timer? _cleanupTimer;
   String? currentIpAddress;
-  MDnsClient? _mdnsClient;
+  RawDatagramSocket? _discoverySocket;
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
-  List<Peer> get currentPeers => _peers.values.toList();
+  List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
 
   Future<void> start() async {
     try {
       currentIpAddress = await _getIpAddress();
       print('Starting network service on IP: $currentIpAddress');
 
-      // Create mDNS client with more specific configuration
-      _mdnsClient = MDnsClient(
-        rawDatagramSocketFactory: (dynamic host, int port, {bool? reuseAddress, bool? reusePort, int? ttl}) async {
-          final socket = await RawDatagramSocket.bind(
-            host,
-            port,
-            reuseAddress: true,
-            reusePort: true,
-            ttl: ttl ?? 255, // Increase TTL for better network reach
-          );
-
-          // Enable broadcast and add membership to mDNS multicast group
-          socket.broadcastEnabled = true;
-          socket.joinMulticast(InternetAddress('224.0.0.251'));
-
-          print('Created mDNS socket on ${socket.address.address}:${socket.port}');
-          return socket;
-        },
+      // Start UDP discovery socket
+      _discoverySocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        _discoveryPort,
+        reuseAddress: true,
+        reusePort: true,
       );
-
-      print('Starting mDNS client...');
-      await _mdnsClient!.start();
-      print('mDNS client started successfully');
+      _discoverySocket!.broadcastEnabled = true;
+      _listenForDiscovery();
 
       await _startServer();
-      await _startAdvertising();
       _startDiscovery();
+      _startPeerCleanup();
     } catch (e, stackTrace) {
       print('Error starting network service: $e');
       print('Stack trace: $stackTrace');
+      await dispose();
       rethrow;
     }
   }
@@ -102,130 +106,120 @@ class NetworkService {
     print('Server started on port $_port');
   }
 
-  Future<void> _startAdvertising() async {
-    print('Starting mDNS advertising...');
-    if (_mdnsClient == null) {
-      throw Exception('mDNS client not initialized');
+  void _startDiscovery() {
+    print('Starting peer discovery...');
+    if (_discoverySocket == null) {
+      throw Exception('Discovery socket not initialized');
     }
 
-    final name = 'woxxy-$_peerId';
-    print('Starting to advertise as: $name');
+    // Add ourselves to the peer list
+    _addPeer(Peer(
+      name: 'woxxy-$_peerId',
+      id: _peerId,
+      address: InternetAddress(currentIpAddress!),
+      port: _port,
+    ));
 
-    _advertisementTimer?.cancel();
-    _advertisementTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      try {
-        // Send PTR record periodically
-        _mdnsClient!
-            .lookup<PtrResourceRecord>(
-          ResourceRecordQuery.serverPointer(_serviceName),
-        )
-            .listen((ptr) {
-          print('Sending advertisement for: $name');
-        });
-      } catch (e) {
-        print('Error in mDNS advertisement: $e');
+    // Start periodic discovery
+    _discoveryTimer?.cancel();
+    _discoveryTimer = Timer.periodic(_pingInterval, (_) {
+      _broadcastDiscovery();
+    });
+
+    // Initial discovery broadcast
+    _broadcastDiscovery();
+  }
+
+  void _broadcastDiscovery() {
+    try {
+      // Broadcast discovery message
+      final message = utf8.encode('WOXXY_ANNOUNCE:$_peerId:$currentIpAddress:$_port');
+      _discoverySocket?.send(
+        message,
+        InternetAddress('255.255.255.255'),
+        _discoveryPort,
+      );
+    } catch (e) {
+      print('Error broadcasting discovery: $e');
+    }
+  }
+
+  void _listenForDiscovery() {
+    _discoverySocket?.listen((RawSocketEvent event) {
+      if (event == RawSocketEvent.read) {
+        final datagram = _discoverySocket?.receive();
+        if (datagram != null) {
+          final message = String.fromCharCodes(datagram.data);
+          if (message.startsWith('WOXXY_ANNOUNCE')) {
+            _handlePeerAnnouncement(message, datagram.address);
+          }
+        }
       }
     });
   }
 
-  void _startDiscovery() async {
-    print('Starting peer discovery...');
-    if (_mdnsClient == null) {
-      throw Exception('mDNS client not initialized');
-    }
-
+  void _handlePeerAnnouncement(String message, InternetAddress sourceAddress) {
     try {
-      // Add ourselves to the peer list
-      final myName = 'woxxy-$_peerId';
-      _addPeer(Peer(
-        name: myName,
-        id: _peerId,
-        address: InternetAddress(currentIpAddress!),
-        port: _port,
-      ));
+      final parts = message.split(':');
+      if (parts.length >= 4) {
+        final peerId = parts[1];
+        final peerIp = parts[2];
+        final peerPort = int.parse(parts[3]);
 
-      // Start continuous discovery using individual record type queries
-      Timer.periodic(const Duration(seconds: 3), (_) {
-        print('Sending discovery queries...');
-
-        // Query for PTR records
-        _mdnsClient!
-            .lookup<PtrResourceRecord>(
-          ResourceRecordQuery.serverPointer(_serviceName),
-        )
-            .listen((ptr) {
-          print('Found PTR record: ${ptr.domainName}');
-          _processPtrRecord(ptr);
-        });
-
-        // Direct query for SRV records
-        _mdnsClient!
-            .lookup<SrvResourceRecord>(
-          ResourceRecordQuery.service(_serviceName),
-        )
-            .listen((srv) {
-          print('Found SRV record: ${srv.target}:${srv.port}');
-          _processSrvRecord(srv);
-        });
-
-        // Query for A records for any discovered peers
-        _peers.values.forEach((peer) {
-          _mdnsClient!
-              .lookup<IPAddressResourceRecord>(
-            ResourceRecordQuery.addressIPv4(peer.name),
-          )
-              .listen((ip) {
-            print('Found IP record: ${ip.address}');
-            _processIpRecord(ip);
-          });
-        });
-      });
+        if (peerId != _peerId) {
+          // Don't add ourselves
+          final peer = Peer(
+            name: 'woxxy-$peerId',
+            id: peerId,
+            address: InternetAddress(peerIp),
+            port: peerPort,
+          );
+          _addPeer(peer);
+        }
+      }
     } catch (e) {
-      print('Error in peer discovery: $e');
-      print('Error details: ${e.toString()}');
+      print('Error processing peer announcement: $e');
     }
   }
 
-  void _processPtrRecord(PtrResourceRecord ptr) {
-    _mdnsClient!.lookup<SrvResourceRecord>(
-      ResourceRecordQuery.service(ptr.domainName),
-    );
+  void _startPeerCleanup() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = Timer.periodic(_peerTimeout, (_) {
+      _cleanupStalePeers();
+    });
   }
 
-  void _processSrvRecord(SrvResourceRecord srv) {
-    final targetParts = srv.target.split('-');
-    if (targetParts.length >= 2) {
-      _mdnsClient!.lookup<IPAddressResourceRecord>(
-        ResourceRecordQuery.addressIPv4(srv.target),
-      );
-    }
-  }
+  void _cleanupStalePeers() {
+    bool hasRemovals = false;
+    _peers.removeWhere((id, status) {
+      if (status.isStale()) {
+        print('Removing stale peer: ${status.peer.name}');
+        hasRemovals = true;
+        return true;
+      }
+      return false;
+    });
 
-  void _processIpRecord(IPAddressResourceRecord ip) {
-    // Extract peer ID from hostname if possible
-    final parts = ip.name.split('-');
-    if (parts.length >= 2 && parts[0].toLowerCase() == 'woxxy') {
-      final peerId = parts[1];
-      _addPeer(Peer(
-        name: ip.name,
-        id: peerId,
-        address: ip.address,
-        port: _port, // Use default port since we might not have SRV info
-      ));
+    if (hasRemovals) {
+      _peerController.add(currentPeers);
     }
   }
 
   void _addPeer(Peer peer) {
-    // Don't filter out our own peer anymore, as it's useful for debugging
     if (!_peers.containsKey(peer.id)) {
       print('Adding new peer: ${peer.name} (${peer.address.address}:${peer.port})');
-      _peers[peer.id] = peer;
+      _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
-    } else if (_peers[peer.id]?.address.address != peer.address.address) {
-      // Update peer if IP changed
-      print('Updating peer IP: ${peer.name} (${peer.address.address}:${peer.port})');
-      _peers[peer.id] = peer;
-      _peerController.add(currentPeers);
+    } else {
+      // Update last seen time
+      _peers[peer.id]?.updateLastSeen();
+
+      // Update peer IP if changed
+      if (_peers[peer.id]?.peer.address.address != peer.address.address) {
+        print('Updating peer IP: ${peer.name} (${peer.address.address}:${peer.port})');
+        _peers[peer.id] = _PeerStatus(peer);
+        _peerController.add(currentPeers);
+      }
     }
   }
 
@@ -270,10 +264,31 @@ class NetworkService {
     );
   }
 
-  void dispose() {
-    _server?.close();
-    _advertisementTimer?.cancel();
-    _mdnsClient?.stop();
-    _peerController.close();
+  Future<void> dispose() async {
+    print('Disposing NetworkService...');
+    try {
+      _discoveryTimer?.cancel();
+      _cleanupTimer?.cancel();
+
+      if (_server != null) {
+        await _server!.close();
+        _server = null;
+      }
+
+      if (_discoverySocket != null) {
+        _discoverySocket!.close();
+        _discoverySocket = null;
+      }
+
+      if (!_peerController.isClosed) {
+        _peerController.close();
+      }
+
+      _peers.clear();
+
+      print('NetworkService disposed successfully');
+    } catch (e) {
+      print('Error during NetworkService disposal: $e');
+    }
   }
 }
