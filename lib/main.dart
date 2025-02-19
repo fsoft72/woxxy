@@ -76,10 +76,53 @@ class _HomePageState extends State<HomePage> {
               return ListTile(
                 title: Text(peer.name),
                 subtitle: Text('${peer.address.address}:${peer.port}'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PeerDetailPage(peer: peer),
+                    ),
+                  );
+                },
               );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class PeerDetailPage extends StatelessWidget {
+  final Peer peer;
+
+  const PeerDetailPage({super.key, required this.peer});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(peer.name),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Peer Details',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 16),
+            Text('Name: ${peer.name}'),
+            Text('IP Address: ${peer.address.address}'),
+            Text('Port: ${peer.port}'),
+          ],
+        ),
       ),
     );
   }
