@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
 import '../models/peer.dart';
@@ -282,7 +283,7 @@ class NetworkService {
       final stopwatch = Stopwatch()..start();
 
       await socket.addStream(file.openRead()).timeout(
-        Duration(seconds: (fileSize / 1024 / 100).ceil()), // 100KB/s minimum speed
+        Duration(seconds: math.max(10, (fileSize / 1024 / 100).ceil())), // Minimum 10 seconds timeout
         onTimeout: () {
           print('⏰ File transfer timed out');
           throw Exception('File transfer timed out');
@@ -290,8 +291,9 @@ class NetworkService {
       );
 
       stopwatch.stop();
-      final speed = (fileSize / 1024 / stopwatch.elapsed.inSeconds).round();
-      print('✅ File stream completed in ${stopwatch.elapsed.inSeconds}s ($speed KB/s)');
+      final elapsedSeconds = stopwatch.elapsed.inSeconds;
+      final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
+      print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
 
       print('🔒 Closing connection...');
       await socket.close();
