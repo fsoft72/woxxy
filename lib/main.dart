@@ -36,6 +36,22 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _networkService.start();
+    _networkService.fileReceived.listen((filePath) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File received: ${filePath.split('/').last}\nSaved to Downloads folder'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Dismiss',
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override

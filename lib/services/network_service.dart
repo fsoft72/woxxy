@@ -35,6 +35,9 @@ class NetworkService {
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
 
+  final _fileReceivedController = StreamController<String>.broadcast();
+  Stream<String> get fileReceived => _fileReceivedController.stream;
+
   Stream<List<Peer>> get peerStream => _peerController.stream;
   List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
 
@@ -237,6 +240,18 @@ class NetworkService {
     await socket.close();
   }
 
+  Future<String> _getDownloadsPath() async {
+    if (Platform.isLinux || Platform.isMacOS) {
+      final home = Platform.environment['HOME'];
+      return '$home/Downloads';
+    } else if (Platform.isWindows) {
+      final userProfile = Platform.environment['USERPROFILE'];
+      return '$userProfile\\Downloads';
+    }
+    // Fallback to temp directory if we can't determine downloads
+    return Directory.systemTemp.path;
+  }
+
   void _handleConnection(Socket socket) async {
     String metadata = '';
     StreamSubscription? subscription;
@@ -248,9 +263,28 @@ class NetworkService {
           metadata += String.fromCharCodes(data);
           if (metadata.contains('\n')) {
             final info = json.decode(metadata.substring(0, metadata.indexOf('\n')));
-            final dir = Directory('${Directory.systemTemp.path}/woxxy');
-            await dir.create(recursive: true);
-            receiveFile = File('${dir.path}/${info['name']}');
+            final downloadsPath = await _getDownloadsPath();
+            final dir = Directory(downloadsPath);
+            if (!await dir.exists()) {
+              await dir.create(recursive: true);
+            }
+
+            String fileName = info['name'];
+            String filePath = '${dir.path}/$fileName';
+
+            // Handle duplicate filenames
+            int counter = 1;
+            while (await File(filePath).exists()) {
+              final extension = fileName.contains('.') ?
+                '.${fileName.split('.').last}' : '';
+              final nameWithoutExt = fileName.contains('.') ?
+                fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+              fileName = '$nameWithoutExt ($counter)$extension';
+              filePath = '${dir.path}/$fileName';
+              counter++;
+            }
+
+            receiveFile = File(filePath);
             await receiveFile!.create();
           }
         } else {
@@ -258,6 +292,9 @@ class NetworkService {
         }
       },
       onDone: () {
+        if (receiveFile != null) {
+          _fileReceivedController.add(receiveFile!.path);
+        }
         subscription?.cancel();
         socket.close();
       },
@@ -282,6 +319,10 @@ class NetworkService {
 
       if (!_peerController.isClosed) {
         _peerController.close();
+      }
+
+      if (!_fileReceivedController.isClosed) {
+        await _fileReceivedController.close();
       }
 
       _peers.clear();
