@@ -63,16 +63,25 @@ class _HomePageState extends State<HomePage> {
       body: StreamBuilder<List<Peer>>(
         stream: _networkService.peerStream,
         builder: (context, snapshot) {
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          if (!snapshot.hasData) {
             return const Center(
               child: Text('No peers found. Searching...'),
             );
           }
 
+          final peers =
+              snapshot.data!.where((peer) => peer.address.address != _networkService.currentIpAddress).toList();
+
+          if (peers.isEmpty) {
+            return const Center(
+              child: Text('No other peers found on the network'),
+            );
+          }
+
           return ListView.builder(
-            itemCount: snapshot.data!.length,
+            itemCount: peers.length,
             itemBuilder: (context, index) {
-              final peer = snapshot.data![index];
+              final peer = peers[index];
               return ListTile(
                 title: Text(peer.name),
                 subtitle: Text('${peer.address.address}:${peer.port}'),
@@ -121,6 +130,59 @@ class PeerDetailPage extends StatelessWidget {
             Text('Name: ${peer.name}'),
             Text('IP Address: ${peer.address.address}'),
             Text('Port: ${peer.port}'),
+            const SizedBox(height: 32),
+            Expanded(
+              child: DragTarget<String>(
+                onWillAccept: (data) => true,
+                onAccept: (filePath) async {
+                  try {
+                    final networkService = NetworkService();
+                    await networkService.sendFile(filePath, peer);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('File sent successfully'),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error sending file: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                builder: (context, candidateData, rejectedData) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary : Colors.grey,
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.file_upload,
+                            size: 48,
+                            color: candidateData.isNotEmpty ? Theme.of(context).colorScheme.primary : Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text('Drag and drop a file here to send'),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
