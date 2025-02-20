@@ -3,6 +3,8 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/network_service.dart';
 import 'models/peer.dart';
+import 'screens/history.dart';
+import 'screens/settings.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,40 +52,29 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final NetworkService _networkService = NetworkService();
+  int _selectedIndex = 1; // Default to home screen
 
   @override
   void initState() {
     super.initState();
     _networkService.start();
-    _networkService.fileReceived.listen((fileInfo) {
-      if (mounted) {
-        final parts = fileInfo.split('|');
-        final filePath = parts[0];
-        final sizeMiB = parts[1];
-        final transferTime = parts[2];
-        final speed = parts[3];
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'File received: ${filePath.split('/').last}\n$sizeMiB MiB in ${transferTime}s, $speed MiB/s\nSaved to Downloads folder'),
-            duration: const Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Dismiss',
-              onPressed: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-          ),
-        );
-      }
-    });
   }
 
   @override
   void dispose() {
     _networkService.dispose();
     super.dispose();
+  }
+
+  // List of screens
+  final List<Widget> _screens = [
+    const HistoryScreen(),
+    _buildHomeScreen(),
+    const SettingsScreen(),
+  ];
+
+  static Widget _buildHomeScreen() {
+    return HomeContent();
   }
 
   @override
@@ -102,47 +93,78 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-      body: StreamBuilder<List<Peer>>(
-        stream: _networkService.peerStream,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(
-              child: Text('No peers found. Searching...'),
-            );
-          }
-
-          final peers =
-              snapshot.data!.where((peer) => peer.address.address != _networkService.currentIpAddress).toList();
-
-          if (peers.isEmpty) {
-            return const Center(
-              child: Text('No other peers found on the network'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: peers.length,
-            itemBuilder: (context, index) {
-              final peer = peers[index];
-              return ListTile(
-                title: Text(peer.name),
-                subtitle: Text('${peer.address.address}:${peer.port}'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => PeerDetailPage(
-                        peer: peer,
-                        networkService: _networkService,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
+      body: _screens[_selectedIndex],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
         },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.history),
+            label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
       ),
+    );
+  }
+}
+
+// Create a separate widget for the home content
+class HomeContent extends StatelessWidget {
+  final NetworkService _networkService = NetworkService();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<Peer>>(
+      stream: _networkService.peerStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+            child: Text('No peers found. Searching...'),
+          );
+        }
+
+        final peers = snapshot.data!.where((peer) => peer.address.address != _networkService.currentIpAddress).toList();
+
+        if (peers.isEmpty) {
+          return const Center(
+            child: Text('No other peers found on the network'),
+          );
+        }
+
+        return ListView.builder(
+          itemCount: peers.length,
+          itemBuilder: (context, index) {
+            final peer = peers[index];
+            return ListTile(
+              title: Text(peer.name),
+              subtitle: Text('${peer.address.address}:${peer.port}'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PeerDetailPage(
+                      peer: peer,
+                      networkService: _networkService,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
