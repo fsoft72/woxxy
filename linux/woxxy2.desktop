@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Woxxy
+Comment=LAN File Sharing App
+Exec=woxxy2
+Icon=woxxy2
+Terminal=false
+Categories=Network;FileTransfer;

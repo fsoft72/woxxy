@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
@@ -12,15 +13,17 @@ void main() async {
   await windowManager.ensureInitialized();
 
   // Configure window properties
-  WindowOptions windowOptions = WindowOptions(
+  WindowOptions windowOptions = const WindowOptions(
     size: Size(540, 960),
     minimumSize: Size(540, 960),
     center: true,
+    title: 'Woxxy',
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
+    await windowManager.setIcon('assets/icons/head.png');
   });
 
   runApp(const MyApp());
@@ -80,13 +83,22 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Text('Woxxy - LAN File Sharing'),
+            SvgPicture.asset(
+              'assets/icons/head.svg',
+              height: 48,
+            ),
             const SizedBox(width: 16),
-            if (_networkService.currentIpAddress != null)
-              Text(
-                'IP: ${_networkService.currentIpAddress}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            Row(
+              children: [
+                const Text('Woxxy - LAN File Sharing'),
+                const SizedBox(width: 16),
+                if (_networkService.currentIpAddress != null)
+                  Text(
+                    'IP: ${_networkService.currentIpAddress}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
           ],
         ),
       ),
