@@ -5,6 +5,8 @@ import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
 import 'services/network_service.dart';
+import 'services/settings_service.dart';
+import 'models/user.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,12 +56,22 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final NetworkService _networkService = NetworkService();
+  final SettingsService _settingsService = SettingsService();
   int _selectedIndex = 1; // Default to home screen
+  late User _currentUser;
 
   @override
   void initState() {
     super.initState();
     _networkService.start();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final user = await _settingsService.loadSettings();
+    setState(() {
+      _currentUser = user;
+    });
   }
 
   @override
@@ -68,11 +80,21 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  void _updateUser(User updatedUser) {
+    setState(() {
+      _currentUser = updatedUser;
+    });
+    _settingsService.saveSettings(updatedUser);
+  }
+
   List<Widget> _getScreens() {
     return [
       const HistoryScreen(),
       HomeContent(networkService: _networkService),
-      const SettingsScreen(),
+      SettingsScreen(
+        user: _currentUser,
+        onUserUpdated: _updateUser,
+      ),
     ];
   }
 
