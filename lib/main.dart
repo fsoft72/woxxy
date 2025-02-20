@@ -37,11 +37,17 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _networkService.start();
-    _networkService.fileReceived.listen((filePath) {
+    _networkService.fileReceived.listen((fileInfo) {
       if (mounted) {
+        final parts = fileInfo.split('|');
+        final filePath = parts[0];
+        final sizeMiB = parts[1];
+        final transferTime = parts[2];
+        final speed = parts[3];
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('File received: ${filePath.split('/').last}\nSaved to Downloads folder'),
+            content: Text('File received: ${filePath.split('/').last}\n$sizeMiB MiB in ${transferTime}s, $speed MiB/s\nSaved to Downloads folder'),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'Dismiss',
@@ -176,13 +182,20 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
                   try {
                     print('🔄 Initiating file transfer...');
+                    final stopwatch = Stopwatch()..start();
                     await widget.networkService.sendFile(file.path, widget.peer);
+                    stopwatch.stop();
                     print('✅ File transfer completed successfully');
 
                     if (mounted) {
+                      final fileSize = await file.length();
+                      final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
+                      final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
+                      final speed = (fileSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+                      
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('File sent successfully'),
+                        SnackBar(
+                          content: Text('File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)'),
                         ),
                       );
                     }

@@ -93,41 +93,39 @@ class NetworkService {
 
   Future<void> _startServer() async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _port);
-    _server!.listen(_handleConnection);
     print('Server started on port $_port');
+    _server!.listen(_handleConnection);
   }
 
   void _startDiscovery() {
-    print('Starting peer discovery...');
-    if (_discoverySocket == null) {
-      throw Exception('Discovery socket not initialized');
-    }
-
-    _addPeer(Peer(
-      name: 'woxxy-$_peerId',
-      id: _peerId,
-      address: InternetAddress(currentIpAddress!),
-      port: _port,
-    ));
-
     _discoveryTimer?.cancel();
-    _discoveryTimer = Timer.periodic(_pingInterval, (_) {
-      _broadcastDiscovery();
+    _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
+      try {
+        final message = 'WOXXY_ANNOUNCE:$_peerId:$currentIpAddress:$_port';
+        _discoverySocket?.send(
+          utf8.encode(message),
+          InternetAddress('255.255.255.255'),
+          _discoveryPort,
+        );
+      } catch (e) {
+        print('Error sending discovery message: $e');
+      }
     });
-    _broadcastDiscovery();
   }
 
-  void _broadcastDiscovery() {
-    try {
-      final message = utf8.encode('WOXXY_ANNOUNCE:$_peerId:$currentIpAddress:$_port');
-      _discoverySocket?.send(
-        message,
-        InternetAddress('255.255.255.255'),
-        _discoveryPort,
-      );
-    } catch (e) {
-      print('Error broadcasting discovery: $e');
-    }
+  void _startPeerCleanup() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = Timer.periodic(_pingInterval, (timer) {
+      final now = DateTime.now();
+      _peers.removeWhere((key, status) {
+        final expired = now.difference(status.lastSeen) > _peerTimeout;
+        if (expired) {
+          print('Removing expired peer: ${status.peer.name}');
+          _peerController.add(currentPeers);
+        }
+        return expired;
+      });
+    });
   }
 
   void _listenForDiscovery() {
@@ -162,39 +160,17 @@ class NetworkService {
         }
       }
     } catch (e) {
-      print('Error processing peer announcement: $e');
-    }
-  }
-
-  void _startPeerCleanup() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(_peerTimeout, (_) {
-      _cleanupStalePeers();
-    });
-  }
-
-  void _cleanupStalePeers() {
-    bool hasRemovals = false;
-    _peers.removeWhere((id, status) {
-      if (status.isStale()) {
-        print('Removing stale peer: ${status.peer.name}');
-        hasRemovals = true;
-        return true;
-      }
-      return false;
-    });
-    if (hasRemovals) {
-      _peerController.add(currentPeers);
+      print('Error handling peer announcement: $e');
     }
   }
 
   void _addPeer(Peer peer) {
     if (!_peers.containsKey(peer.id)) {
-      print('Adding new peer: ${peer.name} (${peer.address.address}:${peer.port})');
+      print('New peer found: ${peer.name} (${peer.address.address}:${peer.port})');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
     } else {
-      _peers[peer.id]?.updateLastSeen();
+      _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
         print('Updating peer IP: ${peer.name} (${peer.address.address}:${peer.port})');
         _peers[peer.id] = _PeerStatus(peer);
@@ -308,6 +284,7 @@ class NetworkService {
     File? receiveFile;
     int? expectedSize;
     int receivedBytes = 0;
+    final stopwatch = Stopwatch()..start();
 
     subscription = socket.listen(
       (List<int> data) async {
@@ -400,20 +377,26 @@ class NetworkService {
         }
       },
       onDone: () async {
+        stopwatch.stop();
         print('✅ File transfer completed');
         await fileSink?.flush();
         await fileSink?.close();
 
         if (receiveFile != null) {
           final finalSize = await receiveFile!.length();
+          final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
+          final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+          final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
+          
           print('📁 Final file saved at: ${receiveFile!.path}');
           print('📊 Received $receivedBytes bytes out of expected $expectedSize bytes');
           print('📊 Actual file size: $finalSize bytes');
+          print('📊 Transfer completed in ${transferTime.toStringAsFixed(1)}s at $speed MiB/s');
 
           if (expectedSize != null && finalSize != expectedSize) {
             print('⚠️ Warning: File size mismatch!');
           }
-          _fileReceivedController.add(receiveFile!.path);
+          _fileReceivedController.add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed');
         }
         subscription?.cancel();
         socket.close();
@@ -436,22 +419,14 @@ class NetworkService {
       _cleanupTimer?.cancel();
       if (_server != null) {
         await _server!.close();
-        _server = null;
       }
       if (_discoverySocket != null) {
         _discoverySocket!.close();
-        _discoverySocket = null;
       }
-      if (!_peerController.isClosed) {
-        await _peerController.close();
-      }
-      if (!_fileReceivedController.isClosed) {
-        await _fileReceivedController.close();
-      }
-      _peers.clear();
-      print('NetworkService disposed successfully');
+      await _peerController.close();
+      await _fileReceivedController.close();
     } catch (e) {
-      print('Error during NetworkService disposal: $e');
+      print('Error during dispose: $e');
     }
   }
 }
@@ -461,12 +436,4 @@ class _PeerStatus {
   DateTime lastSeen;
 
   _PeerStatus(this.peer) : lastSeen = DateTime.now();
-
-  void updateLastSeen() {
-    lastSeen = DateTime.now();
-  }
-
-  bool isStale() {
-    return DateTime.now().difference(lastSeen) > const Duration(seconds: 15);
-  }
 }
