@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -26,7 +27,10 @@ void main() async {
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
     await windowManager.focus();
-    await windowManager.setIcon('assets/icons/head.png');
+    // Only set icon programmatically on non-macOS platforms
+    if (!Platform.isMacOS) {
+      await windowManager.setIcon('assets/icons/head.png');
+    }
   });
 
   runApp(const MyApp());
