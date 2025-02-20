@@ -65,15 +65,17 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // List of screens
-  final List<Widget> _screens = [
-    const HistoryScreen(),
-    HomeContent(),
-    const SettingsScreen(),
-  ];
+  List<Widget> _getScreens() {
+    return [
+      const HistoryScreen(),
+      HomeContent(networkService: _networkService),
+      const SettingsScreen(),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final screens = _getScreens();
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -88,7 +90,7 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-      body: _screens[_selectedIndex],
+      body: screens[_selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) => setState(() {

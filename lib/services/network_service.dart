@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:rxdart/rxdart.dart';
 import '../models/peer.dart';
 
 class NetworkService {
@@ -13,7 +14,7 @@ class NetworkService {
   static const int _bufferSize = 1024 * 32; // 32KB buffer size
 
   final String _peerId = DateTime.now().millisecondsSinceEpoch.toString();
-  final _peerController = StreamController<List<Peer>>.broadcast();
+  final BehaviorSubject<List<Peer>> _peerController = BehaviorSubject<List<Peer>>.seeded([]);
   final _fileReceivedController = StreamController<String>.broadcast();
   final Map<String, _PeerStatus> _peers = {};
   ServerSocket? _server;
