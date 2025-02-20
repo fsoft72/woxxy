@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:rxdart/rxdart.dart';
 import '../models/peer.dart';
+import '../models/user.dart';
+import 'settings_service.dart';
 
 class NetworkService {
   static const int _port = 8090;
@@ -22,6 +24,8 @@ class NetworkService {
   Timer? _cleanupTimer;
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
+  final SettingsService _settingsService = SettingsService();
+  late User _currentUser;
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
@@ -29,6 +33,7 @@ class NetworkService {
 
   Future<void> start() async {
     try {
+      _currentUser = await _settingsService.loadSettings();
       currentIpAddress = await _getIpAddress();
       print('Starting network service on IP: $currentIpAddress');
 
@@ -102,7 +107,7 @@ class NetworkService {
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
-        final message = 'WOXXY_ANNOUNCE:$_peerId:$currentIpAddress:$_port';
+        final message = 'WOXXY_ANNOUNCE:${_currentUser.username}:$currentIpAddress:$_port';
         _discoverySocket?.send(
           utf8.encode(message),
           InternetAddress('255.255.255.255'),
