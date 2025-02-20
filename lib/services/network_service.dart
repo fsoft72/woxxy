@@ -334,9 +334,8 @@ class NetworkService {
               int counter = 1;
               while (await File(filePath).exists()) {
                 final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-                final nameWithoutExt = fileName.contains('.')
-                  ? fileName.substring(0, fileName.lastIndexOf('.'))
-                  : fileName;
+                final nameWithoutExt =
+                    fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
                 fileName = '$nameWithoutExt ($counter)$extension';
                 filePath = '${dir.path}${Platform.pathSeparator}$fileName';
                 counter++;
@@ -362,7 +361,8 @@ class NetworkService {
             receivedBytes += data.length;
             if (expectedSize != null) {
               final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+              print(
+                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
             } else {
               print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes)');
             }
@@ -387,7 +387,7 @@ class NetworkService {
           final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
           final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
           final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
-          
+
           print('📁 Final file saved at: ${receiveFile!.path}');
           print('📊 Received $receivedBytes bytes out of expected $expectedSize bytes');
           print('📊 Actual file size: $finalSize bytes');

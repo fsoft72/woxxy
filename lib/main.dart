@@ -1,9 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:window_manager/window_manager.dart';
 import 'services/network_service.dart';
 import 'models/peer.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize window_manager
+  await windowManager.ensureInitialized();
+
+  // Configure window properties
+  WindowOptions windowOptions = WindowOptions(
+    size: Size(540, 960),
+    minimumSize: Size(540, 960),
+    center: true,
+  );
+
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
+
   runApp(const MyApp());
 }
 
@@ -44,10 +62,11 @@ class _HomePageState extends State<HomePage> {
         final sizeMiB = parts[1];
         final transferTime = parts[2];
         final speed = parts[3];
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('File received: ${filePath.split('/').last}\n$sizeMiB MiB in ${transferTime}s, $speed MiB/s\nSaved to Downloads folder'),
+            content: Text(
+                'File received: ${filePath.split('/').last}\n$sizeMiB MiB in ${transferTime}s, $speed MiB/s\nSaved to Downloads folder'),
             duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'Dismiss',
@@ -192,10 +211,11 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                       final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
                       final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
                       final speed = (fileSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-                      
+
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)'),
+                          content: Text(
+                              'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)'),
                         ),
                       );
                     }
