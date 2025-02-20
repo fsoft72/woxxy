@@ -7,6 +7,7 @@ import 'screens/settings.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
 import 'models/user.dart';
+import 'models/history.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +58,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final NetworkService _networkService = NetworkService();
   final SettingsService _settingsService = SettingsService();
+  final FileHistory _fileHistory = FileHistory();
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser; // Make nullable
   bool _isLoading = true; // Add loading state
@@ -66,6 +68,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _loadSettings();
     _networkService.start();
+    _setupFileReceivedListener();
   }
 
   Future<void> _loadSettings() async {
@@ -73,6 +76,30 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _currentUser = user;
       _isLoading = false;
+    });
+    _networkService.setUsername(user.username);
+  }
+
+  void _setupFileReceivedListener() {
+    _networkService.onFileReceived.listen((fileInfo) {
+      final parts = fileInfo.split('|');
+      if (parts.length >= 4) {
+        final filePath = parts[0];
+        final fileSizeMB = double.parse(parts[1]);
+        final speedMBps = double.parse(parts[3]);
+        final senderUsername = parts.length >= 5 ? parts[4] : 'Unknown';
+
+        final entry = FileHistoryEntry(
+          destinationPath: filePath,
+          senderUsername: senderUsername,
+          fileSize: (fileSizeMB * 1024 * 1024).toInt(),
+          uploadSpeedMBps: speedMBps,
+        );
+
+        setState(() {
+          _fileHistory.addEntry(entry);
+        });
+      }
     });
   }
 
@@ -86,12 +113,13 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _currentUser = updatedUser;
     });
+    _networkService.setUsername(updatedUser.username);
     _settingsService.saveSettings(updatedUser);
   }
 
   List<Widget> _getScreens() {
     return [
-      const HistoryScreen(),
+      HistoryScreen(history: _fileHistory),
       HomeContent(networkService: _networkService),
       if (_currentUser != null)
         SettingsScreen(

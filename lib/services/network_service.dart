@@ -26,6 +26,8 @@ class NetworkService {
   RawDatagramSocket? _discoverySocket;
   final SettingsService _settingsService = SettingsService();
   User? _currentUser; // Make nullable
+  String _currentUsername = 'Unknown';
+  Stream<String> get onFileReceived => _fileReceivedController.stream;
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
@@ -55,6 +57,10 @@ class NetworkService {
       await dispose();
       rethrow;
     }
+  }
+
+  void setUsername(String username) {
+    _currentUsername = username;
   }
 
   Future<String> _getIpAddress() async {
@@ -220,6 +226,7 @@ class NetworkService {
         'name': file.path.split(Platform.pathSeparator).last,
         'size': fileSize,
         'sender': currentIpAddress,
+        'senderUsername': _currentUsername,
       };
       print('📋 Sending metadata: $metadata');
 
@@ -292,6 +299,7 @@ class NetworkService {
     int? expectedSize;
     int receivedBytes = 0;
     final stopwatch = Stopwatch()..start();
+    Map<String, dynamic>? receivedInfo;
 
     subscription = socket.listen(
       (List<int> data) async {
@@ -324,6 +332,7 @@ class NetworkService {
               final metadataStr = utf8.decode(metadataBytes);
               print('📋 Complete metadata received: $metadataStr');
               final info = json.decode(metadataStr);
+              receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
               expectedSize = info['size'] as int;
               print('📋 Expected file size: $expectedSize bytes');
 
@@ -401,7 +410,8 @@ class NetworkService {
           if (expectedSize != null && finalSize != expectedSize) {
             print('⚠️ Warning: File size mismatch!');
           }
-          _fileReceivedController.add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed');
+          final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
+          _fileReceivedController.add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
         }
         subscription?.cancel();
         socket.close();

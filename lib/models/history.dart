@@ -47,6 +47,10 @@ class FileHistory {
     _entries.add(entry);
   }
 
+  void removeEntry(FileHistoryEntry entry) {
+    _entries.removeWhere((e) => e.destinationPath == entry.destinationPath && e.createdAt == entry.createdAt);
+  }
+
   void clear() {
     _entries.clear();
   }
