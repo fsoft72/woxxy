@@ -25,7 +25,7 @@ class NetworkService {
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
   final SettingsService _settingsService = SettingsService();
-  late User _currentUser;
+  User? _currentUser; // Make nullable
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
@@ -107,7 +107,8 @@ class NetworkService {
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
-        final message = 'WOXXY_ANNOUNCE:${_currentUser.username}:$currentIpAddress:$_port';
+        final name = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
+        final message = 'WOXXY_ANNOUNCE:$name:$currentIpAddress:$_port';
         _discoverySocket?.send(
           utf8.encode(message),
           InternetAddress('255.255.255.255'),
@@ -152,13 +153,13 @@ class NetworkService {
     try {
       final parts = message.split(':');
       if (parts.length >= 4) {
-        final peerId = parts[1];
+        final name = parts[1];
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
-        if (peerId != _peerId) {
+        if (name != _currentUser?.username) {
           final peer = Peer(
-            name: 'woxxy-$peerId',
-            id: peerId,
+            name: name,
+            id: name,
             address: InternetAddress(peerIp),
             port: peerPort,
           );
@@ -340,8 +341,7 @@ class NetworkService {
               int counter = 1;
               while (await File(filePath).exists()) {
                 final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-                final nameWithoutExt =
-                    fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+                final nameWithoutExt = fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
                 fileName = '$nameWithoutExt ($counter)$extension';
                 filePath = '${dir.path}${Platform.pathSeparator}$fileName';
                 counter++;
@@ -367,8 +367,7 @@ class NetworkService {
             receivedBytes += data.length;
             if (expectedSize != null) {
               final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-              print(
-                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
             } else {
               print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes)');
             }

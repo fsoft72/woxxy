@@ -58,19 +58,21 @@ class _HomePageState extends State<HomePage> {
   final NetworkService _networkService = NetworkService();
   final SettingsService _settingsService = SettingsService();
   int _selectedIndex = 1; // Default to home screen
-  late User _currentUser;
+  User? _currentUser; // Make nullable
+  bool _isLoading = true; // Add loading state
 
   @override
   void initState() {
     super.initState();
-    _networkService.start();
     _loadSettings();
+    _networkService.start();
   }
 
   Future<void> _loadSettings() async {
     final user = await _settingsService.loadSettings();
     setState(() {
       _currentUser = user;
+      _isLoading = false;
     });
   }
 
@@ -91,15 +93,26 @@ class _HomePageState extends State<HomePage> {
     return [
       const HistoryScreen(),
       HomeContent(networkService: _networkService),
-      SettingsScreen(
-        user: _currentUser,
-        onUserUpdated: _updateUser,
-      ),
+      if (_currentUser != null)
+        SettingsScreen(
+          user: _currentUser!,
+          onUserUpdated: _updateUser,
+        )
+      else
+        const Center(child: CircularProgressIndicator()),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     final screens = _getScreens();
     return Scaffold(
       appBar: AppBar(
