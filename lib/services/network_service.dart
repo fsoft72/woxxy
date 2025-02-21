@@ -171,12 +171,42 @@ class NetworkService {
 
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
     print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
+
+    // Get the peer from our known peers list since we need their listening port
+    final peer = _peers[senderId]?.peer;
+    if (peer == null) {
+      print('⚠️ [Avatar] Unknown peer requested profile picture: $senderId');
+      return;
+    }
+
+    // Allow the incoming socket to close naturally
+    try {
+      socket.destroy();
+    } catch (e) {
+      print('⚠️ [Avatar] Error closing incoming socket: $e');
+    }
+
+    // Create a new socket for sending the response
+    Socket? responseSocket;
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
         print('🔍 [Avatar] Looking for profile image at: ${file.path}');
         if (await file.exists()) {
           try {
+            // Connect back to the peer's listening port
+            print('🔌 [Avatar] Connecting to peer at ${peer.address.address}:${peer.port}');
+            responseSocket = await Socket.connect(
+              peer.address,
+              peer.port,
+            ).timeout(
+              const Duration(seconds: 5),
+              onTimeout: () {
+                print('⏰ Connection attempt timed out');
+                throw Exception('Connection timed out');
+              },
+            );
+
             final fileSize = await file.length();
             final metadata = {
               'type': 'profile_picture_response',
@@ -191,10 +221,13 @@ class NetworkService {
             final metadataBytes = utf8.encode(json.encode(metadata));
             final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
 
-            socket.add(lengthBytes.buffer.asUint8List());
-            await socket.flush();
-            socket.add(metadataBytes);
-            await socket.flush();
+            responseSocket.add(lengthBytes.buffer.asUint8List());
+            await responseSocket.flush();
+            responseSocket.add(metadataBytes);
+            await responseSocket.flush();
+
+            // Add a small delay after metadata
+            await Future.delayed(const Duration(milliseconds: 100));
 
             // Stream the file in chunks
             final input = await file.open();
@@ -205,11 +238,11 @@ class NetworkService {
                 final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
                 final buffer = await input.read(chunkSize);
                 if (buffer.isEmpty) break;
-                socket.add(buffer);
-                await socket.flush();
+                responseSocket.add(buffer);
+                await responseSocket.flush();
                 sentBytes += buffer.length;
 
-                // Add a small delay to prevent overwhelming the socket
+                // Add a small delay between chunks to prevent overwhelming the socket
                 await Future.delayed(const Duration(milliseconds: 1));
               }
               print('✅ [Avatar] Profile picture sent successfully');
@@ -229,8 +262,13 @@ class NetworkService {
     } catch (e, stack) {
       print('❌ [Avatar] Error sending profile picture: $e');
       print('📑 [Avatar] Stack trace: $stack');
+    } finally {
+      try {
+        await responseSocket?.close();
+      } catch (e) {
+        print('⚠️ [Avatar] Error closing response socket: $e');
+      }
     }
-    // Note: We don't close the socket here since it's managed by the caller
   }
 
   void _handleIncomingConnection(Socket socket) {
@@ -253,7 +291,6 @@ class NetworkService {
           buffer.addAll(data);
 
           if (!metadataLengthReceived) {
-            // Keep processing until we find a valid length prefix
             while (buffer.length >= 4 && !metadataLengthReceived) {
               var testLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
               if (testLength > 0 && testLength < 1024 * 1024) {
@@ -280,6 +317,7 @@ class NetworkService {
               receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
 
               if (receivedInfo!['type'] == 'profile_picture_request') {
+                print('📸 [Avatar] Received profile picture request');
                 await _handleProfilePictureRequest(
                   socket,
                   receivedInfo!['senderId'],
@@ -287,6 +325,7 @@ class NetworkService {
                 );
                 return;
               } else if (receivedInfo!['type'] == 'profile_picture_response') {
+                print('🖼️ [Avatar] Processing profile picture response');
                 // Create a temporary file to store the profile picture
                 final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
                 final tempFile = File('${tempDir.path}/profile_${receivedInfo!['senderPeerId']}.jpg');
@@ -300,6 +339,7 @@ class NetworkService {
                   final remainingData = buffer.sublist(metadataLength);
                   fileSink?.add(remainingData);
                   receivedBytes += remainingData.length;
+                  print('📥 [Avatar] Processed ${remainingData.length} bytes of profile picture data');
                 }
                 buffer.clear();
               } else {
@@ -341,12 +381,17 @@ class NetworkService {
               throw e;
             }
           } else if (metadataReceived && fileSink != null) {
-            fileSink?.add(data);
-            receivedBytes += data.length;
-            if (expectedSize != null) {
-              final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-              print(
-                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+            try {
+              fileSink?.add(data);
+              receivedBytes += data.length;
+              if (expectedSize != null) {
+                final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
+                print(
+                    '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+              }
+            } catch (e) {
+              print('❌ Error writing data chunk: $e');
+              throw e;
             }
           }
         } catch (e, stack) {
@@ -358,47 +403,51 @@ class NetworkService {
       onDone: () async {
         stopwatch.stop();
         print('✅ Transfer completed');
-        await fileSink?.flush();
-        await fileSink?.close();
+        try {
+          await fileSink?.flush();
+          await fileSink?.close();
 
-        if (receiveFile != null && await receiveFile!.exists()) {
-          final finalSize = await receiveFile!.length();
+          if (receiveFile != null && await receiveFile!.exists()) {
+            final finalSize = await receiveFile!.length();
 
-          if (receivedInfo?['type'] == 'profile_picture_response') {
-            try {
-              final imageBytes = await receiveFile!.readAsBytes();
-              await _avatarStore.setAvatar(receivedInfo!['senderPeerId'], imageBytes);
-              print('✅ [Avatar] Successfully stored avatar in memory');
-            } catch (e) {
-              print('❌ Error processing received profile picture: $e');
-            } finally {
-              // Clean up temp files
+            if (receivedInfo?['type'] == 'profile_picture_response') {
               try {
-                if (await receiveFile!.exists()) {
-                  await receiveFile!.delete();
-                  final parentDir = receiveFile!.parent;
-                  if (await parentDir.exists()) {
-                    await parentDir.delete();
-                  }
-                }
+                final imageBytes = await receiveFile!.readAsBytes();
+                await _avatarStore.setAvatar(receivedInfo!['senderPeerId'], imageBytes);
+                print('✅ [Avatar] Successfully stored avatar in memory');
               } catch (e) {
-                print('⚠️ [Avatar] Error cleaning up temporary files: $e');
+                print('❌ Error processing received profile picture: $e');
+              }
+            } else {
+              // Regular file transfer completion
+              final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
+              final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+              final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
+              if (expectedSize != null && finalSize != expectedSize) {
+                print('⚠️ Warning: File size mismatch!');
+              }
+              final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
+              _fileReceivedController
+                  .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+            }
+          }
+        } catch (e) {
+          print('❌ Error in onDone handler: $e');
+        } finally {
+          // Clean up resources
+          try {
+            if (receiveFile != null && await receiveFile!.exists()) {
+              await receiveFile!.delete();
+              final parentDir = receiveFile!.parent;
+              if (await parentDir.exists()) {
+                await parentDir.delete();
               }
             }
-          } else {
-            // Regular file transfer completion
-            final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
-            final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-            final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
-            if (expectedSize != null && finalSize != expectedSize) {
-              print('⚠️ Warning: File size mismatch!');
-            }
-            final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
-            _fileReceivedController
-                .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+          } catch (e) {
+            print('⚠️ Error cleaning up temporary files: $e');
           }
+          socket.close();
         }
-        socket.close();
       },
       onError: (error, stackTrace) {
         print('❌ Error during transfer: $error');
