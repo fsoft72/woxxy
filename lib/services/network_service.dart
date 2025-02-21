@@ -449,8 +449,9 @@ class NetworkService {
 
   Future<void> _requestProfilePicture(Peer peer) async {
     print('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
+    Socket? socket;
     try {
-      final socket = await Socket.connect(peer.address, peer.port);
+      socket = await Socket.connect(peer.address, peer.port);
       final request = {
         'type': 'profile_picture_request',
         'senderId': _peerId,
@@ -458,10 +459,16 @@ class NetworkService {
       };
       print('📨 [Avatar] Sending request: ${json.encode(request)}');
       socket.write(json.encode(request));
-      await socket.close();
+      await socket.flush();
       print('✅ [Avatar] Request sent successfully');
     } catch (e) {
       print('❌ [Avatar] Error requesting profile picture: $e');
+    } finally {
+      try {
+        await socket?.close();
+      } catch (e) {
+        print('⚠️ [Avatar] Error closing request socket: $e');
+      }
     }
   }
 
@@ -483,6 +490,7 @@ class NetworkService {
           };
           print('📤 [Avatar] Sending response to: $senderName');
           socket.write(json.encode(response));
+          await socket.flush(); // Make sure data is flushed before closing
           print('✅ [Avatar] Response sent successfully');
         } else {
           print('⚠️ [Avatar] Profile image file not found');
@@ -494,7 +502,11 @@ class NetworkService {
       print('❌ [Avatar] Error sending profile picture: $e');
       print('📑 [Avatar] Stack trace: $stack');
     } finally {
-      await socket.close();
+      try {
+        await socket.close();
+      } catch (e) {
+        print('⚠️ [Avatar] Error closing socket: $e');
+      }
     }
   }
 
