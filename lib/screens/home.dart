@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
+import '../models/avatars.dart';
 import 'peer_details.dart';
 
 class HomeContent extends StatefulWidget {
@@ -15,6 +16,8 @@ class HomeContent extends StatefulWidget {
 }
 
 class _HomeContentState extends State<HomeContent> {
+  final AvatarStore _avatarStore = AvatarStore();
+
   @override
   void initState() {
     super.initState();
@@ -57,7 +60,20 @@ class _HomeContentState extends State<HomeContent> {
           itemCount: peers.length,
           itemBuilder: (context, index) {
             final peer = peers[index];
+            final peerAvatar = _avatarStore.getAvatar(peer.id);
+
             return ListTile(
+              leading: SizedBox(
+                width: 40,
+                height: 40,
+                child: peerAvatar != null
+                    ? CircleAvatar(
+                        backgroundImage: MemoryImage(peerAvatar),
+                      )
+                    : const CircleAvatar(
+                        child: Icon(Icons.person),
+                      ),
+              ),
               title: Text(peer.name),
               subtitle: Text('${peer.address.address}:${peer.port}'),
               onTap: () {
