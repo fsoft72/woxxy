@@ -147,7 +147,7 @@ class NetworkService {
       socket = await Socket.connect(peer.address, peer.port);
       final request = {
         'type': 'profile_picture_request',
-        'senderId': peer.id, // Use peer's ID instead of our peerId
+        'senderId': _currentUser?.username ?? 'Unknown', // Use username instead of peerId
         'senderName': _currentUser?.username ?? 'Unknown',
       };
       // Send metadata length first (4 bytes), then metadata
@@ -172,12 +172,21 @@ class NetworkService {
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
     print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
 
-    // Get the peer from our known peers list since we need their listening port
-    final peer = _peers[senderId]?.peer;
-    if (peer == null) {
-      print('⚠️ [Avatar] Unknown peer requested profile picture: $senderId');
-      return;
-    }
+    // Store peer info from incoming socket
+    final peerAddress = socket.remoteAddress;
+    final peerPort = socket.remotePort;
+
+    // Create a temporary peer for sending the response
+    final tempPeer = Peer(
+      name: senderName,
+      id: senderName, // Use senderName as the consistent ID
+      address: peerAddress,
+      port: _port, // Use the standard port since this is where the peer is listening
+    );
+
+    // Debug: Print all available peer IDs and avatars
+    print('🔍 [Avatar] Available peer IDs: ${_peers.keys.join(", ")}');
+    print('🖼️ [Avatar] Available avatar keys: ${_avatarStore.getKeys()}');
 
     // Allow the incoming socket to close naturally
     try {
@@ -195,10 +204,10 @@ class NetworkService {
         if (await file.exists()) {
           try {
             // Connect back to the peer's listening port
-            print('🔌 [Avatar] Connecting to peer at ${peer.address.address}:${peer.port}');
+            print('🔌 [Avatar] Connecting to peer at ${tempPeer.address.address}:${tempPeer.port}');
             responseSocket = await Socket.connect(
-              peer.address,
-              peer.port,
+              tempPeer.address,
+              tempPeer.port,
             ).timeout(
               const Duration(seconds: 5),
               onTimeout: () {
@@ -212,8 +221,8 @@ class NetworkService {
               'type': 'profile_picture_response',
               'name': 'profile_picture.jpg',
               'size': fileSize,
-              'senderId': senderId,
-              'senderPeerId': _peerId,
+              'senderId': _currentUser?.username ?? 'Unknown',
+              'senderPeerId': _currentUser?.username ?? 'Unknown',
             };
             print('📋 [Avatar] Sending metadata: $metadata');
 
@@ -328,7 +337,7 @@ class NetworkService {
                 print('🖼️ [Avatar] Processing profile picture response');
                 // Create a temporary file to store the profile picture
                 final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
-                final tempFile = File('${tempDir.path}/profile_${receivedInfo!['senderPeerId']}.jpg');
+                final tempFile = File('${tempDir.path}/profile_${receivedInfo!['senderId']}.jpg');
                 fileSink = tempFile.openWrite(mode: FileMode.writeOnly);
                 receiveFile = tempFile;
                 expectedSize = receivedInfo!['size'] as int;
@@ -412,9 +421,13 @@ class NetworkService {
 
             if (receivedInfo?['type'] == 'profile_picture_response') {
               try {
+                print('📥 [Avatar] Reading profile picture data...');
                 final imageBytes = await receiveFile!.readAsBytes();
-                await _avatarStore.setAvatar(receivedInfo!['senderPeerId'], imageBytes);
+                final senderId = receivedInfo!['senderId'];
+                print('💾 [Avatar] Storing profile picture for peer ID: $senderId');
+                await _avatarStore.setAvatar(senderId, imageBytes);
                 print('✅ [Avatar] Successfully stored avatar in memory');
+                print('🔍 [Avatar] Current avatar keys after storage: ${_avatarStore.getKeys()}');
               } catch (e) {
                 print('❌ Error processing received profile picture: $e');
               }
@@ -468,8 +481,9 @@ class NetworkService {
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
-        final name = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
-        final message = 'WOXXY_ANNOUNCE:$name:$currentIpAddress:$_port:$_peerId';
+        // Use username as the consistent ID since it's unique and doesn't change as often
+        final username = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
+        final message = 'WOXXY_ANNOUNCE:$username:$currentIpAddress:$_port:$username';
         print('📢 Broadcasting discovery message: $message');
 
         // Try broadcast first, fallback to localhost if it fails
@@ -540,16 +554,15 @@ class NetworkService {
     try {
       final parts = message.split(':');
       if (parts.length >= 5) {
-        // Now expecting 5 parts including peerId
         final name = parts[1];
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
-        final peerId = parts[4];
+        final peerId = parts[4]; // This will now be the username
         if (name != _currentUser?.username) {
           print('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp, ID: $peerId)');
           final peer = Peer(
             name: name,
-            id: peerId, // Use the actual peerId sent in the announcement
+            id: peerId, // Using username as the consistent ID
             address: InternetAddress(peerIp),
             port: peerPort,
           );
@@ -573,27 +586,27 @@ class NetworkService {
     final bool isNewPeer = !_peers.containsKey(peer.id);
 
     if (isNewPeer) {
-      print('✨ Adding new peer: ${peer.name}');
+      print('✨ Adding new peer: ${peer.name} (ID: ${peer.id})');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
+      print('🔍 [Avatar] Current peer IDs after add: ${_peers.keys.join(", ")}');
 
       // Request profile picture from new peer
       _requestProfilePicture(peer);
     } else {
-      // if the peer does not have a profile image, request it
-      /*
-      if (!_avatarStore.hasAvatar(peer.id)) {
-        _requestProfilePicture(peer);
-      }
-			*/
-
       _peers[peer.id]?.lastSeen = DateTime.now();
-      if (_peers[peer.id]?.peer.address.address != peer.address.address) {
-        print('📝 Updating peer IP: ${peer.name}');
+      if (_peers[peer.id]?.peer.address.address != peer.address.address || _peers[peer.id]?.peer.port != peer.port) {
+        print('📝 Updating peer info: ${peer.name} (ID: ${peer.id})');
         _peers[peer.id] = _PeerStatus(peer);
         _peerController.add(currentPeers);
+
+        // Re-request profile picture when peer reconnects with new address/port
+        if (!_avatarStore.hasAvatar(peer.id)) {
+          print('🔄 Re-requesting profile picture for reconnected peer');
+          _requestProfilePicture(peer);
+        }
       } else {
-        print('👍 Updated last seen time for peer: ${peer.name}');
+        print('👍 Updated last seen time for peer: ${peer.name} (ID: ${peer.id})');
       }
     }
   }

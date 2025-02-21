@@ -11,10 +11,21 @@ class AvatarStore {
   // In-memory storage for avatars
   final Map<String, ui.Image> _avatars = {};
 
+  /// Returns a list of all usernames that have avatars
+  List<String> getKeys() {
+    print("📋 [AvatarStore] Available avatar keys: ${_avatars.keys.toList()}");
+    return _avatars.keys.toList();
+  }
+
   /// Stores an avatar image for a username
   Future<void> setAvatar(String username, Uint8List imageData) async {
     print("🖼️ [AvatarStore] Setting avatar for: $username (${imageData.length} bytes)");
     try {
+      // Clean up old avatar if it exists
+      if (_avatars.containsKey(username)) {
+        _avatars[username]?.dispose();
+      }
+
       final codec = await ui.instantiateImageCodec(imageData);
       final frameInfo = await codec.getNextFrame();
       _avatars[username] = frameInfo.image;
