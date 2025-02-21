@@ -6,6 +6,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:rxdart/rxdart.dart';
 import '../models/peer.dart';
 import '../models/user.dart';
+import '../models/avatars.dart';
 import 'settings_service.dart';
 
 class NetworkService {
@@ -32,6 +33,8 @@ class NetworkService {
   Stream<List<Peer>> get peerStream => _peerController.stream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
   List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
+
+  final AvatarStore _avatarStore = AvatarStore();
 
   Future<void> start() async {
     try {
@@ -115,7 +118,37 @@ class NetworkService {
   Future<void> _startServer() async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _port);
     print('Server started on port $_port');
-    _server!.listen(_handleConnection);
+    _server!.listen((Socket socket) {
+      socket.listen(
+        (List<int> data) async {
+          try {
+            final String message = utf8.decode(data);
+            final Map<String, dynamic> request = json.decode(message);
+
+            if (request['type'] == 'profile_picture_request') {
+              await _handleProfilePictureRequest(
+                socket,
+                request['senderId'],
+                request['senderName'],
+              );
+            } else if (request['type'] == 'profile_picture_response') {
+              final String senderId = request['senderId'];
+              final String imageData = request['imageData'];
+              _avatarStore.setAvatar(senderId, base64Decode(imageData));
+            } else {
+              // Handle existing file transfer logic
+              _handleConnection(socket);
+            }
+          } catch (e) {
+            print('❌ Error handling socket data: $e');
+          }
+        },
+        onError: (error) {
+          print('❌ Socket error: $error');
+          socket.destroy();
+        },
+      );
+    });
   }
 
   void _startDiscovery() {
@@ -222,10 +255,15 @@ class NetworkService {
       return;
     }
 
-    if (!_peers.containsKey(peer.id)) {
+    final bool isNewPeer = !_peers.containsKey(peer.id);
+
+    if (isNewPeer) {
       print('✨ Adding new peer: ${peer.name}');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
+
+      // Request profile picture from new peer
+      _requestProfilePicture(peer);
     } else {
       _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
@@ -235,6 +273,38 @@ class NetworkService {
       } else {
         print('👍 Updated last seen time for peer: ${peer.name}');
       }
+    }
+  }
+
+  Future<void> _requestProfilePicture(Peer peer) async {
+    try {
+      final socket = await Socket.connect(peer.address, peer.port);
+      final request = {
+        'type': 'profile_picture_request',
+        'senderId': _peerId,
+        'senderName': _currentUser?.username ?? 'Unknown',
+      };
+      socket.write(json.encode(request));
+      await socket.close();
+    } catch (e) {
+      print('❌ Error requesting profile picture: $e');
+    }
+  }
+
+  Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
+    try {
+      if (_currentUser?.profileImage != null) {
+        final response = {
+          'type': 'profile_picture_response',
+          'senderId': senderId,
+          'imageData': _currentUser!.profileImage,
+        };
+        socket.write(json.encode(response));
+      }
+    } catch (e) {
+      print('❌ Error sending profile picture: $e');
+    } finally {
+      await socket.close();
     }
   }
 
