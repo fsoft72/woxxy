@@ -179,7 +179,7 @@ class NetworkService {
                 final String senderPeerId = request['senderPeerId'];
                 final String imageData = request['imageData'];
                 print("🖼️ Received profile picture from peer: $senderId");
-                _avatarStore.setAvatar(senderPeerId, base64Decode(imageData));
+                await _avatarStore.setAvatar(senderPeerId, base64Decode(imageData));
                 handledConnection = true;
                 return;
               }

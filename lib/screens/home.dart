@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 import '../services/network_service.dart';
 import '../models/peer.dart';
 import '../models/avatars.dart';
@@ -68,8 +69,9 @@ class _HomeContentState extends State<HomeContent> {
                 width: 40,
                 height: 40,
                 child: peerAvatar != null
-                    ? CircleAvatar(
-                        backgroundImage: MemoryImage(peerAvatar),
+                    ? RawImage(
+                        image: peerAvatar,
+                        fit: BoxFit.cover,
                       )
                     : const CircleAvatar(
                         child: Icon(Icons.person),
