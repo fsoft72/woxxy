@@ -398,9 +398,10 @@ class NetworkService {
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
         if (name != _currentUser?.username) {
+          print('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp)');
           final peer = Peer(
             name: name,
-            id: name,
+            id: name, // Using name as the consistent ID
             address: InternetAddress(peerIp),
             port: peerPort,
           );
@@ -408,7 +409,7 @@ class NetworkService {
         }
       }
     } catch (e) {
-      print('Error handling peer announcement: $e');
+      print('❌ [Avatar] Error handling peer announcement: $e');
     }
   }
 
@@ -443,6 +444,7 @@ class NetworkService {
   }
 
   Future<void> _requestProfilePicture(Peer peer) async {
+    print('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
     try {
       final socket = await Socket.connect(peer.address, peer.port);
       final request = {
@@ -450,19 +452,24 @@ class NetworkService {
         'senderId': _peerId,
         'senderName': _currentUser?.username ?? 'Unknown',
       };
+      print('📨 [Avatar] Sending request: ${json.encode(request)}');
       socket.write(json.encode(request));
       await socket.close();
+      print('✅ [Avatar] Request sent successfully');
     } catch (e) {
-      print('❌ Error requesting profile picture: $e');
+      print('❌ [Avatar] Error requesting profile picture: $e');
     }
   }
 
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
+    print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
+        print('🔍 [Avatar] Looking for profile image at: ${file.path}');
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
+          print('📊 [Avatar] Read image file: ${bytes.length} bytes');
           final base64Image = base64Encode(bytes);
           final response = {
             'type': 'profile_picture_response',
@@ -470,11 +477,18 @@ class NetworkService {
             'senderPeerId': _peerId,
             'imageData': base64Image,
           };
+          print('📤 [Avatar] Sending response to: $senderName');
           socket.write(json.encode(response));
+          print('✅ [Avatar] Response sent successfully');
+        } else {
+          print('⚠️ [Avatar] Profile image file not found');
         }
+      } else {
+        print('ℹ️ [Avatar] No profile image set');
       }
-    } catch (e) {
-      print('❌ Error sending profile picture: $e');
+    } catch (e, stack) {
+      print('❌ [Avatar] Error sending profile picture: $e');
+      print('📑 [Avatar] Stack trace: $stack');
     } finally {
       await socket.close();
     }

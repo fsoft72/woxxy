@@ -62,7 +62,9 @@ class _HomeContentState extends State<HomeContent> {
           itemCount: peers.length,
           itemBuilder: (context, index) {
             final peer = peers[index];
-            final peerAvatar = _avatarStore.getAvatar(peer.address.address);
+            print('🎭 [Avatar UI] Getting avatar for peer: ${peer.name} (${peer.id})');
+            final peerAvatar = _avatarStore.getAvatar(peer.id); // Use peer.id instead of address
+            print('🖼️ [Avatar UI] Avatar ${peerAvatar != null ? 'found' : 'not found'} for ${peer.name}');
 
             return ListTile(
               leading: SizedBox(
