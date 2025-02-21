@@ -171,12 +171,12 @@ class NetworkService {
 
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
     print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
+    bool isSocketClosed = false;
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
         print('🔍 [Avatar] Looking for profile image at: ${file.path}');
         if (await file.exists()) {
-          // Use the same file transfer mechanism as regular files
           final fileSize = await file.length();
           final metadata = {
             'type': 'profile_picture_response',
@@ -190,6 +190,7 @@ class NetworkService {
           // Send metadata length first (4 bytes), then metadata
           final metadataBytes = utf8.encode(json.encode(metadata));
           final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+
           try {
             socket.add(lengthBytes.buffer.asUint8List());
             await socket.flush();
@@ -203,7 +204,7 @@ class NetworkService {
             final input = await file.open();
             int sentBytes = 0;
             try {
-              while (sentBytes < fileSize) {
+              while (sentBytes < fileSize && !isSocketClosed) {
                 final remaining = fileSize - sentBytes;
                 final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
                 final buffer = await input.read(chunkSize);
@@ -217,6 +218,7 @@ class NetworkService {
               await input.close();
             }
           } catch (e) {
+            isSocketClosed = true;
             print('❌ [Avatar] Error during file transfer: $e');
             rethrow;
           }
@@ -227,8 +229,17 @@ class NetworkService {
         print('ℹ️ [Avatar] No profile image set');
       }
     } catch (e, stack) {
+      isSocketClosed = true;
       print('❌ [Avatar] Error sending profile picture: $e');
       print('📑 [Avatar] Stack trace: $stack');
+    } finally {
+      try {
+        if (!isSocketClosed) {
+          await socket.close();
+        }
+      } catch (e) {
+        print('⚠️ [Avatar] Error during socket cleanup: $e');
+      }
     }
   }
 
