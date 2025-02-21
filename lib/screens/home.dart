@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+// ignore: unused_import
 import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
 import '../models/avatars.dart';
@@ -71,9 +72,13 @@ class _HomeContentState extends State<HomeContent> {
                 width: 40,
                 height: 40,
                 child: peerAvatar != null
-                    ? RawImage(
-                        image: peerAvatar,
-                        fit: BoxFit.cover,
+                    ? ClipOval(
+                        child: RawImage(
+                          image: peerAvatar,
+                          width: 40,
+                          height: 40,
+                          fit: BoxFit.cover,
+                        ),
                       )
                     : const CircleAvatar(
                         child: Icon(Icons.person),

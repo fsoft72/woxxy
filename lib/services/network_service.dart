@@ -140,9 +140,100 @@ class NetworkService {
     });
   }
 
+  Future<void> _requestProfilePicture(Peer peer) async {
+    print('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
+    Socket? socket;
+    try {
+      socket = await Socket.connect(peer.address, peer.port);
+      final request = {
+        'type': 'profile_picture_request',
+        'senderId': _peerId,
+        'senderName': _currentUser?.username ?? 'Unknown',
+      };
+      // Send metadata length first (4 bytes), then metadata
+      final metadataBytes = utf8.encode(json.encode(request));
+      final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+      socket.add(lengthBytes.buffer.asUint8List());
+      await socket.flush();
+      socket.add(metadataBytes);
+      await socket.flush();
+      print('✅ [Avatar] Request sent successfully');
+    } catch (e) {
+      print('❌ [Avatar] Error requesting profile picture: $e');
+    } finally {
+      try {
+        await socket?.close();
+      } catch (e) {
+        print('⚠️ [Avatar] Error closing request socket: $e');
+      }
+    }
+  }
+
+  Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
+    print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
+    try {
+      if (_currentUser?.profileImage != null) {
+        final file = File(_currentUser!.profileImage!);
+        print('🔍 [Avatar] Looking for profile image at: ${file.path}');
+        if (await file.exists()) {
+          // Use the same file transfer mechanism as regular files
+          final fileSize = await file.length();
+          final metadata = {
+            'type': 'profile_picture_response',
+            'name': 'profile_picture.jpg',
+            'size': fileSize,
+            'senderId': senderId,
+            'senderPeerId': _peerId,
+          };
+          print('📋 [Avatar] Sending metadata: $metadata');
+
+          // Send metadata length first (4 bytes), then metadata
+          final metadataBytes = utf8.encode(json.encode(metadata));
+          final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+          try {
+            socket.add(lengthBytes.buffer.asUint8List());
+            await socket.flush();
+            socket.add(metadataBytes);
+            await socket.flush();
+
+            // Small delay to ensure metadata is processed
+            await Future.delayed(const Duration(milliseconds: 100));
+
+            // Stream the file in chunks
+            final input = await file.open();
+            int sentBytes = 0;
+            try {
+              while (sentBytes < fileSize) {
+                final remaining = fileSize - sentBytes;
+                final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
+                final buffer = await input.read(chunkSize);
+                if (buffer.isEmpty) break;
+                socket.add(buffer);
+                await socket.flush();
+                sentBytes += buffer.length;
+              }
+              print('✅ [Avatar] Profile picture sent successfully');
+            } finally {
+              await input.close();
+            }
+          } catch (e) {
+            print('❌ [Avatar] Error during file transfer: $e');
+            rethrow;
+          }
+        } else {
+          print('⚠️ [Avatar] Profile image file not found');
+        }
+      } else {
+        print('ℹ️ [Avatar] No profile image set');
+      }
+    } catch (e, stack) {
+      print('❌ [Avatar] Error sending profile picture: $e');
+      print('📑 [Avatar] Stack trace: $stack');
+    }
+  }
+
   void _handleIncomingConnection(Socket socket) {
     List<int> buffer = [];
-    bool handledConnection = false;
     bool metadataLengthReceived = false;
     bool metadataReceived = false;
     int metadataLength = 0;
@@ -160,50 +251,17 @@ class NetworkService {
         try {
           buffer.addAll(data);
 
-          if (!handledConnection) {
-            // Try to decode as JSON first
-            try {
-              final String message = utf8.decode(buffer);
-              final Map<String, dynamic> request = json.decode(message);
-
-              if (request['type'] == 'profile_picture_request') {
-                await _handleProfilePictureRequest(
-                  socket,
-                  request['senderId'],
-                  request['senderName'],
-                );
-                handledConnection = true;
-                return;
-              } else if (request['type'] == 'profile_picture_response') {
-                final String senderId = request['senderId'];
-                final String senderPeerId = request['senderPeerId'];
-                final String imageData = request['imageData'];
-                print("🖼️ Received profile picture from peer: $senderId");
-                await _avatarStore.setAvatar(senderPeerId, base64Decode(imageData));
-                handledConnection = true;
-                return;
-              }
-            } catch (jsonError) {
-              // If JSON parsing fails, treat it as a file transfer
-              handledConnection = true;
-            }
-          }
-
-          // Handle file transfer data
           if (!metadataLengthReceived) {
             // Keep processing until we find a valid length prefix
             while (buffer.length >= 4 && !metadataLengthReceived) {
-              // Look for a valid length value (reasonable size limits)
               var testLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
               if (testLength > 0 && testLength < 1024 * 1024) {
-                // Max 1MB metadata
                 metadataLength = testLength;
                 buffer = buffer.skip(4).toList();
                 metadataLengthReceived = true;
                 print('📋 Found valid metadata length: $metadataLength bytes');
                 break;
               } else {
-                // Skip invalid byte and continue searching
                 buffer = buffer.skip(1).toList();
                 print('⚠️ Skipping invalid byte in length prefix');
               }
@@ -214,61 +272,79 @@ class NetworkService {
           }
 
           if (!metadataReceived && buffer.length >= metadataLength) {
-            // Try to parse metadata with error handling
             try {
               final metadataBytes = buffer.take(metadataLength).toList();
               final metadataStr = utf8.decode(metadataBytes);
               print('📋 Complete metadata received: $metadataStr');
               receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
-              expectedSize = receivedInfo!['size'] as int;
-              print('📋 Expected file size: $expectedSize bytes');
 
-              final downloadsPath = await _getDownloadsPath();
-              final dir = Directory(downloadsPath);
-              if (!await dir.exists()) {
-                print('📁 Creating downloads directory');
-                await dir.create(recursive: true);
+              if (receivedInfo!['type'] == 'profile_picture_request') {
+                await _handleProfilePictureRequest(
+                  socket,
+                  receivedInfo!['senderId'],
+                  receivedInfo!['senderName'],
+                );
+                return;
+              } else if (receivedInfo!['type'] == 'profile_picture_response') {
+                // Create a temporary file to store the profile picture
+                final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
+                final tempFile = File('${tempDir.path}/profile_${receivedInfo!['senderPeerId']}.jpg');
+                fileSink = tempFile.openWrite(mode: FileMode.writeOnly);
+                receiveFile = tempFile;
+                expectedSize = receivedInfo!['size'] as int;
+                metadataReceived = true;
+
+                // Process remaining data as file content
+                if (buffer.length > metadataLength) {
+                  final remainingData = buffer.sublist(metadataLength);
+                  fileSink?.add(remainingData);
+                  receivedBytes += remainingData.length;
+                }
+                buffer.clear();
+              } else {
+                // Handle regular file transfer
+                expectedSize = receivedInfo!['size'] as int;
+                final downloadsPath = await _getDownloadsPath();
+                final dir = Directory(downloadsPath);
+                if (!await dir.exists()) {
+                  await dir.create(recursive: true);
+                }
+
+                String fileName = receivedInfo!['name'] as String;
+                String filePath = '${dir.path}${Platform.pathSeparator}$fileName';
+
+                // Handle duplicate filenames
+                int counter = 1;
+                while (await File(filePath).exists()) {
+                  final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
+                  final nameWithoutExt =
+                      fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+                  fileName = '$nameWithoutExt ($counter)$extension';
+                  filePath = '${dir.path}${Platform.pathSeparator}$fileName';
+                  counter++;
+                }
+
+                receiveFile = File(filePath);
+                fileSink = receiveFile!.openWrite(mode: FileMode.writeOnly);
+                metadataReceived = true;
+
+                if (buffer.length > metadataLength) {
+                  final remainingData = buffer.sublist(metadataLength);
+                  fileSink?.add(remainingData);
+                  receivedBytes += remainingData.length;
+                }
+                buffer.clear();
               }
-
-              String fileName = receivedInfo!['name'] as String;
-              String filePath = '${dir.path}${Platform.pathSeparator}$fileName';
-
-              // Handle duplicate filenames
-              int counter = 1;
-              while (await File(filePath).exists()) {
-                final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-                final nameWithoutExt =
-                    fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
-                fileName = '$nameWithoutExt ($counter)$extension';
-                filePath = '${dir.path}${Platform.pathSeparator}$fileName';
-                counter++;
-              }
-
-              receiveFile = File(filePath);
-              fileSink = receiveFile!.openWrite(mode: FileMode.writeOnly);
-              print('📄 Created file: $filePath');
-              metadataReceived = true;
-
-              // Process remaining data as file content
-              if (buffer.length > metadataLength) {
-                final remainingData = buffer.sublist(metadataLength);
-                fileSink!.add(remainingData);
-                receivedBytes += remainingData.length;
-                print('📥 Written initial chunk: ${remainingData.length} bytes');
-              }
-              buffer.clear();
             } catch (e) {
               print('❌ Error parsing metadata: $e');
               throw e;
             }
-          } else if (metadataReceived) {
-            // Direct binary write for file data
-            fileSink!.add(data);
+          } else if (metadataReceived && fileSink != null) {
+            fileSink?.add(data);
             receivedBytes += data.length;
             if (expectedSize != null) {
               final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-              print(
-                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
             }
           }
         } catch (e, stack) {
@@ -279,32 +355,51 @@ class NetworkService {
       },
       onDone: () async {
         stopwatch.stop();
-        print('✅ File transfer completed');
+        print('✅ Transfer completed');
         await fileSink?.flush();
         await fileSink?.close();
 
-        if (receiveFile != null) {
+        if (receiveFile != null && await receiveFile!.exists()) {
           final finalSize = await receiveFile!.length();
-          final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
-          final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-          final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
 
-          print('📁 Final file saved at: ${receiveFile!.path}');
-          print('📊 Received $receivedBytes bytes out of expected $expectedSize bytes');
-          print('📊 Actual file size: $finalSize bytes');
-          print('📊 Transfer completed in ${transferTime.toStringAsFixed(1)}s at $speed MiB/s');
-
-          if (expectedSize != null && finalSize != expectedSize) {
-            print('⚠️ Warning: File size mismatch!');
+          if (receivedInfo?['type'] == 'profile_picture_response') {
+            try {
+              final imageBytes = await receiveFile!.readAsBytes();
+              await _avatarStore.setAvatar(receivedInfo!['senderPeerId'], imageBytes);
+              print('✅ [Avatar] Successfully stored avatar in memory');
+            } catch (e) {
+              print('❌ Error processing received profile picture: $e');
+            } finally {
+              // Clean up temp files
+              try {
+                if (await receiveFile!.exists()) {
+                  await receiveFile!.delete();
+                  final parentDir = receiveFile!.parent;
+                  if (await parentDir.exists()) {
+                    await parentDir.delete();
+                  }
+                }
+              } catch (e) {
+                print('⚠️ [Avatar] Error cleaning up temporary files: $e');
+              }
+            }
+          } else {
+            // Regular file transfer completion
+            final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
+            final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+            final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
+            if (expectedSize != null && finalSize != expectedSize) {
+              print('⚠️ Warning: File size mismatch!');
+            }
+            final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
+            _fileReceivedController
+                .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
           }
-          final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
-          _fileReceivedController
-              .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
         }
         socket.close();
       },
       onError: (error, stackTrace) {
-        print('❌ Error during file reception: $error');
+        print('❌ Error during transfer: $error');
         print('📑 Stack trace: $stackTrace');
         _cleanupFileTransfer(fileSink, socket);
       },
@@ -443,69 +538,6 @@ class NetworkService {
         _peerController.add(currentPeers);
       } else {
         print('👍 Updated last seen time for peer: ${peer.name}');
-      }
-    }
-  }
-
-  Future<void> _requestProfilePicture(Peer peer) async {
-    print('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
-    Socket? socket;
-    try {
-      socket = await Socket.connect(peer.address, peer.port);
-      final request = {
-        'type': 'profile_picture_request',
-        'senderId': _peerId,
-        'senderName': _currentUser?.username ?? 'Unknown',
-      };
-      print('📨 [Avatar] Sending request: ${json.encode(request)}');
-      socket.write(json.encode(request));
-      await socket.flush();
-      print('✅ [Avatar] Request sent successfully');
-    } catch (e) {
-      print('❌ [Avatar] Error requesting profile picture: $e');
-    } finally {
-      try {
-        await socket?.close();
-      } catch (e) {
-        print('⚠️ [Avatar] Error closing request socket: $e');
-      }
-    }
-  }
-
-  Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
-    print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
-    try {
-      if (_currentUser?.profileImage != null) {
-        final file = File(_currentUser!.profileImage!);
-        print('🔍 [Avatar] Looking for profile image at: ${file.path}');
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          print('📊 [Avatar] Read image file: ${bytes.length} bytes');
-          final base64Image = base64Encode(bytes);
-          final response = {
-            'type': 'profile_picture_response',
-            'senderId': senderId,
-            'senderPeerId': _peerId,
-            'imageData': base64Image,
-          };
-          print('📤 [Avatar] Sending response to: $senderName');
-          socket.write(json.encode(response));
-          await socket.flush(); // Make sure data is flushed before closing
-          print('✅ [Avatar] Response sent successfully');
-        } else {
-          print('⚠️ [Avatar] Profile image file not found');
-        }
-      } else {
-        print('ℹ️ [Avatar] No profile image set');
-      }
-    } catch (e, stack) {
-      print('❌ [Avatar] Error sending profile picture: $e');
-      print('📑 [Avatar] Stack trace: $stack');
-    } finally {
-      try {
-        await socket.close();
-      } catch (e) {
-        print('⚠️ [Avatar] Error closing socket: $e');
       }
     }
   }
