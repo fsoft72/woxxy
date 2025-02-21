@@ -16,8 +16,7 @@ class NetworkService {
   static const int _bufferSize = 1024 * 32; // 32KB buffer size
 
   final String _peerId = DateTime.now().millisecondsSinceEpoch.toString();
-  final BehaviorSubject<List<Peer>> _peerController =
-      BehaviorSubject<List<Peer>>.seeded([]);
+  final BehaviorSubject<List<Peer>> _peerController = BehaviorSubject<List<Peer>>.seeded([]);
   final _fileReceivedController = StreamController<String>.broadcast();
   final Map<String, _PeerStatus> _peers = {};
   ServerSocket? _server;
@@ -32,8 +31,7 @@ class NetworkService {
 
   Stream<List<Peer>> get peerStream => _peerController.stream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
-  List<Peer> get currentPeers =>
-      _peers.values.map((status) => status.peer).toList();
+  List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
 
   Future<void> start() async {
     try {
@@ -67,31 +65,40 @@ class NetworkService {
 
   Future<String> _getIpAddress() async {
     try {
-      final wifiIP = await NetworkInfo().getWifiIP();
+      print('🔍 Getting IP address...');
+      final info = NetworkInfo();
+      final wifiIP = await info.getWifiIP();
+
       if (wifiIP != null && wifiIP.isNotEmpty) {
+        print('📡 Found WiFi IP: $wifiIP');
         return wifiIP;
       }
-    } catch (e) {
-      print('NetworkInfo failed: $e');
-    }
 
-    try {
+      // Fallback: Try to find a suitable network interface
+      print('⚠️ No WiFi IP found, checking network interfaces...');
       final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: true,
         type: InternetAddressType.IPv4,
-        includeLinkLocal: false,
       );
+
       for (var interface in interfaces) {
-        if (interface.name.toLowerCase().contains('lo')) continue;
+        print('🌐 Checking interface: ${interface.name}');
         for (var addr in interface.addresses) {
-          if (!addr.isLoopback && addr.type == InternetAddressType.IPv4) {
+          // Skip loopback and link-local addresses
+          if (!addr.isLoopback && !addr.address.startsWith('169.254')) {
+            print('✅ Found valid IP: ${addr.address} on ${interface.name}');
             return addr.address;
           }
         }
       }
+
+      print('❌ No suitable IP address found');
+      throw Exception('Could not determine IP address');
     } catch (e) {
-      print('Network interface lookup failed: $e');
+      print('❌ Error getting IP address: $e');
+      throw Exception('Could not determine IP address: $e');
     }
-    throw Exception('Could not determine IP address');
   }
 
   Future<String> _getDownloadsPath() async {
@@ -112,13 +119,13 @@ class NetworkService {
   }
 
   void _startDiscovery() {
+    print('🔍 Starting peer discovery service...');
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
-        final name = _currentUser?.username.trim().isEmpty ?? true
-            ? 'Woxxy-$_peerId'
-            : _currentUser!.username;
+        final name = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
         final message = 'WOXXY_ANNOUNCE:$name:$currentIpAddress:$_port';
+        print('📢 Broadcasting discovery message: $message');
 
         // Try broadcast first, fallback to localhost if it fails
         try {
@@ -127,7 +134,9 @@ class NetworkService {
             InternetAddress('255.255.255.255'),
             _discoveryPort,
           );
+          print('✅ Broadcast message sent successfully');
         } catch (e) {
+          print('⚠️ Broadcast failed: $e');
           // If broadcast fails, at least try localhost for testing
           _discoverySocket?.send(
             utf8.encode(message),
@@ -136,37 +145,49 @@ class NetworkService {
           );
         }
       } catch (e) {
-        print('Error sending discovery message: $e');
+        print('❌ Error in discovery service: $e');
       }
     });
   }
 
   void _startPeerCleanup() {
+    print('🧹 Starting peer cleanup service...');
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(_pingInterval, (timer) {
       final now = DateTime.now();
+      final beforeCount = _peers.length;
+
       _peers.removeWhere((key, status) {
         final expired = now.difference(status.lastSeen) > _peerTimeout;
         if (expired) {
-          print('Removing expired peer: ${status.peer.name}');
-          _peerController.add(currentPeers);
+          print('🗑️ Removing expired peer: ${status.peer.name} (last seen: ${status.lastSeen})');
         }
         return expired;
       });
+
+      if (_peers.length != beforeCount) {
+        _peerController.add(currentPeers);
+      }
+
+      print('👥 Current peer count: ${_peers.length}');
     });
   }
 
   void _listenForDiscovery() {
+    print('👂 Starting discovery listener...');
     _discoverySocket?.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
         final datagram = _discoverySocket?.receive();
         if (datagram != null) {
           final message = String.fromCharCodes(datagram.data);
+          print('📨 Received discovery message: $message from ${datagram.address}');
           if (message.startsWith('WOXXY_ANNOUNCE')) {
             _handlePeerAnnouncement(message, datagram.address);
           }
         }
       }
+    }, onError: (error) {
+      print('❌ Error in discovery listener: $error');
     });
   }
 
@@ -193,18 +214,26 @@ class NetworkService {
   }
 
   void _addPeer(Peer peer) {
+    print('🤝 Processing peer: ${peer.name} (${peer.address.address}:${peer.port})');
+
+    // Don't add ourselves as a peer
+    if (peer.address.address == currentIpAddress && peer.port == _port) {
+      print('🚫 Skipping self as peer');
+      return;
+    }
+
     if (!_peers.containsKey(peer.id)) {
-      print(
-          'New peer found: ${peer.name} (${peer.address.address}:${peer.port})');
+      print('✨ Adding new peer: ${peer.name}');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
     } else {
       _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
-        print(
-            'Updating peer IP: ${peer.name} (${peer.address.address}:${peer.port})');
+        print('📝 Updating peer IP: ${peer.name}');
         _peers[peer.id] = _PeerStatus(peer);
         _peerController.add(currentPeers);
+      } else {
+        print('👍 Updated last seen time for peer: ${peer.name}');
       }
     }
   }
@@ -212,8 +241,7 @@ class NetworkService {
   Future<void> sendFile(String filePath, Peer receiver) async {
     print('📤 NetworkService.sendFile() started');
     print('📁 File path: $filePath');
-    print(
-        '👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
+    print('👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
     print('🔍 Current IP: $currentIpAddress');
 
     final file = File(filePath);
@@ -227,8 +255,7 @@ class NetworkService {
 
     Socket? socket;
     try {
-      print(
-          '🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
+      print('🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
       socket = await Socket.connect(
         receiver.address,
         receiver.port,
@@ -283,15 +310,12 @@ class NetworkService {
 
           sentBytes += buffer.length;
           final percentage = ((sentBytes / fileSize) * 100).toStringAsFixed(1);
-          print(
-              '📤 Sent chunk: ${buffer.length} bytes (Total: $sentBytes/$fileSize bytes - $percentage%)');
+          print('📤 Sent chunk: ${buffer.length} bytes (Total: $sentBytes/$fileSize bytes - $percentage%)');
         }
 
         stopwatch.stop();
         final elapsedSeconds = stopwatch.elapsed.inSeconds;
-        final speed = elapsedSeconds > 0
-            ? (fileSize / 1024 / elapsedSeconds).round()
-            : fileSize ~/ 1024;
+        final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
         print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
       } finally {
         await input.close();
@@ -310,8 +334,7 @@ class NetworkService {
   }
 
   void _handleConnection(Socket socket) async {
-    print(
-        '📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
+    print('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
     List<int> buffer = [];
     bool metadataLengthReceived = false;
     bool metadataReceived = false;
@@ -331,8 +354,7 @@ class NetworkService {
             // First 4 bytes contain metadata length
             if (buffer.length + data.length >= 4) {
               buffer.addAll(data.take(4 - buffer.length));
-              final lengthBytes =
-                  ByteData.sublistView(Uint8List.fromList(buffer));
+              final lengthBytes = ByteData.sublistView(Uint8List.fromList(buffer));
               metadataLength = lengthBytes.getUint32(0);
               print('📋 Expected metadata length: $metadataLength bytes');
               metadataLengthReceived = true;
@@ -373,12 +395,9 @@ class NetworkService {
               // Handle duplicate filenames
               int counter = 1;
               while (await File(filePath).exists()) {
-                final extension = fileName.contains('.')
-                    ? '.${fileName.split('.').last}'
-                    : '';
-                final nameWithoutExt = fileName.contains('.')
-                    ? fileName.substring(0, fileName.lastIndexOf('.'))
-                    : fileName;
+                final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
+                final nameWithoutExt =
+                    fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
                 fileName = '$nameWithoutExt ($counter)$extension';
                 filePath = '${dir.path}${Platform.pathSeparator}$fileName';
                 counter++;
@@ -394,8 +413,7 @@ class NetworkService {
                 final remainingData = buffer.sublist(metadataLength);
                 fileSink!.add(remainingData);
                 receivedBytes += remainingData.length;
-                print(
-                    '📥 Written initial chunk: ${remainingData.length} bytes');
+                print('📥 Written initial chunk: ${remainingData.length} bytes');
               }
               buffer.clear();
             }
@@ -404,13 +422,11 @@ class NetworkService {
             fileSink!.add(data);
             receivedBytes += data.length;
             if (expectedSize != null) {
-              final percentage =
-                  ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
+              final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
               print(
                   '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
             } else {
-              print(
-                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes)');
+              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes bytes)');
             }
           }
         } catch (e, stack) {
@@ -431,24 +447,20 @@ class NetworkService {
         if (receiveFile != null) {
           final finalSize = await receiveFile!.length();
           final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
-          final speed =
-              (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+          final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
           final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
 
           print('📁 Final file saved at: ${receiveFile!.path}');
-          print(
-              '📊 Received $receivedBytes bytes out of expected $expectedSize bytes');
+          print('📊 Received $receivedBytes bytes out of expected $expectedSize bytes');
           print('📊 Actual file size: $finalSize bytes');
-          print(
-              '📊 Transfer completed in ${transferTime.toStringAsFixed(1)}s at $speed MiB/s');
+          print('📊 Transfer completed in ${transferTime.toStringAsFixed(1)}s at $speed MiB/s');
 
           if (expectedSize != null && finalSize != expectedSize) {
             print('⚠️ Warning: File size mismatch!');
           }
-          final senderUsername =
-              receivedInfo?['senderUsername'] as String? ?? 'Unknown';
-          _fileReceivedController.add(
-              '${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+          final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
+          _fileReceivedController
+              .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
         }
         subscription?.cancel();
         socket.close();
