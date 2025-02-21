@@ -50,7 +50,8 @@ class _HomeContentState extends State<HomeContent> {
             child: Text('No peers found. Searching...'),
           );
         }
-        final peers = snapshot.data!.where((peer) => peer.address.address != widget.networkService.currentIpAddress).toList();
+        final peers =
+            snapshot.data!.where((peer) => peer.address.address != widget.networkService.currentIpAddress).toList();
         if (peers.isEmpty) {
           return const Center(
             child: Text('No other peers found on the network'),
@@ -60,7 +61,7 @@ class _HomeContentState extends State<HomeContent> {
           itemCount: peers.length,
           itemBuilder: (context, index) {
             final peer = peers[index];
-            final peerAvatar = _avatarStore.getAvatar(peer.id);
+            final peerAvatar = _avatarStore.getAvatar(peer.address.address);
 
             return ListTile(
               leading: SizedBox(

@@ -134,6 +134,7 @@ class NetworkService {
             } else if (request['type'] == 'profile_picture_response') {
               final String senderId = request['senderId'];
               final String imageData = request['imageData'];
+              print("=== SENDER ID: $senderId");
               _avatarStore.setAvatar(senderId, base64Decode(imageData));
             } else {
               // Handle existing file transfer logic
@@ -294,12 +295,17 @@ class NetworkService {
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
     try {
       if (_currentUser?.profileImage != null) {
-        final response = {
-          'type': 'profile_picture_response',
-          'senderId': senderId,
-          'imageData': _currentUser!.profileImage,
-        };
-        socket.write(json.encode(response));
+        final file = File(_currentUser!.profileImage!);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final base64Image = base64Encode(bytes);
+          final response = {
+            'type': 'profile_picture_response',
+            'senderId': _peerId,
+            'imageData': base64Image,
+          };
+          socket.write(json.encode(response));
+        }
       }
     } catch (e) {
       print('❌ Error sending profile picture: $e');
