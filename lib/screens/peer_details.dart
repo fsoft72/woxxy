@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import '../models/peer.dart';
 import '../services/network_service.dart';
+import '../funcs/utils.dart';
 
 class PeerDetailPage extends StatefulWidget {
   final Peer peer;
@@ -64,22 +65,18 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                       final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
                       final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
                       final speed = (fileSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)'),
-                        ),
+                      showSnackbar(
+                        context,
+                        'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)',
                       );
                     }
                   } catch (e, stackTrace) {
                     print('❌ Error during file transfer: $e');
                     print('📑 Stack trace: $stackTrace');
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error sending file: $e'),
-                          backgroundColor: Colors.red,
-                        ),
+                      showSnackbar(
+                        context,
+                        'Error sending file: $e',
                       );
                     }
                   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../models/history.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../funcs/utils.dart';
 
 class HistoryScreen extends StatefulWidget {
   final FileHistory history;
@@ -34,9 +35,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return;
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not open file location: $e')),
-          );
+          showSnackbar(context, 'Could not open file location: $e');
         }
         return;
       }
@@ -50,9 +49,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     if (!await launchUrl(uri)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open file location')),
-        );
+        showSnackbar(context, 'Could not open file location');
       }
     }
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
 import '../models/avatars.dart';
+import '../funcs/utils.dart';
 import 'peer_details.dart';
 
 class HomeContent extends StatefulWidget {
@@ -30,13 +31,9 @@ class _HomeContentState extends State<HomeContent> {
         final sizeMiB = parts[1];
         final transferTime = parts[2];
         final speed = parts[3];
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'File received successfully ($sizeMiB MiB in ${transferTime}s, $speed MiB/s)',
-            ),
-          ),
+        showSnackbar(
+          context,
+          'File received successfully ($sizeMiB MiB in ${transferTime}s, $speed MiB/s)',
         );
       }
     });
