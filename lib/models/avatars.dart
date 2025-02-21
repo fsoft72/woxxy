@@ -12,6 +12,7 @@ class AvatarStore {
 
   /// Stores an avatar image for a username
   void setAvatar(String username, Uint8List imageData) {
+    print("=== SET AVATAR FOR: $username");
     _avatars[username] = imageData;
   }
 

@@ -133,9 +133,10 @@ class NetworkService {
               );
             } else if (request['type'] == 'profile_picture_response') {
               final String senderId = request['senderId'];
+              final String senderPeerId = request['senderPeerId'];
               final String imageData = request['imageData'];
-              print("=== SENDER ID: $senderId");
-              _avatarStore.setAvatar(senderId, base64Decode(imageData));
+              print("🖼️ Received profile picture from peer: $senderId");
+              _avatarStore.setAvatar(senderPeerId, base64Decode(imageData));
             } else {
               // Handle existing file transfer logic
               _handleConnection(socket);
@@ -301,7 +302,8 @@ class NetworkService {
           final base64Image = base64Encode(bytes);
           final response = {
             'type': 'profile_picture_response',
-            'senderId': _peerId,
+            'senderId': senderId,
+            'senderPeerId': _peerId,
             'imageData': base64Image,
           };
           socket.write(json.encode(response));
