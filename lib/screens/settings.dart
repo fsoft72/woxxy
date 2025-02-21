@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:io';
 import '../models/user.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -39,12 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickImage() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: [
-        'jpg',
-        'jpeg',
-        'png',
-        'svg'
-      ],
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'svg'],
     );
 
     if (result != null) {
@@ -94,7 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return CircleAvatar(
       radius: 50,
-      backgroundImage: AssetImage(_selectedImagePath!),
+      backgroundImage: FileImage(File(_selectedImagePath!)),
     );
   }
 
