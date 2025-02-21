@@ -28,7 +28,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     final Uri uri;
     if (Platform.isWindows) {
-      uri = Uri.parse('explorer.exe /select,"${file.path}"');
+      // Use Process.run instead of url_launcher for Windows
+      try {
+        await Process.run('explorer.exe', ['/select,', file.path]);
+        return;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open file location: $e')),
+          );
+        }
+        return;
+      }
     } else if (Platform.isLinux) {
       uri = Uri.parse('file://${path.dirname(file.path)}');
     } else if (Platform.isMacOS) {
