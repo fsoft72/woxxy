@@ -147,7 +147,7 @@ class NetworkService {
       socket = await Socket.connect(peer.address, peer.port);
       final request = {
         'type': 'profile_picture_request',
-        'senderId': _peerId,
+        'senderId': peer.id, // Use peer's ID instead of our peerId
         'senderName': _currentUser?.username ?? 'Unknown',
       };
       // Send metadata length first (4 bytes), then metadata
@@ -469,7 +469,7 @@ class NetworkService {
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
         final name = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
-        final message = 'WOXXY_ANNOUNCE:$name:$currentIpAddress:$_port';
+        final message = 'WOXXY_ANNOUNCE:$name:$currentIpAddress:$_port:$_peerId';
         print('📢 Broadcasting discovery message: $message');
 
         // Try broadcast first, fallback to localhost if it fails
@@ -539,15 +539,17 @@ class NetworkService {
   void _handlePeerAnnouncement(String message, InternetAddress sourceAddress) {
     try {
       final parts = message.split(':');
-      if (parts.length >= 4) {
+      if (parts.length >= 5) {
+        // Now expecting 5 parts including peerId
         final name = parts[1];
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
+        final peerId = parts[4];
         if (name != _currentUser?.username) {
-          print('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp)');
+          print('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp, ID: $peerId)');
           final peer = Peer(
             name: name,
-            id: name, // Using name as the consistent ID
+            id: peerId, // Use the actual peerId sent in the announcement
             address: InternetAddress(peerIp),
             port: peerPort,
           );
