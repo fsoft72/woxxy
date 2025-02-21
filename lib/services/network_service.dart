@@ -171,56 +171,54 @@ class NetworkService {
 
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
     print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
-    Socket? responseSocket;
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
         print('🔍 [Avatar] Looking for profile image at: ${file.path}');
         if (await file.exists()) {
-          // Create a new socket connection for sending the response
-          responseSocket = await Socket.connect(
-            socket.remoteAddress,
-            socket.remotePort,
-          );
-
-          final fileSize = await file.length();
-          final metadata = {
-            'type': 'profile_picture_response',
-            'name': 'profile_picture.jpg',
-            'size': fileSize,
-            'senderId': senderId,
-            'senderPeerId': _peerId,
-          };
-          print('📋 [Avatar] Sending metadata: $metadata');
-
-          // Send metadata length first (4 bytes), then metadata
-          final metadataBytes = utf8.encode(json.encode(metadata));
-          final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
-
-          responseSocket.add(lengthBytes.buffer.asUint8List());
-          await responseSocket.flush();
-          responseSocket.add(metadataBytes);
-          await responseSocket.flush();
-
-          // Small delay to ensure metadata is processed
-          await Future.delayed(const Duration(milliseconds: 100));
-
-          // Stream the file in chunks
-          final input = await file.open();
-          int sentBytes = 0;
           try {
-            while (sentBytes < fileSize) {
-              final remaining = fileSize - sentBytes;
-              final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
-              final buffer = await input.read(chunkSize);
-              if (buffer.isEmpty) break;
-              responseSocket.add(buffer);
-              await responseSocket.flush();
-              sentBytes += buffer.length;
+            final fileSize = await file.length();
+            final metadata = {
+              'type': 'profile_picture_response',
+              'name': 'profile_picture.jpg',
+              'size': fileSize,
+              'senderId': senderId,
+              'senderPeerId': _peerId,
+            };
+            print('📋 [Avatar] Sending metadata: $metadata');
+
+            // Send metadata length first (4 bytes), then metadata
+            final metadataBytes = utf8.encode(json.encode(metadata));
+            final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+
+            socket.add(lengthBytes.buffer.asUint8List());
+            await socket.flush();
+            socket.add(metadataBytes);
+            await socket.flush();
+
+            // Stream the file in chunks
+            final input = await file.open();
+            int sentBytes = 0;
+            try {
+              while (sentBytes < fileSize) {
+                final remaining = fileSize - sentBytes;
+                final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
+                final buffer = await input.read(chunkSize);
+                if (buffer.isEmpty) break;
+                socket.add(buffer);
+                await socket.flush();
+                sentBytes += buffer.length;
+
+                // Add a small delay to prevent overwhelming the socket
+                await Future.delayed(const Duration(milliseconds: 1));
+              }
+              print('✅ [Avatar] Profile picture sent successfully');
+            } finally {
+              await input.close();
             }
-            print('✅ [Avatar] Profile picture sent successfully');
-          } finally {
-            await input.close();
+          } catch (e) {
+            print('❌ [Avatar] Error during transfer: $e');
+            throw e;
           }
         } else {
           print('⚠️ [Avatar] Profile image file not found');
@@ -231,13 +229,8 @@ class NetworkService {
     } catch (e, stack) {
       print('❌ [Avatar] Error sending profile picture: $e');
       print('📑 [Avatar] Stack trace: $stack');
-    } finally {
-      try {
-        await responseSocket?.close();
-      } catch (e) {
-        print('⚠️ [Avatar] Error during socket cleanup: $e');
-      }
     }
+    // Note: We don't close the socket here since it's managed by the caller
   }
 
   void _handleIncomingConnection(Socket socket) {
