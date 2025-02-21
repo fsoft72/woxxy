@@ -344,7 +344,8 @@ class NetworkService {
             receivedBytes += data.length;
             if (expectedSize != null) {
               final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-              print('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+              print(
+                  '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
             }
           }
         } catch (e, stack) {
@@ -528,9 +529,12 @@ class NetworkService {
       _requestProfilePicture(peer);
     } else {
       // if the peer does not have a profile image, request it
+      /*
       if (!_avatarStore.hasAvatar(peer.id)) {
         _requestProfilePicture(peer);
       }
+			*/
+
       _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
         print('📝 Updating peer IP: ${peer.name}');
