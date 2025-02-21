@@ -432,6 +432,10 @@ class NetworkService {
       // Request profile picture from new peer
       _requestProfilePicture(peer);
     } else {
+      // if the peer does not have a profile image, request it
+      if (!_avatarStore.hasAvatar(peer.id)) {
+        _requestProfilePicture(peer);
+      }
       _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address) {
         print('📝 Updating peer IP: ${peer.name}');
