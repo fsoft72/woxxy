@@ -50,7 +50,7 @@ class NetworkService {
         reusePort: true,
       );
       _discoverySocket!.broadcastEnabled = true;
-      _listenForDiscovery();
+      _startDiscoveryListener();
 
       await _startServer();
       _startDiscovery();
@@ -387,7 +387,7 @@ class NetworkService {
               }
             } catch (e) {
               zprint('❌ Error parsing metadata: $e');
-              throw e;
+              rethrow;
             }
           } else if (metadataReceived && fileSink != null) {
             try {
@@ -399,7 +399,7 @@ class NetworkService {
               }
             } catch (e) {
               zprint('❌ Error writing data chunk: $e');
-              throw e;
+              rethrow;
             }
           }
         } catch (e, stack) {
@@ -530,7 +530,7 @@ class NetworkService {
     });
   }
 
-  void _listenForDiscovery() {
+  void _startDiscoveryListener() {
     zprint('👂 Starting discovery listener...');
     _discoverySocket?.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
