@@ -35,6 +35,7 @@ class FileTransfer {
     String downloadPath,
   ) async {
     try {
+      print("=== downloadPath: $downloadPath");
       // Ensure download directory exists
       Directory(downloadPath).createSync(recursive: true);
 

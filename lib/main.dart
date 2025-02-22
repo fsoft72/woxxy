@@ -15,9 +15,19 @@ import 'package:path_provider/path_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize FileTransferManager with downloads directory
-  final downloadsDir = await getApplicationDocumentsDirectory();
-  final downloadPath = '${downloadsDir.path}/downloads';
+  // Load user settings first
+  final settingsService = SettingsService();
+  final user = await settingsService.loadSettings();
+
+  // Initialize FileTransferManager with user's preferred directory or default
+  String downloadPath;
+  if (user.defaultDownloadDirectory.isNotEmpty) {
+    downloadPath = user.defaultDownloadDirectory;
+  } else {
+    final downloadsDir = await getApplicationDocumentsDirectory();
+    downloadPath = '${downloadsDir.path}/downloads';
+  }
+
   await Directory(downloadPath).create(recursive: true);
   FileTransferManager(downloadPath: downloadPath);
 

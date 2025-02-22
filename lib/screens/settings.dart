@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
 import '../models/user.dart';
+import '../models/file_transfer_manager.dart';
 
 class SettingsScreen extends StatefulWidget {
   final User user;
@@ -40,7 +41,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickImage() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'svg'],
+      allowedExtensions: [
+        'jpg',
+        'jpeg',
+        'png',
+        'svg'
+      ],
     );
 
     if (result != null) {
@@ -55,6 +61,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
 
     if (selectedDirectory != null) {
+      // Update FileTransferManager download path
+      await FileTransferManager.instance.updateDownloadPath(selectedDirectory);
+
       setState(() {
         _selectedDirectory = selectedDirectory;
       });
