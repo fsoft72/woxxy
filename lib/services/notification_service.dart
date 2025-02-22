@@ -23,7 +23,6 @@ class NotificationService {
       // Use generic system icons that are guaranteed to exist
       final initializationSettingsLinux = LinuxInitializationSettings(
         defaultActionName: 'Open',
-        defaultIcon: XdgIconLookupLinuxIcon('dialog-information'),
       );
 
       final initializationSettings = InitializationSettings(
@@ -50,7 +49,6 @@ class NotificationService {
             linux: LinuxNotificationDetails(
               category: LinuxNotificationCategory.presence,
               urgency: LinuxNotificationUrgency.normal,
-              icon: XdgIconLookupLinuxIcon('dialog-information'),
               actions: [
                 const LinuxNotificationAction(
                   key: 'test',
@@ -86,18 +84,14 @@ class NotificationService {
         linux: LinuxNotificationDetails(
           category: LinuxNotificationCategory.transferComplete,
           urgency: LinuxNotificationUrgency.normal,
-          icon: XdgIconLookupLinuxIcon('dialog-information'),
-          body: 'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
           actions: [
             const LinuxNotificationAction(
               key: 'open',
               label: 'Open file',
             ),
           ],
-          // Ensure notification is not transient and stays visible
           resident: true,
           suppressSound: false,
-          actionKeyAsLabelOnClose: true,
         ),
       );
 
@@ -105,7 +99,7 @@ class NotificationService {
       await _notifications.show(
         id,
         'File Received',
-        'Received $fileName',
+        'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
         notificationDetails,
       );
       print('✅ File received notification sent (ID: $id)');
