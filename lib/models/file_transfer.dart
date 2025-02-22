@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as path;
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 
 typedef OnTransferComplete = void Function(FileTransfer);
 
@@ -26,6 +28,12 @@ class FileTransfer {
   /// Callback when transfer completes
   final OnTransferComplete? onTransferComplete;
 
+  /// Expected MD5 checksum of the file
+  final String? expectedMd5;
+
+  /// Buffer to store received data for checksum verification
+  List<int> _receivedData = [];
+
   FileTransfer._internal({
     required this.source_ip,
     required this.destination_filename,
@@ -33,12 +41,13 @@ class FileTransfer {
     required this.file_sink,
     required this.duration,
     required this.senderUsername,
+    required this.expectedMd5,
     this.onTransferComplete,
   });
 
   /// Creates a new FileTransfer instance and prepares the file for writing
   /// Returns null if the file cannot be created
-  static Future<FileTransfer?> start(String source_ip, String original_filename, int size, String downloadPath, String senderUsername, {OnTransferComplete? onTransferComplete}) async {
+  static Future<FileTransfer?> start(String source_ip, String original_filename, int size, String downloadPath, String senderUsername, String? expectedMd5, {OnTransferComplete? onTransferComplete}) async {
     try {
       print("=== downloadPath: $downloadPath");
       // Ensure download directory exists
@@ -66,6 +75,7 @@ class FileTransfer {
         file_sink: sink,
         duration: watch,
         senderUsername: senderUsername,
+        expectedMd5: expectedMd5,
         onTransferComplete: onTransferComplete,
       );
     } catch (e) {
@@ -77,6 +87,7 @@ class FileTransfer {
   /// Writes binary data to the file
   Future<void> write(List<int> binary_data) async {
     try {
+      _receivedData.addAll(binary_data);
       file_sink.add(binary_data);
     } catch (e) {
       print('Error writing to file: $e');
@@ -85,14 +96,27 @@ class FileTransfer {
   }
 
   /// Closes the file and stops the duration tracking
-  Future<void> end() async {
+  Future<bool> end() async {
     try {
       await file_sink.close();
       duration.stop();
+
+      if (expectedMd5 != null) {
+        final actualMd5 = md5.convert(_receivedData).toString();
+        if (actualMd5 != expectedMd5) {
+          print('MD5 checksum mismatch! Expected: $expectedMd5, Got: $actualMd5');
+          await File(destination_filename).delete();
+          return false;
+        }
+        print('MD5 checksum verified successfully');
+      }
+
       onTransferComplete?.call(this);
+      return true;
     } catch (e) {
       print('Error closing file: $e');
       // Optionally rethrow or handle error
+      return false;
     }
   }
 

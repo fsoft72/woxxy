@@ -40,12 +40,7 @@ class FileTransferManager {
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
-  Future<bool> add(
-    String source_ip,
-    String original_filename,
-    int size,
-    String senderUsername,
-  ) async {
+  Future<bool> add(String source_ip, String original_filename, int size, String senderUsername, {String? md5Checksum}) async {
     try {
       FileTransfer? transfer = await FileTransfer.start(
         source_ip,
@@ -53,6 +48,7 @@ class FileTransferManager {
         size,
         downloadPath,
         senderUsername,
+        md5Checksum,
         onTransferComplete: _handleTransferComplete,
       );
 
@@ -87,9 +83,12 @@ class FileTransferManager {
   Future<bool> end(String source_ip) async {
     try {
       if (files.containsKey(source_ip)) {
-        await files[source_ip]!.end();
-        files.remove(source_ip);
-        return true;
+        final success = await files[source_ip]!.end();
+        if (success) {
+          files.remove(source_ip);
+          return true;
+        }
+        return false;
       }
       return false;
     } catch (e) {

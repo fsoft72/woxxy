@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:crypto/crypto.dart';
 import 'package:woxxy2/funcs/debug.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
@@ -129,12 +130,14 @@ class NetworkService {
             final fileName = receivedInfo!['name'] as String;
             final fileSize = receivedInfo!['size'] as int;
             final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
+            final md5Checksum = receivedInfo!['md5Checksum'] as String?;
 
             final added = await FileTransferManager.instance.add(
               sourceIp,
               fileName,
               fileSize,
               senderUsername,
+              md5Checksum: md5Checksum,
             );
 
             if (!added) {
@@ -205,11 +208,16 @@ class NetworkService {
         receiver.port,
       ).timeout(const Duration(seconds: 5));
 
+      // Calculate MD5 checksum before sending
+      final fileBytes = await file.readAsBytes();
+      final checksum = md5.convert(fileBytes).toString();
+
       final metadata = {
         'name': file.path.split(Platform.pathSeparator).last,
         'size': fileSize,
         'sender': currentIpAddress,
         'senderUsername': _currentUsername,
+        'md5Checksum': checksum,
       };
 
       // Send metadata
@@ -224,27 +232,8 @@ class NetworkService {
       await Future.delayed(const Duration(milliseconds: 100));
 
       // Stream the file
-      final input = await file.open();
-      try {
-        var buffer = Uint8List(_bufferSize);
-        int sentBytes = 0;
-
-        while (sentBytes < fileSize) {
-          final remaining = fileSize - sentBytes;
-          final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
-          buffer = await input.read(chunkSize);
-          if (buffer.isEmpty) break;
-
-          socket.add(buffer);
-          await socket.flush();
-          sentBytes += buffer.length;
-
-          final percentage = ((sentBytes / fileSize) * 100).toStringAsFixed(1);
-          zprint('📤 Sent: $sentBytes/$fileSize bytes - $percentage%');
-        }
-      } finally {
-        await input.close();
-      }
+      socket.add(fileBytes);
+      await socket.flush();
     } catch (e) {
       zprint('❌ Error in sendFile: $e');
       rethrow;
