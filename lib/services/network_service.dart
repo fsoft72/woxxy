@@ -3,44 +3,30 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:woxxy2/funcs/debug.dart';
 import '../models/peer.dart';
+import '../models/peer_manager.dart';
 import '../models/file_transfer_manager.dart';
-
-class _PeerStatus {
-  final Peer peer;
-  DateTime lastSeen;
-
-  _PeerStatus(this.peer) : lastSeen = DateTime.now();
-
-  void updateLastSeen() {
-    lastSeen = DateTime.now();
-  }
-}
 
 class NetworkService {
   static const int _port = 8090;
   static const int _discoveryPort = 8091;
   static const Duration _pingInterval = Duration(seconds: 5);
-  static const Duration _peerTimeout = Duration(seconds: 15);
   static const int _bufferSize = 1024 * 32; // 32KB buffer size
 
-  final BehaviorSubject<List<Peer>> _peerController = BehaviorSubject<List<Peer>>.seeded([]);
   final _fileReceivedController = StreamController<String>.broadcast();
-  final Map<String, _PeerStatus> _peers = {};
+  final _peerManager = PeerManager();
 
   ServerSocket? _server;
   Timer? _discoveryTimer;
-  Timer? _cleanupTimer;
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
   String _currentUsername = 'Unknown';
 
   Stream<String> get onFileReceived => _fileReceivedController.stream;
-  Stream<List<Peer>> get peerStream => _peerController.stream;
+  Stream<List<Peer>> get peerStream => _peerManager.peerStream;
   Stream<String> get fileReceived => _fileReceivedController.stream;
-  List<Peer> get currentPeers => _peers.values.map((status) => status.peer).toList();
+  List<Peer> get currentPeers => _peerManager.currentPeers;
 
   Future<void> start() async {
     try {
@@ -58,22 +44,18 @@ class NetworkService {
       _startDiscoveryListener();
       await _startServer();
       _startDiscovery();
-      _startPeerCleanup();
-    } catch (e, stackTrace) {
-      zprint('Error starting network service: $e');
-      zprint('Stack trace: $stackTrace');
-      await dispose();
+      _peerManager.startPeerCleanup();
+    } catch (e) {
+      zprint('❌ Error starting network service: $e');
       rethrow;
     }
   }
 
   Future<void> dispose() async {
     _discoveryTimer?.cancel();
-    _cleanupTimer?.cancel();
     await _server?.close();
     _discoverySocket?.close();
     await _fileReceivedController.close();
-    await _peerController.close();
   }
 
   void setUsername(String username) {
@@ -139,8 +121,7 @@ class NetworkService {
             final metadataStr = utf8.decode(metadataBytes);
             receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
 
-            if (receivedInfo!['type'] == 'profile_picture_request' ||
-                receivedInfo!['type'] == 'profile_picture_response') {
+            if (receivedInfo!['type'] == 'profile_picture_request' || receivedInfo!['type'] == 'profile_picture_response') {
               await _handleProfilePictureRequest(socket, receivedInfo!['senderId'], receivedInfo!['senderName']);
               return;
             }
@@ -289,20 +270,6 @@ class NetworkService {
     });
   }
 
-  void _startPeerCleanup() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(_pingInterval, (timer) {
-      final now = DateTime.now();
-      final beforeCount = _peers.length;
-      _peers.removeWhere((key, status) {
-        return now.difference(status.lastSeen) > _peerTimeout;
-      });
-      if (_peers.length != beforeCount) {
-        _peerController.add(currentPeers);
-      }
-    });
-  }
-
   void _startDiscoveryListener() {
     _discoverySocket?.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
@@ -333,25 +300,11 @@ class NetworkService {
             address: InternetAddress(peerIp),
             port: peerPort,
           );
-          _addPeer(peer);
+          _peerManager.addPeer(peer, currentIpAddress!, _port);
         }
       }
     } catch (e) {
       zprint('❌ Error handling peer announcement: $e');
-    }
-  }
-
-  void _addPeer(Peer peer) {
-    if (peer.address.address == currentIpAddress && peer.port == _port) {
-      return;
-    }
-
-    final bool isNewPeer = !_peers.containsKey(peer.id);
-    if (isNewPeer) {
-      _peers[peer.id] = _PeerStatus(peer);
-      _peerController.add(currentPeers);
-    } else {
-      _peers[peer.id]!.updateLastSeen();
     }
   }
 }
