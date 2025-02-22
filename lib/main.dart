@@ -9,9 +9,17 @@ import 'services/network_service.dart';
 import 'services/settings_service.dart';
 import 'models/user.dart';
 import 'models/history.dart';
+import 'models/file_transfer_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize FileTransferManager with downloads directory
+  final downloadsDir = await getApplicationDocumentsDirectory();
+  final downloadPath = '${downloadsDir.path}/downloads';
+  await Directory(downloadPath).create(recursive: true);
+  FileTransferManager(downloadPath: downloadPath);
 
   // Initialize window_manager
   await windowManager.ensureInitialized();

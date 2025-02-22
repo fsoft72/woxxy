@@ -2,14 +2,31 @@ import 'file_transfer.dart';
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
+  /// Singleton instance
+  static FileTransferManager? _instance;
+
   /// Map of active file transfers, keyed by source IP
   final Map<String, FileTransfer> files = {};
 
   /// Path where downloaded files will be stored
   final String downloadPath;
 
-  /// Creates a new FileTransferManager instance
-  FileTransferManager({required this.downloadPath});
+  /// Private constructor
+  FileTransferManager._({required this.downloadPath});
+
+  /// Factory constructor to get or create the singleton instance
+  factory FileTransferManager({required String downloadPath}) {
+    _instance ??= FileTransferManager._(downloadPath: downloadPath);
+    return _instance!;
+  }
+
+  /// Get the singleton instance
+  static FileTransferManager get instance {
+    if (_instance == null) {
+      throw StateError('FileTransferManager not initialized. Call FileTransferManager() with downloadPath first.');
+    }
+    return _instance!;
+  }
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
