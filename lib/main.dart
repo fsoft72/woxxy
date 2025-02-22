@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:tray_manager/tray_manager.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
@@ -40,7 +41,32 @@ void main() async {
     minimumSize: Size(540, 960),
     center: true,
     title: 'Woxxy',
+    skipTaskbar: false,
   );
+
+  // Setup tray icon and menu
+  String iconPath = 'assets/icons/head.png';
+  await trayManager.setIcon(iconPath);
+
+  Menu menu = Menu(
+    items: [
+      MenuItem(
+        label: 'Open',
+        onClick: (menuItem) async {
+          await windowManager.show();
+          await windowManager.focus();
+        },
+      ),
+      MenuItem.separator(),
+      MenuItem(
+        label: 'Quit',
+        onClick: (menuItem) async {
+          exit(0);
+        },
+      ),
+    ],
+  );
+  await trayManager.setContextMenu(menu);
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
@@ -50,6 +76,9 @@ void main() async {
       await windowManager.setIcon('assets/icons/head.png');
     }
   });
+
+  // Set close intercept after window is ready
+  await windowManager.setPreventClose(true);
 
   runApp(const MyApp());
 }
@@ -77,7 +106,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   final NetworkService _networkService = NetworkService();
   final SettingsService _settingsService = SettingsService();
   final FileHistory _fileHistory = FileHistory();
@@ -88,6 +117,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    trayManager.addListener(this);
+    windowManager.addListener(this);
     _loadSettings();
     _networkService.start();
     // Set file history in FileTransferManager
@@ -129,8 +160,26 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    trayManager.removeListener(this);
+    windowManager.removeListener(this);
     _networkService.dispose();
     super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    // Just hide the window instead of closing the app
+    await windowManager.hide();
+  }
+
+  @override
+  void onTrayIconMouseDown() async {
+    // Show and focus window when tray icon is clicked
+    final isVisible = await windowManager.isVisible();
+    if (!isVisible) {
+      await windowManager.show();
+      await windowManager.focus();
+    }
   }
 
   void _updateUser(User updatedUser) {
