@@ -12,30 +12,140 @@ import 'settings_service.dart';
 
 class FileTransfer {
   final Socket socket;
-  IOSink? fileSink;
-  File? receiveFile;
-  int? expectedSize;
+  final RandomAccessFile fileHandle;
+  final File file;
+  final int expectedSize;
   int receivedBytes = 0;
   final Stopwatch stopwatch = Stopwatch()..start();
-  Map<String, dynamic>? metadata;
-  List<int> buffer = [];
-  bool metadataLengthReceived = false;
-  bool metadataReceived = false;
-  int metadataLength = 0;
+  final Map<String, dynamic> metadata;
 
-  FileTransfer({required this.socket});
+  FileTransfer({
+    required this.socket,
+    required this.file,
+    required this.fileHandle,
+    required this.metadata,
+    required this.expectedSize,
+  });
+
+  bool get isComplete => receivedBytes >= expectedSize;
 }
 
 class TransferManager {
-  static const int _bufferSize = 1024 * 32; // 32KB buffer size
-  final Map<String, FileTransfer> _activeTransfers = {};
+  static const int _bufferSize = 1024 * 32;
   final StreamController<String> _fileReceivedController;
   final AvatarStore _avatarStore;
   final User? _currentUser;
 
   TransferManager(this._fileReceivedController, this._avatarStore, this._currentUser);
 
-  String _generateTransferId() => DateTime.now().millisecondsSinceEpoch.toString();
+  Future<void> handleIncomingTransfer(Socket socket) async {
+    List<int> buffer = [];
+    late StreamSubscription<List<int>> subscription;
+    RandomAccessFile? fileHandle;
+
+    try {
+      socket.setOption(SocketOption.tcpNoDelay, true);
+      final completer = Completer<void>();
+
+      subscription = socket.listen(
+        (data) async {
+          try {
+            buffer.addAll(data);
+
+            // If we haven't read the metadata yet
+            if (fileHandle == null && buffer.length >= 4) {
+              final metadataLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
+              buffer = buffer.skip(4).toList();
+
+              if (buffer.length >= metadataLength) {
+                final metadataBytes = buffer.take(metadataLength).toList();
+                buffer = buffer.skip(metadataLength).toList();
+
+                final metadataStr = utf8.decode(metadataBytes);
+                final metadata = json.decode(metadataStr) as Map<String, dynamic>;
+                zprint('📋 Metadata received: $metadataStr');
+
+                if (metadata['type'] == 'profile_picture_request') {
+                  subscription.cancel();
+                  await _handleProfilePictureRequest(socket);
+                  completer.complete();
+                  return;
+                } else if (metadata['type'] == 'profile_picture_response') {
+                  await _handleProfilePictureResponse(socket, metadata, buffer);
+                  completer.complete();
+                  return;
+                }
+
+                // Initialize file transfer
+                final filePath = await _getTargetFilePath(metadata['name'] as String);
+                zprint('📂 Creating file at: $filePath');
+                final file = File(filePath);
+                fileHandle = await file.open(mode: FileMode.write);
+
+                // Write any remaining data in buffer
+                if (buffer.isNotEmpty && fileHandle != null) {
+                  await fileHandle.writeFrom(buffer);
+                  buffer.clear();
+                }
+              }
+            }
+            // Regular file data
+            else if (fileHandle != null) {
+              await fileHandle.writeFrom(data);
+            }
+          } catch (e) {
+            zprint('❌ Error processing data: $e');
+            completer.completeError(e);
+          }
+        },
+        onError: (error) {
+          zprint('❌ Error in socket: $error');
+          completer.completeError(error);
+        },
+        onDone: () async {
+          zprint('✅ Transfer complete');
+          await fileHandle?.flush();
+          await fileHandle?.close();
+          completer.complete();
+        },
+        cancelOnError: true,
+      );
+
+      await completer.future;
+    } catch (e, stack) {
+      zprint('❌ Error in transfer: $e');
+      zprint('📑 Stack trace: $stack');
+    } finally {
+      subscription.cancel();
+      await fileHandle?.close();
+      socket.destroy();
+    }
+  }
+
+  Future<List<int>> _readExactBytes(Socket socket, int length) {
+    final completer = Completer<List<int>>();
+    final buffer = <int>[];
+    late StreamSubscription<List<int>> subscription;
+
+    subscription = socket.listen(
+      (data) {
+        buffer.addAll(data);
+        if (buffer.length >= length) {
+          subscription.cancel();
+          completer.complete(buffer.take(length).toList());
+        }
+      },
+      onError: completer.completeError,
+      onDone: () {
+        if (!completer.isCompleted) {
+          completer.completeError('Connection closed before reading $length bytes');
+        }
+      },
+      cancelOnError: true,
+    );
+
+    return completer.future;
+  }
 
   Future<String> _getDownloadsPath() async {
     if (_currentUser?.defaultDownloadDirectory.isNotEmpty ?? false) {
@@ -57,151 +167,109 @@ class TransferManager {
     return Directory.systemTemp.path;
   }
 
-  Future<void> handleIncomingTransfer(Socket socket) async {
-    final transferId = _generateTransferId();
-    final transfer = FileTransfer(socket: socket);
-    _activeTransfers[transferId] = transfer;
-    zprint('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
+  Future<FileTransfer?> _initializeTransfer(Socket socket, Map<String, dynamic> metadata) async {
+    final fileName = metadata['name'] as String;
+    final expectedSize = metadata['size'] as int;
 
     try {
-      await _processIncomingTransfer(transferId);
-    } catch (e, stack) {
-      zprint('❌ Error processing transfer $transferId: $e');
-      zprint('📑 Stack trace: $stack');
-      await _cleanupTransfer(transferId);
-    }
-  }
+      final filePath = await _getTargetFilePath(fileName);
+      zprint('📂 Creating file at: $filePath');
 
-  Future<void> _processIncomingTransfer(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
+      final file = File(filePath);
+      final fileHandle = await file.open(mode: FileMode.write);
 
-    transfer.socket.setOption(SocketOption.tcpNoDelay, true);
+      final transfer = FileTransfer(
+        socket: socket,
+        file: file,
+        fileHandle: fileHandle,
+        metadata: metadata,
+        expectedSize: expectedSize,
+      );
 
-    transfer.socket.listen(
-      (data) => _handleDataChunk(transferId, data),
-      onDone: () => _handleTransferComplete(transferId),
-      onError: (error, stack) => _handleTransferError(transferId, error, stack),
-      cancelOnError: false, // Don't cancel on error to ensure we get all data
-    );
-  }
-
-  Future<void> _handleDataChunk(String transferId, List<int> data) async {
-    final transfer = _activeTransfers[transferId]!;
-    transfer.buffer.addAll(data);
-
-    try {
-      if (!transfer.metadataLengthReceived) {
-        if (!await _processMetadataLength(transferId)) return;
-      }
-
-      if (!transfer.metadataReceived) {
-        if (!await _processMetadata(transferId)) return;
-      }
-
-      await _processFileData(transferId);
+      zprint('✅ Transfer initialized. Expected size: $expectedSize bytes');
+      return transfer;
     } catch (e) {
-      zprint('❌ Error processing data chunk: $e');
-      rethrow;
+      zprint('❌ Error initializing transfer: $e');
+      return null;
     }
   }
 
-  Future<bool> _processMetadataLength(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
+  Future<void> _processTransfer(FileTransfer transfer) async {
+    try {
+      await for (final chunk in transfer.socket) {
+        // Write chunk to file
+        await transfer.fileHandle?.writeFrom(chunk);
+        transfer.receivedBytes += chunk.length;
 
-    while (transfer.buffer.length >= 4) {
-      var testLength = ByteData.sublistView(Uint8List.fromList(transfer.buffer.take(4).toList())).getUint32(0);
+        final percentage = ((transfer.receivedBytes / transfer.expectedSize) * 100).toStringAsFixed(1);
+        zprint('📥 Progress: ${transfer.receivedBytes}/${transfer.expectedSize} bytes - $percentage%');
 
-      if (testLength > 0 && testLength < 1024 * 1024) {
-        transfer.metadataLength = testLength;
-        transfer.buffer = transfer.buffer.skip(4).toList();
-        transfer.metadataLengthReceived = true;
-        zprint('📋 Found valid metadata length: ${transfer.metadataLength} bytes');
-        return true;
+        if (transfer.isComplete) break;
       }
 
-      transfer.buffer = transfer.buffer.skip(1).toList();
-      zprint('⚠️ Skipping invalid byte in length prefix');
-    }
-    return false;
-  }
+      // Finalize transfer
+      await transfer.fileHandle?.flush();
+      await transfer.fileHandle?.close();
 
-  Future<bool> _processMetadata(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-
-    if (transfer.buffer.length >= transfer.metadataLength) {
-      try {
-        final metadataBytes = transfer.buffer.take(transfer.metadataLength).toList();
-        final metadataStr = utf8.decode(metadataBytes);
-        zprint('📋 Complete metadata received: $metadataStr');
-        transfer.metadata = json.decode(metadataStr) as Map<String, dynamic>;
-
-        if (transfer.metadata!['type'] == 'profile_picture_request') {
-          await _handleProfilePictureRequest(transferId);
-          return false;
-        } else if (transfer.metadata!['type'] == 'profile_picture_response') {
-          await _initializeProfilePictureReceive(transferId);
-        } else {
-          await _initializeFileReceive(transferId);
-        }
-
-        transfer.buffer = transfer.buffer.skip(transfer.metadataLength).toList();
-        transfer.metadataReceived = true;
-        return true;
-      } catch (e) {
-        zprint('❌ Error parsing metadata: $e');
-        rethrow;
+      final finalSize = await transfer.file.length();
+      if (finalSize == transfer.expectedSize) {
+        _notifyTransferComplete(transfer, finalSize);
+      } else {
+        zprint('⚠️ Size mismatch: Expected ${transfer.expectedSize}, got $finalSize');
       }
+    } catch (e) {
+      zprint('❌ Error during transfer: $e');
+    } finally {
+      await _cleanup(transfer);
     }
-    return false;
   }
 
-  Future<void> _initializeProfilePictureReceive(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-
-    final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
-    final tempFile = File('${tempDir.path}/profile_${transfer.metadata!['senderId']}.jpg');
-    transfer.fileSink = tempFile.openWrite(mode: FileMode.writeOnly);
-    transfer.receiveFile = tempFile;
-    transfer.expectedSize = transfer.metadata!['size'] as int;
-    zprint('📥 [Avatar] Initialized profile picture receive');
-  }
-
-  Future<void> _initializeFileReceive(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-
-    final downloadsPath = await _getDownloadsPath();
-    final dir = Directory(downloadsPath);
+  Future<String> _getTargetFilePath(String fileName) async {
+    final dir = Directory(await _getDownloadsPath());
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
 
-    String fileName = transfer.metadata!['name'] as String;
     String filePath = '${dir.path}${Platform.pathSeparator}$fileName';
-
-    // Handle duplicate filenames
+    String finalPath = filePath;
     int counter = 1;
-    while (await File(filePath).exists()) {
+
+    while (await File(finalPath).exists()) {
       final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
       final nameWithoutExt = fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
-      fileName = '$nameWithoutExt ($counter)$extension';
-      filePath = '${dir.path}${Platform.pathSeparator}$fileName';
+      finalPath = '${dir.path}${Platform.pathSeparator}$nameWithoutExt ($counter)$extension';
       counter++;
     }
 
-    transfer.receiveFile = File(filePath);
-    transfer.fileSink = transfer.receiveFile!.openWrite(mode: FileMode.writeOnly);
-    transfer.expectedSize = transfer.metadata!['size'] as int;
+    return finalPath;
   }
 
-  Future<void> _handleProfilePictureRequest(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
+  void _notifyTransferComplete(FileTransfer transfer, int finalSize) {
+    final transferTime = transfer.stopwatch.elapsed.inMilliseconds / 1000;
+    final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+    final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
+    final senderUsername = transfer.metadata['senderUsername'] as String? ?? 'Unknown';
+
+    _fileReceivedController.add('${transfer.file.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+  }
+
+  Future<void> _cleanup(FileTransfer transfer) async {
+    try {
+      await transfer.fileHandle?.close();
+      transfer.socket.destroy();
+    } catch (e) {
+      zprint('⚠️ Error during cleanup: $e');
+    }
+  }
+
+  Future<void> _handleProfilePictureRequest(Socket socket) async {
     zprint('📸 [Avatar] Received profile picture request');
 
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
         if (await file.exists()) {
-          await _sendProfilePicture(transfer.socket, file);
+          await _sendProfilePicture(socket, file);
         } else {
           zprint('⚠️ [Avatar] Profile image file not found');
         }
@@ -210,7 +278,48 @@ class TransferManager {
       }
     } catch (e) {
       zprint('❌ [Avatar] Error handling profile picture request: $e');
-      rethrow;
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  Future<void> _handleProfilePictureResponse(Socket socket, Map<String, dynamic> metadata, List<int> initialData) async {
+    zprint('🖼️ [Avatar] Processing profile picture response');
+    final senderId = metadata['senderId'];
+    final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
+    final tempFile = File('${tempDir.path}/profile_$senderId.jpg');
+    late final RandomAccessFile fileHandle;
+
+    try {
+      fileHandle = await tempFile.open(mode: FileMode.write);
+
+      // Write initial data if any
+      if (initialData.isNotEmpty) {
+        await fileHandle.writeFrom(initialData);
+      }
+
+      // Continue reading rest of the data
+      await for (final chunk in socket) {
+        await fileHandle.writeFrom(chunk);
+      }
+
+      await fileHandle.flush();
+      await fileHandle.close();
+
+      // Store avatar in memory
+      final imageBytes = await tempFile.readAsBytes();
+      await _avatarStore.setAvatar(senderId, imageBytes);
+      zprint('✅ [Avatar] Successfully stored avatar in memory');
+    } catch (e) {
+      zprint('❌ [Avatar] Error processing profile picture: $e');
+    } finally {
+      // Cleanup temporary files
+      try {
+        await tempFile.delete();
+        await tempDir.delete();
+      } catch (e) {
+        zprint('⚠️ [Avatar] Error cleaning up temporary files: $e');
+      }
     }
   }
 
@@ -225,6 +334,7 @@ class TransferManager {
     };
 
     try {
+      // Send metadata
       final metadataBytes = utf8.encode(json.encode(metadata));
       final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
 
@@ -233,170 +343,23 @@ class TransferManager {
       socket.add(metadataBytes);
       await socket.flush();
 
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      final input = await file.open();
-      int sentBytes = 0;
-
+      // Send file data
+      final fileHandle = await file.open();
       try {
-        while (sentBytes < fileSize) {
-          final remaining = fileSize - sentBytes;
-          final chunkSize = remaining < _bufferSize ? remaining : _bufferSize;
-          final buffer = await input.read(chunkSize);
-
+        var position = 0;
+        while (position < fileSize) {
+          final buffer = await fileHandle.read(_bufferSize);
           if (buffer.isEmpty) break;
 
           socket.add(buffer);
           await socket.flush();
-          sentBytes += buffer.length;
-          await Future.delayed(const Duration(milliseconds: 1));
+          position += buffer.length;
         }
       } finally {
-        await input.close();
+        await fileHandle.close();
       }
     } catch (e) {
       zprint('❌ [Avatar] Error sending profile picture: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _finalizeProfilePictureTransfer(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-    try {
-      zprint('📥 [Avatar] Reading profile picture data...');
-      final imageBytes = await transfer.receiveFile!.readAsBytes();
-      final senderId = transfer.metadata!['senderId'];
-      zprint('💾 [Avatar] Storing profile picture for peer ID: $senderId');
-      await _avatarStore.setAvatar(senderId, imageBytes);
-      zprint('✅ [Avatar] Successfully stored avatar in memory');
-    } catch (e) {
-      zprint('❌ Error processing received profile picture: $e');
-    }
-  }
-
-  void _handleTransferError(String transferId, dynamic error, StackTrace stack) {
-    zprint('❌ Error during transfer: $error');
-    zprint('📑 Stack trace: $stack');
-    _cleanupTransfer(transferId);
-  }
-
-  Future<void> _processFileData(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-
-    if (transfer.fileSink != null && transfer.buffer.isNotEmpty) {
-      try {
-        // Check if we're about to exceed the expected size
-        if (transfer.expectedSize != null) {
-          final remainingExpected = transfer.expectedSize! - transfer.receivedBytes;
-          if (remainingExpected <= 0) {
-            zprint('⚠️ Warning: Received more data than expected');
-            return;
-          }
-
-          // Only take what we need if this chunk would exceed the expected size
-          if (transfer.buffer.length > remainingExpected) {
-            final chunk = transfer.buffer.take(remainingExpected).toList();
-            transfer.fileSink!.add(chunk);
-            transfer.receivedBytes += chunk.length;
-            transfer.buffer = transfer.buffer.skip(remainingExpected).toList();
-          } else {
-            transfer.fileSink!.add(transfer.buffer);
-            transfer.receivedBytes += transfer.buffer.length;
-            transfer.buffer.clear();
-          }
-        } else {
-          transfer.fileSink!.add(transfer.buffer);
-          transfer.receivedBytes += transfer.buffer.length;
-          transfer.buffer.clear();
-        }
-
-        if (transfer.expectedSize != null) {
-          final percentage = ((transfer.receivedBytes / transfer.expectedSize!) * 100).toStringAsFixed(1);
-          zprint('📥 Received chunk: ${transfer.buffer.length} bytes ' + '(Total: ${transfer.receivedBytes}/${transfer.expectedSize} bytes - $percentage%)');
-        }
-      } catch (e) {
-        zprint('❌ Error writing data chunk: $e');
-        rethrow;
-      }
-    }
-  }
-
-  Future<void> _handleTransferComplete(String transferId) async {
-    final transfer = _activeTransfers[transferId]!;
-    transfer.stopwatch.stop();
-
-    try {
-      // Make sure all buffered data is written
-      if (transfer.fileSink != null && transfer.buffer.isNotEmpty) {
-        await _processFileData(transferId);
-      }
-
-      await transfer.fileSink?.flush();
-      await transfer.fileSink?.close();
-
-      if (transfer.receiveFile != null && await transfer.receiveFile!.exists()) {
-        final finalSize = await transfer.receiveFile!.length();
-
-        // Check if we received all expected data
-        if (transfer.expectedSize != null && finalSize < transfer.expectedSize!) {
-          final difference = transfer.expectedSize! - finalSize;
-          final percentReceived = ((finalSize / transfer.expectedSize!) * 100).toStringAsFixed(1);
-          zprint('⚠️ Incomplete transfer: Missing $difference bytes ($percentReceived% received)');
-          // You might want to handle incomplete transfers differently
-          return;
-        }
-
-        if (transfer.metadata?['type'] == 'profile_picture_response') {
-          await _finalizeProfilePictureTransfer(transferId);
-        } else {
-          await _finalizeFileTransfer(transferId, finalSize);
-        }
-      }
-    } catch (e) {
-      zprint('❌ Error in transfer completion: $e');
-    } finally {
-      await _cleanupTransfer(transferId);
-    }
-  }
-
-  Future<void> _finalizeFileTransfer(String transferId, int finalSize) async {
-    final transfer = _activeTransfers[transferId]!;
-
-    // Only proceed if we got all the data
-    if (transfer.expectedSize != null && finalSize < transfer.expectedSize!) {
-      zprint('❌ Transfer failed: Incomplete file');
-      return;
-    }
-
-    final transferTime = transfer.stopwatch.elapsed.inMilliseconds / 1000;
-    final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-    final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
-
-    final senderUsername = transfer.metadata?['senderUsername'] as String? ?? 'Unknown';
-    _fileReceivedController.add('${transfer.receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
-  }
-
-  Future<void> _cleanupTransfer(String transferId) async {
-    final transfer = _activeTransfers[transferId];
-    if (transfer != null) {
-      try {
-        await transfer.fileSink?.flush();
-        await transfer.fileSink?.close();
-        transfer.socket.destroy();
-
-        // Only delete temporary files (profile pictures)
-        if (transfer.receiveFile != null && transfer.metadata?['type'] == 'profile_picture_response') {
-          final parentDir = transfer.receiveFile!.parent;
-          await transfer.receiveFile!.delete();
-          if (await parentDir.exists() && parentDir.path.contains('woxxy_profile')) {
-            await parentDir.delete();
-          }
-        }
-      } catch (e) {
-        zprint('⚠️ Error during transfer cleanup: $e');
-      } finally {
-        _activeTransfers.remove(transferId);
-      }
     }
   }
 }
