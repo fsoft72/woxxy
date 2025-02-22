@@ -1,6 +1,7 @@
 // ignore: unused_import
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:woxxy2/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
 import '../models/avatars.dart';
@@ -49,8 +50,7 @@ class _HomeContentState extends State<HomeContent> {
             child: Text('No peers found. Searching...'),
           );
         }
-        final peers =
-            snapshot.data!.where((peer) => peer.address.address != widget.networkService.currentIpAddress).toList();
+        final peers = snapshot.data!.where((peer) => peer.address.address != widget.networkService.currentIpAddress).toList();
         if (peers.isEmpty) {
           return const Center(
             child: Text('No other peers found on the network'),
@@ -60,9 +60,9 @@ class _HomeContentState extends State<HomeContent> {
           itemCount: peers.length,
           itemBuilder: (context, index) {
             final peer = peers[index];
-            print('🎭 [Avatar UI] Getting avatar for peer: ${peer.name} (${peer.id})');
+            zprint('🎭 [Avatar UI] Getting avatar for peer: ${peer.name} (${peer.id})');
             final peerAvatar = _avatarStore.getAvatar(peer.id); // Use peer.id instead of address
-            print('🖼️ [Avatar UI] Avatar ${peerAvatar != null ? 'found' : 'not found'} for ${peer.name}');
+            zprint('🖼️ [Avatar UI] Avatar ${peerAvatar != null ? 'found' : 'not found'} for ${peer.name}');
 
             return ListTile(
               leading: SizedBox(

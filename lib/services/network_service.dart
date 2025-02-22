@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:woxxy2/funcs/debug.dart';
 import '../models/peer.dart';
 import '../models/user.dart';
 import '../models/avatars.dart';
@@ -40,7 +41,7 @@ class NetworkService {
     try {
       _currentUser = await _settingsService.loadSettings();
       currentIpAddress = await _getIpAddress();
-      print('Starting network service on IP: $currentIpAddress');
+      zprint('Starting network service on IP: $currentIpAddress');
 
       _discoverySocket = await RawDatagramSocket.bind(
         InternetAddress.anyIPv4,
@@ -55,8 +56,8 @@ class NetworkService {
       _startDiscovery();
       _startPeerCleanup();
     } catch (e, stackTrace) {
-      print('Error starting network service: $e');
-      print('Stack trace: $stackTrace');
+      zprint('Error starting network service: $e');
+      zprint('Stack trace: $stackTrace');
       await dispose();
       rethrow;
     }
@@ -68,17 +69,17 @@ class NetworkService {
 
   Future<String> _getIpAddress() async {
     try {
-      print('🔍 Getting IP address...');
+      zprint('🔍 Getting IP address...');
       final info = NetworkInfo();
       final wifiIP = await info.getWifiIP();
 
       if (wifiIP != null && wifiIP.isNotEmpty) {
-        print('📡 Found WiFi IP: $wifiIP');
+        zprint('📡 Found WiFi IP: $wifiIP');
         return wifiIP;
       }
 
       // Fallback: Try to find a suitable network interface
-      print('⚠️ No WiFi IP found, checking network interfaces...');
+      zprint('⚠️ No WiFi IP found, checking network interfaces...');
       final interfaces = await NetworkInterface.list(
         includeLoopback: false,
         includeLinkLocal: true,
@@ -86,20 +87,20 @@ class NetworkService {
       );
 
       for (var interface in interfaces) {
-        print('🌐 Checking interface: ${interface.name}');
+        zprint('🌐 Checking interface: ${interface.name}');
         for (var addr in interface.addresses) {
           // Skip loopback and link-local addresses
           if (!addr.isLoopback && !addr.address.startsWith('169.254')) {
-            print('✅ Found valid IP: ${addr.address} on ${interface.name}');
+            zprint('✅ Found valid IP: ${addr.address} on ${interface.name}');
             return addr.address;
           }
         }
       }
 
-      print('❌ No suitable IP address found');
+      zprint('❌ No suitable IP address found');
       throw Exception('Could not determine IP address');
     } catch (e) {
-      print('❌ Error getting IP address: $e');
+      zprint('❌ Error getting IP address: $e');
       throw Exception('Could not determine IP address: $e');
     }
   }
@@ -116,7 +117,7 @@ class NetworkService {
         await dir.create(recursive: true);
         return _currentUser!.defaultDownloadDirectory;
       } catch (e) {
-        print('❌ Error creating custom download directory: $e');
+        zprint('❌ Error creating custom download directory: $e');
         // Fall through to defaults if creation fails
       }
     }
@@ -134,14 +135,14 @@ class NetworkService {
 
   Future<void> _startServer() async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _port);
-    print('Server started on port $_port');
+    zprint('Server started on port $_port');
     _server!.listen((Socket socket) {
       _handleIncomingConnection(socket);
     });
   }
 
   Future<void> _requestProfilePicture(Peer peer) async {
-    print('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
+    zprint('📤 [Avatar] Requesting profile picture from: ${peer.name} at ${peer.address.address}:${peer.port}');
     Socket? socket;
     try {
       socket = await Socket.connect(peer.address, peer.port);
@@ -157,20 +158,20 @@ class NetworkService {
       await socket.flush();
       socket.add(metadataBytes);
       await socket.flush();
-      print('✅ [Avatar] Request sent successfully');
+      zprint('✅ [Avatar] Request sent successfully');
     } catch (e) {
-      print('❌ [Avatar] Error requesting profile picture: $e');
+      zprint('❌ [Avatar] Error requesting profile picture: $e');
     } finally {
       try {
         await socket?.close();
       } catch (e) {
-        print('⚠️ [Avatar] Error closing request socket: $e');
+        zprint('⚠️ [Avatar] Error closing request socket: $e');
       }
     }
   }
 
   Future<void> _handleProfilePictureRequest(Socket socket, String senderId, String senderName) async {
-    print('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
+    zprint('📥 [Avatar] Received profile picture request from: $senderName (ID: $senderId)');
 
     // Store peer info from incoming socket
     final peerAddress = socket.remoteAddress;
@@ -185,14 +186,14 @@ class NetworkService {
     );
 
     // Debug: Print all available peer IDs and avatars
-    print('🔍 [Avatar] Available peer IDs: ${_peers.keys.join(", ")}');
-    print('🖼️ [Avatar] Available avatar keys: ${_avatarStore.getKeys()}');
+    zprint('🔍 [Avatar] Available peer IDs: ${_peers.keys.join(", ")}');
+    zprint('🖼️ [Avatar] Available avatar keys: ${_avatarStore.getKeys()}');
 
     // Allow the incoming socket to close naturally
     try {
       socket.destroy();
     } catch (e) {
-      print('⚠️ [Avatar] Error closing incoming socket: $e');
+      zprint('⚠️ [Avatar] Error closing incoming socket: $e');
     }
 
     // Create a new socket for sending the response
@@ -200,18 +201,18 @@ class NetworkService {
     try {
       if (_currentUser?.profileImage != null) {
         final file = File(_currentUser!.profileImage!);
-        print('🔍 [Avatar] Looking for profile image at: ${file.path}');
+        zprint('🔍 [Avatar] Looking for profile image at: ${file.path}');
         if (await file.exists()) {
           try {
             // Connect back to the peer's listening port
-            print('🔌 [Avatar] Connecting to peer at ${tempPeer.address.address}:${tempPeer.port}');
+            zprint('🔌 [Avatar] Connecting to peer at ${tempPeer.address.address}:${tempPeer.port}');
             responseSocket = await Socket.connect(
               tempPeer.address,
               tempPeer.port,
             ).timeout(
               const Duration(seconds: 5),
               onTimeout: () {
-                print('⏰ Connection attempt timed out');
+                zprint('⏰ Connection attempt timed out');
                 throw Exception('Connection timed out');
               },
             );
@@ -224,7 +225,7 @@ class NetworkService {
               'senderId': _currentUser?.username ?? 'Unknown',
               'senderPeerId': _currentUser?.username ?? 'Unknown',
             };
-            print('📋 [Avatar] Sending metadata: $metadata');
+            zprint('📋 [Avatar] Sending metadata: $metadata');
 
             // Send metadata length first (4 bytes), then metadata
             final metadataBytes = utf8.encode(json.encode(metadata));
@@ -254,28 +255,28 @@ class NetworkService {
                 // Add a small delay between chunks to prevent overwhelming the socket
                 await Future.delayed(const Duration(milliseconds: 1));
               }
-              print('✅ [Avatar] Profile picture sent successfully');
+              zprint('✅ [Avatar] Profile picture sent successfully');
             } finally {
               await input.close();
             }
           } catch (e) {
-            print('❌ [Avatar] Error during transfer: $e');
+            zprint('❌ [Avatar] Error during transfer: $e');
             throw e;
           }
         } else {
-          print('⚠️ [Avatar] Profile image file not found');
+          zprint('⚠️ [Avatar] Profile image file not found');
         }
       } else {
-        print('ℹ️ [Avatar] No profile image set');
+        zprint('ℹ️ [Avatar] No profile image set');
       }
     } catch (e, stack) {
-      print('❌ [Avatar] Error sending profile picture: $e');
-      print('📑 [Avatar] Stack trace: $stack');
+      zprint('❌ [Avatar] Error sending profile picture: $e');
+      zprint('📑 [Avatar] Stack trace: $stack');
     } finally {
       try {
         await responseSocket?.close();
       } catch (e) {
-        print('⚠️ [Avatar] Error closing response socket: $e');
+        zprint('⚠️ [Avatar] Error closing response socket: $e');
       }
     }
   }
@@ -292,7 +293,7 @@ class NetworkService {
     final stopwatch = Stopwatch()..start();
     Map<String, dynamic>? receivedInfo;
 
-    print('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
+    zprint('📥 New incoming connection from: ${socket.remoteAddress.address}:${socket.remotePort}');
 
     socket.listen(
       (List<int> data) async {
@@ -306,11 +307,11 @@ class NetworkService {
                 metadataLength = testLength;
                 buffer = buffer.skip(4).toList();
                 metadataLengthReceived = true;
-                print('📋 Found valid metadata length: $metadataLength bytes');
+                zprint('📋 Found valid metadata length: $metadataLength bytes');
                 break;
               } else {
                 buffer = buffer.skip(1).toList();
-                print('⚠️ Skipping invalid byte in length prefix');
+                zprint('⚠️ Skipping invalid byte in length prefix');
               }
             }
             if (!metadataLengthReceived) {
@@ -322,11 +323,11 @@ class NetworkService {
             try {
               final metadataBytes = buffer.take(metadataLength).toList();
               final metadataStr = utf8.decode(metadataBytes);
-              print('📋 Complete metadata received: $metadataStr');
+              zprint('📋 Complete metadata received: $metadataStr');
               receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
 
               if (receivedInfo!['type'] == 'profile_picture_request') {
-                print('📸 [Avatar] Received profile picture request');
+                zprint('📸 [Avatar] Received profile picture request');
                 await _handleProfilePictureRequest(
                   socket,
                   receivedInfo!['senderId'],
@@ -334,7 +335,7 @@ class NetworkService {
                 );
                 return;
               } else if (receivedInfo!['type'] == 'profile_picture_response') {
-                print('🖼️ [Avatar] Processing profile picture response');
+                zprint('🖼️ [Avatar] Processing profile picture response');
                 // Create a temporary file to store the profile picture
                 final tempDir = await Directory.systemTemp.createTemp('woxxy_profile');
                 final tempFile = File('${tempDir.path}/profile_${receivedInfo!['senderId']}.jpg');
@@ -348,7 +349,7 @@ class NetworkService {
                   final remainingData = buffer.sublist(metadataLength);
                   fileSink?.add(remainingData);
                   receivedBytes += remainingData.length;
-                  print('📥 [Avatar] Processed ${remainingData.length} bytes of profile picture data');
+                  zprint('📥 [Avatar] Processed ${remainingData.length} bytes of profile picture data');
                 }
                 buffer.clear();
               } else {
@@ -367,8 +368,7 @@ class NetworkService {
                 int counter = 1;
                 while (await File(filePath).exists()) {
                   final extension = fileName.contains('.') ? '.${fileName.split('.').last}' : '';
-                  final nameWithoutExt =
-                      fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
+                  final nameWithoutExt = fileName.contains('.') ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
                   fileName = '$nameWithoutExt ($counter)$extension';
                   filePath = '${dir.path}${Platform.pathSeparator}$fileName';
                   counter++;
@@ -386,7 +386,7 @@ class NetworkService {
                 buffer.clear();
               }
             } catch (e) {
-              print('❌ Error parsing metadata: $e');
+              zprint('❌ Error parsing metadata: $e');
               throw e;
             }
           } else if (metadataReceived && fileSink != null) {
@@ -395,23 +395,22 @@ class NetworkService {
               receivedBytes += data.length;
               if (expectedSize != null) {
                 final percentage = ((receivedBytes / expectedSize!) * 100).toStringAsFixed(1);
-                print(
-                    '📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
+                zprint('📥 Received chunk: ${data.length} bytes (Total: $receivedBytes/$expectedSize bytes - $percentage%)');
               }
             } catch (e) {
-              print('❌ Error writing data chunk: $e');
+              zprint('❌ Error writing data chunk: $e');
               throw e;
             }
           }
         } catch (e, stack) {
-          print('❌ Error processing chunk: $e');
-          print('📑 Stack trace: $stack');
+          zprint('❌ Error processing chunk: $e');
+          zprint('📑 Stack trace: $stack');
           _cleanupFileTransfer(fileSink, socket);
         }
       },
       onDone: () async {
         stopwatch.stop();
-        print('✅ Transfer completed');
+        zprint('✅ Transfer completed');
         try {
           await fileSink?.flush();
           await fileSink?.close();
@@ -421,15 +420,15 @@ class NetworkService {
 
             if (receivedInfo?['type'] == 'profile_picture_response') {
               try {
-                print('📥 [Avatar] Reading profile picture data...');
+                zprint('📥 [Avatar] Reading profile picture data...');
                 final imageBytes = await receiveFile!.readAsBytes();
                 final senderId = receivedInfo!['senderId'];
-                print('💾 [Avatar] Storing profile picture for peer ID: $senderId');
+                zprint('💾 [Avatar] Storing profile picture for peer ID: $senderId');
                 await _avatarStore.setAvatar(senderId, imageBytes);
-                print('✅ [Avatar] Successfully stored avatar in memory');
-                print('🔍 [Avatar] Current avatar keys after storage: ${_avatarStore.getKeys()}');
+                zprint('✅ [Avatar] Successfully stored avatar in memory');
+                zprint('🔍 [Avatar] Current avatar keys after storage: ${_avatarStore.getKeys()}');
               } catch (e) {
-                print('❌ Error processing received profile picture: $e');
+                zprint('❌ Error processing received profile picture: $e');
               }
             } else {
               // Regular file transfer completion
@@ -437,15 +436,14 @@ class NetworkService {
               final speed = (finalSize / transferTime / 1024 / 1024).toStringAsFixed(2);
               final sizeMiB = (finalSize / 1024 / 1024).toStringAsFixed(2);
               if (expectedSize != null && finalSize != expectedSize) {
-                print('⚠️ Warning: File size mismatch!');
+                zprint('⚠️ Warning: File size mismatch!');
               }
               final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
-              _fileReceivedController
-                  .add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+              _fileReceivedController.add('${receiveFile!.path}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
             }
           }
         } catch (e) {
-          print('❌ Error in onDone handler: $e');
+          zprint('❌ Error in onDone handler: $e');
         } finally {
           // Clean up resources
           try {
@@ -457,14 +455,14 @@ class NetworkService {
               }
             }
           } catch (e) {
-            print('⚠️ Error cleaning up temporary files: $e');
+            zprint('⚠️ Error cleaning up temporary files: $e');
           }
           socket.close();
         }
       },
       onError: (error, stackTrace) {
-        print('❌ Error during transfer: $error');
-        print('📑 Stack trace: $stackTrace');
+        zprint('❌ Error during transfer: $error');
+        zprint('📑 Stack trace: $stackTrace');
         _cleanupFileTransfer(fileSink, socket);
       },
     );
@@ -477,14 +475,14 @@ class NetworkService {
   }
 
   void _startDiscovery() {
-    print('🔍 Starting peer discovery service...');
+    zprint('🔍 Starting peer discovery service...');
     _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
         // Use username as the consistent ID since it's unique and doesn't change as often
         final username = _currentUser?.username.trim().isEmpty ?? true ? 'Woxxy-$_peerId' : _currentUser!.username;
         final message = 'WOXXY_ANNOUNCE:$username:$currentIpAddress:$_port:$username';
-        print('📢 Broadcasting discovery message: $message');
+        zprint('📢 Broadcasting discovery message: $message');
 
         // Try broadcast first, fallback to localhost if it fails
         try {
@@ -493,9 +491,9 @@ class NetworkService {
             InternetAddress('255.255.255.255'),
             _discoveryPort,
           );
-          print('✅ Broadcast message sent successfully');
+          zprint('✅ Broadcast message sent successfully');
         } catch (e) {
-          print('⚠️ Broadcast failed: $e');
+          zprint('⚠️ Broadcast failed: $e');
           // If broadcast fails, at least try localhost for testing
           _discoverySocket?.send(
             utf8.encode(message),
@@ -504,13 +502,13 @@ class NetworkService {
           );
         }
       } catch (e) {
-        print('❌ Error in discovery service: $e');
+        zprint('❌ Error in discovery service: $e');
       }
     });
   }
 
   void _startPeerCleanup() {
-    print('🧹 Starting peer cleanup service...');
+    zprint('🧹 Starting peer cleanup service...');
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(_pingInterval, (timer) {
       final now = DateTime.now();
@@ -519,7 +517,7 @@ class NetworkService {
       _peers.removeWhere((key, status) {
         final expired = now.difference(status.lastSeen) > _peerTimeout;
         if (expired) {
-          print('🗑️ Removing expired peer: ${status.peer.name} (last seen: ${status.lastSeen})');
+          zprint('🗑️ Removing expired peer: ${status.peer.name} (last seen: ${status.lastSeen})');
         }
         return expired;
       });
@@ -528,25 +526,25 @@ class NetworkService {
         _peerController.add(currentPeers);
       }
 
-      print('👥 Current peer count: ${_peers.length}');
+      zprint('👥 Current peer count: ${_peers.length}');
     });
   }
 
   void _listenForDiscovery() {
-    print('👂 Starting discovery listener...');
+    zprint('👂 Starting discovery listener...');
     _discoverySocket?.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
         final datagram = _discoverySocket?.receive();
         if (datagram != null) {
           final message = String.fromCharCodes(datagram.data);
-          print('📨 Received discovery message: $message from ${datagram.address}');
+          zprint('📨 Received discovery message: $message from ${datagram.address}');
           if (message.startsWith('WOXXY_ANNOUNCE')) {
             _handlePeerAnnouncement(message, datagram.address);
           }
         }
       }
     }, onError: (error) {
-      print('❌ Error in discovery listener: $error');
+      zprint('❌ Error in discovery listener: $error');
     });
   }
 
@@ -559,7 +557,7 @@ class NetworkService {
         final peerPort = int.parse(parts[3]);
         final peerId = parts[4]; // This will now be the username
         if (name != _currentUser?.username) {
-          print('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp, ID: $peerId)');
+          zprint('🆔 [Avatar] Processing peer announcement from: $name (IP: $peerIp, ID: $peerId)');
           final peer = Peer(
             name: name,
             id: peerId, // Using username as the consistent ID
@@ -570,76 +568,76 @@ class NetworkService {
         }
       }
     } catch (e) {
-      print('❌ [Avatar] Error handling peer announcement: $e');
+      zprint('❌ [Avatar] Error handling peer announcement: $e');
     }
   }
 
   void _addPeer(Peer peer) {
-    print('🤝 Processing peer: ${peer.name} (${peer.address.address}:${peer.port})');
+    zprint('🤝 Processing peer: ${peer.name} (${peer.address.address}:${peer.port})');
 
     // Don't add ourselves as a peer
     if (peer.address.address == currentIpAddress && peer.port == _port) {
-      print('🚫 Skipping self as peer');
+      zprint('🚫 Skipping self as peer');
       return;
     }
 
     final bool isNewPeer = !_peers.containsKey(peer.id);
 
     if (isNewPeer) {
-      print('✨ Adding new peer: ${peer.name} (ID: ${peer.id})');
+      zprint('✨ Adding new peer: ${peer.name} (ID: ${peer.id})');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
-      print('🔍 [Avatar] Current peer IDs after add: ${_peers.keys.join(", ")}');
+      zprint('🔍 [Avatar] Current peer IDs after add: ${_peers.keys.join(", ")}');
 
       // Request profile picture from new peer
       _requestProfilePicture(peer);
     } else {
       _peers[peer.id]?.lastSeen = DateTime.now();
       if (_peers[peer.id]?.peer.address.address != peer.address.address || _peers[peer.id]?.peer.port != peer.port) {
-        print('📝 Updating peer info: ${peer.name} (ID: ${peer.id})');
+        zprint('📝 Updating peer info: ${peer.name} (ID: ${peer.id})');
         _peers[peer.id] = _PeerStatus(peer);
         _peerController.add(currentPeers);
 
         // Re-request profile picture when peer reconnects with new address/port
         if (!_avatarStore.hasAvatar(peer.id)) {
-          print('🔄 Re-requesting profile picture for reconnected peer');
+          zprint('🔄 Re-requesting profile picture for reconnected peer');
           _requestProfilePicture(peer);
         }
       } else {
-        print('👍 Updated last seen time for peer: ${peer.name} (ID: ${peer.id})');
+        zprint('👍 Updated last seen time for peer: ${peer.name} (ID: ${peer.id})');
       }
     }
   }
 
   Future<void> sendFile(String filePath, Peer receiver) async {
-    print('📤 NetworkService.sendFile() started');
-    print('📁 File path: $filePath');
-    print('👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
-    print('🔍 Current IP: $currentIpAddress');
+    zprint('📤 NetworkService.sendFile() started');
+    zprint('📁 File path: $filePath');
+    zprint('👤 Receiver: ${receiver.name} at ${receiver.address.address}:${receiver.port}');
+    zprint('🔍 Current IP: $currentIpAddress');
 
     final file = File(filePath);
     if (!await file.exists()) {
-      print('❌ File does not exist: $filePath');
+      zprint('❌ File does not exist: $filePath');
       throw Exception('File does not exist: $filePath');
     }
 
     final fileSize = await file.length();
-    print('📏 File size: $fileSize bytes');
+    zprint('📏 File size: $fileSize bytes');
 
     Socket? socket;
     try {
-      print('🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
+      zprint('🔌 Attempting to connect to ${receiver.address.address}:${receiver.port}...');
       socket = await Socket.connect(
         receiver.address,
         receiver.port,
       ).timeout(
         const Duration(seconds: 5),
         onTimeout: () {
-          print('⏰ Connection attempt timed out');
+          zprint('⏰ Connection attempt timed out');
           throw Exception('Connection timed out');
         },
       );
-      print('✅ Connected to peer successfully');
+      zprint('✅ Connected to peer successfully');
 
       final metadata = {
         'name': file.path.split(Platform.pathSeparator).last,
@@ -647,7 +645,7 @@ class NetworkService {
         'sender': currentIpAddress,
         'senderUsername': _currentUsername,
       };
-      print('📋 Sending metadata: $metadata');
+      zprint('📋 Sending metadata: $metadata');
 
       // Send metadata length first (4 bytes), then metadata
       final metadataBytes = utf8.encode(json.encode(metadata));
@@ -659,9 +657,9 @@ class NetworkService {
 
       // Small delay to ensure metadata is processed
       await Future.delayed(const Duration(milliseconds: 100));
-      print('✅ Metadata sent (${metadataBytes.length} bytes)');
+      zprint('✅ Metadata sent (${metadataBytes.length} bytes)');
 
-      print('📨 Starting file stream...');
+      zprint('📨 Starting file stream...');
       final stopwatch = Stopwatch()..start();
 
       // Read and send file in chunks
@@ -683,31 +681,31 @@ class NetworkService {
 
           sentBytes += buffer.length;
           final percentage = ((sentBytes / fileSize) * 100).toStringAsFixed(1);
-          print('📤 Sent chunk: ${buffer.length} bytes (Total: $sentBytes/$fileSize bytes - $percentage%)');
+          zprint('📤 Sent chunk: ${buffer.length} bytes (Total: $sentBytes/$fileSize bytes - $percentage%)');
         }
 
         stopwatch.stop();
         final elapsedSeconds = stopwatch.elapsed.inSeconds;
         final speed = elapsedSeconds > 0 ? (fileSize / 1024 / elapsedSeconds).round() : fileSize ~/ 1024;
-        print('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
+        zprint('✅ File stream completed in ${elapsedSeconds}s ($speed KB/s)');
       } finally {
         await input.close();
       }
 
-      print('🔒 Closing connection...');
+      zprint('🔒 Closing connection...');
       await socket.close();
-      print('✅ Connection closed successfully');
-      print('🎉 File transfer completed successfully');
+      zprint('✅ Connection closed successfully');
+      zprint('🎉 File transfer completed successfully');
     } catch (e, stackTrace) {
-      print('❌ Error in sendFile: $e');
-      print('📑 Stack trace:\n$stackTrace');
+      zprint('❌ Error in sendFile: $e');
+      zprint('📑 Stack trace:\n$stackTrace');
       socket?.destroy();
       rethrow;
     }
   }
 
   Future<void> dispose() async {
-    print('Disposing NetworkService...');
+    zprint('Disposing NetworkService...');
     try {
       _discoveryTimer?.cancel();
       _cleanupTimer?.cancel();
@@ -720,7 +718,7 @@ class NetworkService {
       await _peerController.close();
       await _fileReceivedController.close();
     } catch (e) {
-      print('Error during dispose: $e');
+      zprint('Error during dispose: $e');
     }
   }
 }

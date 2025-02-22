@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:woxxy2/funcs/debug.dart';
 import '../models/peer.dart';
 import '../services/network_service.dart';
 import '../funcs/utils.dart';
@@ -51,15 +52,15 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   setState(() => _isDragging = false);
                   if (details.files.isEmpty) return;
                   final file = details.files.first;
-                  print('📤 Starting file transfer process');
-                  print('📁 File to send: ${file.path}');
-                  print('👤 Sending to peer: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
+                  zprint('📤 Starting file transfer process');
+                  zprint('📁 File to send: ${file.path}');
+                  zprint('👤 Sending to peer: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
                   try {
-                    print('🔄 Initiating file transfer...');
+                    zprint('🔄 Initiating file transfer...');
                     final stopwatch = Stopwatch()..start();
                     await widget.networkService.sendFile(file.path, widget.peer);
                     stopwatch.stop();
-                    print('✅ File transfer completed successfully');
+                    zprint('✅ File transfer completed successfully');
                     if (mounted) {
                       final fileSize = await file.length();
                       final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
@@ -71,8 +72,8 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                       );
                     }
                   } catch (e, stackTrace) {
-                    print('❌ Error during file transfer: $e');
-                    print('📑 Stack trace: $stackTrace');
+                    zprint('❌ Error during file transfer: $e');
+                    zprint('📑 Stack trace: $stackTrace');
                     if (mounted) {
                       showSnackbar(
                         context,
@@ -82,11 +83,11 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   }
                 },
                 onDragEntered: (details) {
-                  print('🎯 File drag entered');
+                  zprint('🎯 File drag entered');
                   setState(() => _isDragging = true);
                 },
                 onDragExited: (details) {
-                  print('🎯 File drag exited');
+                  zprint('🎯 File drag exited');
                   setState(() => _isDragging = false);
                 },
                 child: Container(
