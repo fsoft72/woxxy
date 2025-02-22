@@ -1,4 +1,5 @@
 import 'file_transfer.dart';
+import 'dart:io';
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
@@ -9,7 +10,7 @@ class FileTransferManager {
   final Map<String, FileTransfer> files = {};
 
   /// Path where downloaded files will be stored
-  final String downloadPath;
+  String downloadPath;
 
   /// Private constructor
   FileTransferManager._({required this.downloadPath});
@@ -81,6 +82,20 @@ class FileTransferManager {
       return false;
     } catch (e) {
       print('Error ending transfer: $e');
+      return false;
+    }
+  }
+
+  /// Updates the download path for future file transfers
+  /// Creates the directory if it doesn't exist
+  /// Returns true if the path was successfully updated
+  Future<bool> updateDownloadPath(String newPath) async {
+    try {
+      await Directory(newPath).create(recursive: true);
+      _instance!.downloadPath = newPath;
+      return true;
+    } catch (e) {
+      print('Error updating download path: $e');
       return false;
     }
   }
