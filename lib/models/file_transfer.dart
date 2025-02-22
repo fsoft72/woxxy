@@ -48,6 +48,8 @@ class FileTransfer {
       File file = File(finalPath);
       IOSink sink = file.openWrite(mode: FileMode.writeOnly);
 
+      print("=== FILE: $finalPath");
+
       // Create and start stopwatch
       Stopwatch watch = Stopwatch()..start();
 
