@@ -8,6 +8,17 @@ import 'package:woxxy2/funcs/debug.dart';
 import '../models/peer.dart';
 import '../models/file_transfer_manager.dart';
 
+class _PeerStatus {
+  final Peer peer;
+  DateTime lastSeen;
+
+  _PeerStatus(this.peer) : lastSeen = DateTime.now();
+
+  void updateLastSeen() {
+    lastSeen = DateTime.now();
+  }
+}
+
 class NetworkService {
   static const int _port = 8090;
   static const int _discoveryPort = 8091;
@@ -56,6 +67,15 @@ class NetworkService {
     }
   }
 
+  Future<void> dispose() async {
+    _discoveryTimer?.cancel();
+    _cleanupTimer?.cancel();
+    await _server?.close();
+    _discoverySocket?.close();
+    await _fileReceivedController.close();
+    await _peerController.close();
+  }
+
   void setUsername(String username) {
     _currentUsername = username;
   }
@@ -92,38 +112,30 @@ class NetworkService {
   Future<void> _startServer() async {
     _server = await ServerSocket.bind(InternetAddress.anyIPv4, _port);
     zprint('Server started on port $_port');
-    _server!.listen((socket) => _handleIncomingConnection(socket));
+    _server!.listen((socket) => _handleNewConnection(socket));
   }
 
-  void _handleIncomingConnection(Socket socket) {
-    List<int> buffer = [];
-    bool metadataLengthReceived = false;
-    bool metadataReceived = false;
-    int metadataLength = 0;
-    int receivedBytes = 0;
+  Future<void> _handleNewConnection(Socket socket) async {
+    final sourceIp = socket.remoteAddress.address;
+    zprint('📥 New connection from $sourceIp');
     final stopwatch = Stopwatch()..start();
-    Map<String, dynamic>? receivedInfo;
-    String sourceIp = socket.remoteAddress.address;
 
-    zprint('📥 New incoming connection from: $sourceIp:${socket.remotePort}');
+    var buffer = <int>[];
+    var metadataReceived = false;
+    Map<String, dynamic>? receivedInfo;
+    var receivedBytes = 0;
 
     socket.listen(
-      (List<int> data) async {
+      (data) async {
         try {
-          buffer.addAll(data);
+          if (!metadataReceived) {
+            buffer.addAll(data);
+            if (buffer.length < 4) return;
 
-          if (!metadataLengthReceived) {
-            if (buffer.length >= 4) {
-              metadataLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
-              buffer = buffer.skip(4).toList();
-              metadataLengthReceived = true;
-              zprint('📋 Found metadata length: $metadataLength bytes');
-            }
-            return;
-          }
+            final metadataLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
+            if (buffer.length < 4 + metadataLength) return;
 
-          if (!metadataReceived && buffer.length >= metadataLength) {
-            final metadataBytes = buffer.take(metadataLength).toList();
+            final metadataBytes = buffer.take(4 + metadataLength).toList().sublist(4);
             final metadataStr = utf8.decode(metadataBytes);
             receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
 
@@ -135,7 +147,14 @@ class NetworkService {
 
             final fileName = receivedInfo!['name'] as String;
             final fileSize = receivedInfo!['size'] as int;
-            final added = await FileTransferManager.instance.add(sourceIp, fileName, fileSize);
+            final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
+
+            final added = await FileTransferManager.instance.add(
+              sourceIp,
+              fileName,
+              fileSize,
+              senderUsername,
+            );
 
             if (!added) {
               socket.destroy();
@@ -143,13 +162,13 @@ class NetworkService {
             }
 
             metadataReceived = true;
-            if (buffer.length > metadataLength) {
-              final remainingData = buffer.sublist(metadataLength);
+            if (buffer.length > 4 + metadataLength) {
+              final remainingData = buffer.sublist(4 + metadataLength);
               await FileTransferManager.instance.write(sourceIp, remainingData);
               receivedBytes += remainingData.length;
             }
             buffer.clear();
-          } else if (metadataReceived) {
+          } else {
             await FileTransferManager.instance.write(sourceIp, data);
             receivedBytes += data.length;
 
@@ -169,13 +188,7 @@ class NetworkService {
         try {
           if (metadataReceived) {
             await FileTransferManager.instance.end(sourceIp);
-
-            final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
-            final speed = (receivedBytes / transferTime / 1024 / 1024).toStringAsFixed(2);
-            final sizeMiB = (receivedBytes / 1024 / 1024).toStringAsFixed(2);
-            final senderUsername = receivedInfo?['senderUsername'] as String? ?? 'Unknown';
-
-            _fileReceivedController.add('${FileTransferManager.instance.downloadPath}|$sizeMiB|${transferTime.toStringAsFixed(1)}|$speed|$senderUsername');
+            zprint('✅ File transfer completed');
           }
         } catch (e) {
           zprint('❌ Error completing transfer: $e');
@@ -338,27 +351,7 @@ class NetworkService {
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
     } else {
-      _peers[peer.id]?.lastSeen = DateTime.now();
-      if (_peers[peer.id]?.peer.address.address != peer.address.address ||
-          _peers[peer.id]?.peer.port != peer.port) {
-        _peers[peer.id] = _PeerStatus(peer);
-        _peerController.add(currentPeers);
-      }
+      _peers[peer.id]!.updateLastSeen();
     }
   }
-
-  Future<void> dispose() async {
-    _discoveryTimer?.cancel();
-    _cleanupTimer?.cancel();
-    await _server?.close();
-    _discoverySocket?.close();
-    await _peerController.close();
-    await _fileReceivedController.close();
-  }
-}
-
-class _PeerStatus {
-  final Peer peer;
-  DateTime lastSeen;
-  _PeerStatus(this.peer) : lastSeen = DateTime.now();
 }

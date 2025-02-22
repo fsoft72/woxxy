@@ -90,6 +90,8 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _loadSettings();
     _networkService.start();
+    // Set file history in FileTransferManager
+    FileTransferManager.instance.setFileHistory(_fileHistory);
     _setupFileReceivedListener();
   }
 

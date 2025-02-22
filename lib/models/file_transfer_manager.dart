@@ -1,5 +1,6 @@
 import 'file_transfer.dart';
 import 'dart:io';
+import 'history.dart';
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
@@ -11,6 +12,9 @@ class FileTransferManager {
 
   /// Path where downloaded files will be stored
   String downloadPath;
+
+  /// File history manager
+  FileHistory? _fileHistory;
 
   /// Private constructor
   FileTransferManager._({required this.downloadPath});
@@ -29,12 +33,18 @@ class FileTransferManager {
     return _instance!;
   }
 
+  /// Set the FileHistory instance for tracking transfers
+  void setFileHistory(FileHistory history) {
+    _fileHistory = history;
+  }
+
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
   Future<bool> add(
     String source_ip,
     String original_filename,
     int size,
+    String senderUsername,
   ) async {
     try {
       FileTransfer? transfer = await FileTransfer.start(
@@ -42,6 +52,8 @@ class FileTransferManager {
         original_filename,
         size,
         downloadPath,
+        senderUsername,
+        onTransferComplete: _handleTransferComplete,
       );
 
       if (transfer != null) {
@@ -97,6 +109,19 @@ class FileTransferManager {
     } catch (e) {
       print('Error updating download path: $e');
       return false;
+    }
+  }
+
+  /// Handle completed transfer by adding it to history
+  void _handleTransferComplete(FileTransfer transfer) {
+    if (_fileHistory != null) {
+      final entry = FileHistoryEntry(
+        destinationPath: transfer.destination_filename,
+        senderUsername: transfer.senderUsername,
+        fileSize: transfer.size,
+        uploadSpeedMBps: transfer.getSpeedMBps(),
+      );
+      _fileHistory!.addEntry(entry);
     }
   }
 }
