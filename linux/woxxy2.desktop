@@ -6,3 +6,5 @@ Exec=woxxy2
 Icon=woxxy2
 Terminal=false
 Categories=Network;FileTransfer;
+X-GNOME-UsesNotifications=true
+Actions=open;

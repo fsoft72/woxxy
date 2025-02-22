@@ -8,6 +8,7 @@ import 'screens/home.dart';
 import 'screens/settings.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
+import 'services/notification_service.dart';
 import 'models/user.dart';
 import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
@@ -15,6 +16,10 @@ import 'package:path_provider/path_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize notification service
+  final notificationService = NotificationService();
+  await notificationService.init();
 
   // Load user settings first
   final settingsService = SettingsService();
@@ -136,7 +141,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   }
 
   void _setupFileReceivedListener() {
-    _networkService.onFileReceived.listen((fileInfo) {
+    _networkService.onFileReceived.listen((fileInfo) async {
       final parts = fileInfo.split('|');
       if (parts.length >= 4) {
         final filePath = parts[0];
@@ -150,10 +155,20 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
           fileSize: (fileSizeMB * 1024 * 1024).toInt(),
           uploadSpeedMBps: speedMBps,
         );
-
         setState(() {
           _fileHistory.addEntry(entry);
         });
+
+        // Show notification if window is hidden
+        final isVisible = await windowManager.isVisible();
+        if (!isVisible) {
+          await NotificationService.instance.showFileReceivedNotification(
+            filePath: filePath,
+            senderUsername: senderUsername,
+            fileSizeMB: fileSizeMB,
+            speedMBps: speedMBps,
+          );
+        }
       }
     });
   }
