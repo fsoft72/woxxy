@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to select profile pictures.</string>
+	<key>NSOpenPanelUsageDescription</key>
+	<string>This app needs access to select files and directories.</string>
 </dict>
 </plist>
