@@ -2,7 +2,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications_linux/flutter_local_notifications_linux.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'package:flutter/services.dart';
 
 class NotificationManager {
   static final NotificationManager _instance = NotificationManager._internal();
@@ -18,12 +17,14 @@ class NotificationManager {
     print('📱 Creating FlutterLocalNotificationsPlugin instance');
   }
 
-  final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
   bool _isInitialized = false;
 
   Future<String?> _getAbsoluteIconPath() async {
     try {
-      final iconPath = path.join(Directory.current.path, 'build', 'flutter_assets', 'assets', 'icons', 'head.png');
+      final iconPath = path.join(Directory.current.path, 'build',
+          'flutter_assets', 'assets', 'icons', 'head.png');
       if (await File(iconPath).exists()) {
         print('✅ Found icon at: $iconPath');
         return iconPath;
@@ -38,7 +39,8 @@ class NotificationManager {
 
   Future<void> init() async {
     print('🔄 Starting NotificationManager initialization...');
-    print('💻 Running on platform: ${Platform.operatingSystem} (${Platform.operatingSystemVersion})');
+    print(
+        '💻 Running on platform: ${Platform.operatingSystem} (${Platform.operatingSystemVersion})');
     print('📂 Current directory: ${Directory.current.path}');
 
     if (_isInitialized) {
@@ -53,8 +55,9 @@ class NotificationManager {
       // Linux-specific initialization
       final linuxSettings = LinuxInitializationSettings(
         defaultActionName: 'Open notification',
-        defaultIcon: iconPath != null ? FileLinuxIcon(iconPath) : null,
-        defaultSound: true,
+        defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+        defaultSound:
+            null, // Using null since we can't get the theme sound working
       );
 
       final initializationSettings = InitializationSettings(
@@ -65,9 +68,7 @@ class NotificationManager {
 
       // Check if Linux dependencies are available
       if (Platform.isLinux) {
-        final result = await Process.run('notify-send', [
-          '--version'
-        ]);
+        final result = await Process.run('notify-send', ['--version']);
         print('🐧 Linux notify-send version:');
         print(result.stdout);
       }
@@ -94,11 +95,11 @@ class NotificationManager {
               label: 'Test',
             ),
           ],
-          sound: true,
+          sound: null, // Using null since we can't get the theme sound working
           suppressSound: false,
           resident: true,
           defaultActionName: 'Open',
-          icon: iconPath != null ? FileLinuxIcon(iconPath) : null,
+          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
         );
 
         await _notifications.show(
@@ -152,9 +153,9 @@ class NotificationManager {
         ],
         resident: true,
         suppressSound: false,
-        sound: true,
+        sound: null, // Using null since we can't get the theme sound working
         defaultActionName: 'Open',
-        icon: iconPath != null ? FileLinuxIcon(iconPath) : null,
+        icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
       );
 
       final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
@@ -178,13 +179,12 @@ class NotificationManager {
           ];
 
           if (iconPath != null) {
-            args.addAll([
-              '--icon=$iconPath'
-            ]);
+            args.addAll(['--icon=$iconPath']);
           }
 
           final result = await Process.run('notify-send', args);
-          print('✅ Fallback notification result: ${result.exitCode == 0 ? 'success' : 'failed'}');
+          print(
+              '✅ Fallback notification result: ${result.exitCode == 0 ? 'success' : 'failed'}');
           if (result.stderr.isNotEmpty) {
             print('⚠️ notify-send stderr: ${result.stderr}');
           }
