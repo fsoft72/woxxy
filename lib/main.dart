@@ -8,18 +8,21 @@ import 'screens/home.dart';
 import 'screens/settings.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
-import 'services/notification_service.dart';
+import 'models/notification_manager.dart';
 import 'models/user.dart';
 import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() async {
+  print('🚀 Application starting...');
+  print('📱 Ensuring Flutter binding is initialized...');
   WidgetsFlutterBinding.ensureInitialized();
+  print('✅ Flutter binding initialized');
 
-  // Initialize notification service
-  final notificationService = NotificationService();
-  await notificationService.init();
+  print('🔔 Starting notification manager initialization...');
+  await NotificationManager.instance.init();
+  print('🔔 Notification manager initialization attempt completed');
 
   // Load user settings first
   final settingsService = SettingsService();
@@ -159,16 +162,13 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
           _fileHistory.addEntry(entry);
         });
 
-        // Show notification if window is hidden
-        final isVisible = await windowManager.isVisible();
-        if (!isVisible) {
-          await NotificationService.instance.showFileReceivedNotification(
-            filePath: filePath,
-            senderUsername: senderUsername,
-            fileSizeMB: fileSizeMB,
-            speedMBps: speedMBps,
-          );
-        }
+        // Show notification for all received files
+        await NotificationManager.instance.showFileReceivedNotification(
+          filePath: filePath,
+          senderUsername: senderUsername,
+          fileSizeMB: fileSizeMB,
+          speedMBps: speedMBps,
+        );
       }
     });
   }

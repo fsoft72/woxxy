@@ -25,6 +25,7 @@ dependencies:
   crypto: ^3.0.3
   tray_manager: ^0.2.0
   flutter_local_notifications: ^16.2.0
+  flutter_local_notifications_linux: ^4.0.0
 
 dev_dependencies:
   flutter_test:
