@@ -21,6 +21,8 @@ class NotificationManager {
       FlutterLocalNotificationsPlugin();
   bool _isInitialized = false;
 
+  bool get isInitialized => _isInitialized;
+
   Future<String?> _getAbsoluteIconPath() async {
     try {
       final iconPath = path.join(Directory.current.path, 'build',
@@ -37,6 +39,48 @@ class NotificationManager {
     }
   }
 
+  Future<bool> requestPermissions() async {
+    if (Platform.isMacOS) {
+      print('🍎 Requesting macOS notification permissions...');
+
+      try {
+        // Initialize plugin with default settings first
+        final darwinSettings = DarwinInitializationSettings(
+            requestAlertPermission: true, // Request during initialization
+            requestBadgePermission: true,
+            requestSoundPermission: true,
+            onDidReceiveLocalNotification: (id, title, body, payload) async {
+              print('🍎 macOS received local notification: $title');
+            });
+
+        final initializationSettings = InitializationSettings(
+          macOS: darwinSettings,
+        );
+
+        // Initialize the plugin with permission requests
+        final initSuccess = await _notifications.initialize(
+          initializationSettings,
+          onDidReceiveNotificationResponse: (details) {
+            print('🔔 Notification response received: ${details.actionId}');
+          },
+        );
+
+        if (initSuccess ?? false) {
+          _isInitialized = true;
+          print('✅ Notification service initialized successfully');
+          return true;
+        } else {
+          print('❌ Failed to initialize notification service');
+          return false;
+        }
+      } catch (e) {
+        print('❌ Error requesting macOS permissions: $e');
+        return false;
+      }
+    }
+    return true; // Other platforms don't need explicit permission
+  }
+
   Future<void> init() async {
     print('🔄 Starting NotificationManager initialization...');
     print(
@@ -44,73 +88,50 @@ class NotificationManager {
     print('📂 Current directory: ${Directory.current.path}');
 
     if (_isInitialized) {
-      print('⚠️ NotificationManager already initialized, skipping...');
+      print('✅ NotificationManager already initialized');
       return;
     }
 
     try {
-      final iconPath = await _getAbsoluteIconPath();
-      print('🖼️ Using icon path: $iconPath');
-
-      // Linux-specific initialization
-      final linuxSettings = LinuxInitializationSettings(
-        defaultActionName: 'Open notification',
-        defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
-        defaultSound:
-            null, // Using null since we can't get the theme sound working
-      );
-
-      final initializationSettings = InitializationSettings(
-        android: const AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: const DarwinInitializationSettings(),
-        linux: linuxSettings,
-      );
-
-      // Check if Linux dependencies are available
-      if (Platform.isLinux) {
-        final result = await Process.run('notify-send', ['--version']);
-        print('🐧 Linux notify-send version:');
-        print(result.stdout);
-      }
-
-      final success = await _notifications.initialize(
-        initializationSettings,
-        onDidReceiveNotificationResponse: (details) {
-          print('🔔 Notification response received: ${details.actionId}');
-        },
-      );
-
-      if (success ?? false) {
-        _isInitialized = true;
-        print('✅ Notification service initialized successfully');
-
-        // Get the icon path for the test notification
+      if (Platform.isMacOS) {
+        final hasPermissions = await requestPermissions();
+        if (!hasPermissions) {
+          print('❌ Notification permissions denied');
+          _isInitialized = false;
+          return;
+        }
+      } else if (Platform.isLinux) {
         final iconPath = await _getAbsoluteIconPath();
-        final linuxDetails = LinuxNotificationDetails(
-          category: LinuxNotificationCategory.presence,
-          urgency: LinuxNotificationUrgency.critical,
-          actions: [
-            const LinuxNotificationAction(
-              key: 'test',
-              label: 'Test',
-            ),
-          ],
-          sound: null, // Using null since we can't get the theme sound working
-          suppressSound: false,
-          resident: true,
-          defaultActionName: 'Open',
-          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+        print('🖼️ Using icon path: $iconPath');
+
+        // Linux-specific initialization
+        final linuxSettings = LinuxInitializationSettings(
+          defaultActionName: 'Open notification',
+          defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+          defaultSound: null,
         );
 
-        await _notifications.show(
-          0,
-          'Woxxy',
-          'File transfer notifications enabled',
-          NotificationDetails(linux: linuxDetails),
+        final initializationSettings = InitializationSettings(
+          linux: linuxSettings,
         );
-      } else {
-        print('❌ Failed to initialize notification service');
-        print('⚠️ Initialize() returned: $success');
+
+        // Initialize notifications for Linux
+        final success = await _notifications.initialize(
+          initializationSettings,
+          onDidReceiveNotificationResponse: (details) {
+            print('🔔 Notification response received: ${details.actionId}');
+          },
+        );
+
+        if (success ?? false) {
+          _isInitialized = true;
+          print('✅ Notification service initialized successfully');
+          await _showTestNotification();
+        } else {
+          print('❌ Failed to initialize notification service');
+          print('⚠️ Initialize() returned: $success');
+          _isInitialized = false;
+        }
       }
     } catch (e, stackTrace) {
       print('❌ Error initializing notifications:');
@@ -120,15 +141,79 @@ class NotificationManager {
     }
   }
 
+  Future<void> _showTestNotification() async {
+    if (!_isInitialized) {
+      print('⚠️ Cannot show test notification - notifications not initialized');
+      return;
+    }
+
+    try {
+      final iconPath = await _getAbsoluteIconPath();
+      if (Platform.isLinux) {
+        final linuxDetails = LinuxNotificationDetails(
+          category: LinuxNotificationCategory.presence,
+          urgency: LinuxNotificationUrgency.critical,
+          actions: [
+            const LinuxNotificationAction(
+              key: 'test',
+              label: 'Test',
+            ),
+          ],
+          sound: null,
+          suppressSound: false,
+          resident: true,
+          defaultActionName: 'Open',
+          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+        );
+        await _notifications.show(
+          0,
+          'Woxxy',
+          'File transfer notifications enabled',
+          NotificationDetails(linux: linuxDetails),
+        );
+      } else if (Platform.isMacOS) {
+        final darwinDetails = DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: 'default',
+            threadIdentifier: 'file_transfer',
+            interruptionLevel: InterruptionLevel
+                .active // Add this to ensure notification is shown
+            );
+        await _notifications.show(
+          0,
+          'Woxxy',
+          'File transfer notifications enabled',
+          NotificationDetails(macOS: darwinDetails),
+        );
+      }
+    } catch (e) {
+      print('❌ Error showing test notification: $e');
+    }
+  }
+
   Future<void> showFileReceivedNotification({
     required String filePath,
     required String senderUsername,
     required double fileSizeMB,
     required double speedMBps,
   }) async {
+    if (!_isInitialized && Platform.isMacOS) {
+      print('⚠️ Notifications not initialized on macOS');
+      // Try to initialize once
+      await init();
+
+      if (!_isInitialized) {
+        print(
+            '❌ Failed to initialize notifications - notifications will be disabled');
+        return;
+      }
+    }
+
     if (!_isInitialized) {
-      print('⚠️ Notifications not initialized');
-      print('Debug: initialization status = $_isInitialized');
+      print(
+          '⚠️ Notifications not initialized and cannot be initialized at this time');
       return;
     }
 
@@ -142,30 +227,47 @@ class NotificationManager {
       final fileName = path.basename(filePath);
       final iconPath = await _getAbsoluteIconPath();
 
-      final linuxDetails = LinuxNotificationDetails(
-        category: LinuxNotificationCategory.transferComplete,
-        urgency: LinuxNotificationUrgency.critical,
-        actions: [
-          const LinuxNotificationAction(
-            key: 'open',
-            label: 'Open file',
-          ),
-        ],
-        resident: true,
-        suppressSound: false,
-        sound: null, // Using null since we can't get the theme sound working
-        defaultActionName: 'Open',
-        icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
-      );
-
-      final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
-      await _notifications.show(
-        id,
-        'File Received',
-        'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-        NotificationDetails(linux: linuxDetails),
-      );
-      print('✅ File received notification sent (ID: $id)');
+      if (Platform.isLinux) {
+        final linuxDetails = LinuxNotificationDetails(
+          category: LinuxNotificationCategory.transferComplete,
+          urgency: LinuxNotificationUrgency.critical,
+          actions: [
+            const LinuxNotificationAction(
+              key: 'open',
+              label: 'Open file',
+            ),
+          ],
+          resident: true,
+          suppressSound: false,
+          sound: null,
+          defaultActionName: 'Open',
+          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+        );
+        final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+        await _notifications.show(
+          id,
+          'File Received',
+          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
+          NotificationDetails(linux: linuxDetails),
+        );
+        print('✅ File received notification sent (ID: $id)');
+      } else if (Platform.isMacOS) {
+        final darwinDetails = DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: 'default',
+            threadIdentifier: 'file_transfer',
+            interruptionLevel: InterruptionLevel.active);
+        final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+        await _notifications.show(
+          id,
+          'File Received',
+          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
+          NotificationDetails(macOS: darwinDetails),
+        );
+        print('✅ File received notification sent (ID: $id)');
+      }
 
       // Fallback to notify-send if flutter_local_notifications fails
       if (Platform.isLinux) {

@@ -32,5 +32,7 @@
 	<string>This app needs access to your photo library to select profile pictures.</string>
 	<key>NSOpenPanelUsageDescription</key>
 	<string>This app needs access to select files and directories.</string>
+	<key>NSNotificationUsageDescription</key>
+	<string>This app needs to send notifications for file transfers.</string>
 </dict>
 </plist>
