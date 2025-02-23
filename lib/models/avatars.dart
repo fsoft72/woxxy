@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:woxxy2/funcs/debug.dart';
+import 'package:woxxy/funcs/debug.dart';
 
 /// A store that manages username to avatar image mappings in memory
 class AvatarStore {

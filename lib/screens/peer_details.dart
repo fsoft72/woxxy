@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
-import 'package:woxxy2/funcs/debug.dart';
+import 'package:woxxy/funcs/debug.dart';
 import '../models/peer.dart';
 import '../services/network_service.dart';
 import '../funcs/utils.dart';

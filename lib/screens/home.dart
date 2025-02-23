@@ -1,7 +1,7 @@
 // ignore: unused_import
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:woxxy2/funcs/debug.dart';
+import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
 import '../models/avatars.dart';
