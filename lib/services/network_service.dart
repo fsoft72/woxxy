@@ -13,7 +13,6 @@ class NetworkService {
   static const int _port = 8090;
   static const int _discoveryPort = 8091;
   static const Duration _pingInterval = Duration(seconds: 5);
-  static const int _bufferSize = 1024 * 32; // 32KB buffer size
 
   final _fileReceivedController = StreamController<String>.broadcast();
   final _peerManager = PeerManager();

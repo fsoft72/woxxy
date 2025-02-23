@@ -1,7 +1,9 @@
+// ignore_for_file: non_constant_identifier_names, avoid_print
+
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart';
-import 'dart:convert';
+import 'package:woxxy2/funcs/debug.dart';
 
 typedef OnTransferComplete = void Function(FileTransfer);
 
@@ -49,7 +51,7 @@ class FileTransfer {
   /// Returns null if the file cannot be created
   static Future<FileTransfer?> start(String source_ip, String original_filename, int size, String downloadPath, String senderUsername, String? expectedMd5, {OnTransferComplete? onTransferComplete}) async {
     try {
-      print("=== downloadPath: $downloadPath");
+      zprint("=== downloadPath: $downloadPath");
       // Ensure download directory exists
       Directory(downloadPath).createSync(recursive: true);
 
@@ -63,7 +65,7 @@ class FileTransfer {
       File file = File(finalPath);
       IOSink sink = file.openWrite(mode: FileMode.writeOnly);
 
-      print("=== FILE: $finalPath");
+      zprint("=== FILE: $finalPath");
 
       // Create and start stopwatch
       Stopwatch watch = Stopwatch()..start();
@@ -104,11 +106,11 @@ class FileTransfer {
       if (expectedMd5 != null) {
         final actualMd5 = md5.convert(_receivedData).toString();
         if (actualMd5 != expectedMd5) {
-          print('MD5 checksum mismatch! Expected: $expectedMd5, Got: $actualMd5');
+          zprint('MD5 checksum mismatch! Expected: $expectedMd5, Got: $actualMd5');
           await File(destination_filename).delete();
           return false;
         }
-        print('MD5 checksum verified successfully');
+        zprint('MD5 checksum verified successfully');
       }
 
       onTransferComplete?.call(this);
