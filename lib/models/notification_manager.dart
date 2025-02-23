@@ -93,7 +93,27 @@ class NotificationManager {
     }
 
     try {
-      if (Platform.isMacOS) {
+      if (Platform.isAndroid) {
+        final androidSettings = AndroidInitializationSettings('head');
+        final initializationSettings = InitializationSettings(
+          android: androidSettings,
+        );
+
+        final success = await _notifications.initialize(
+          initializationSettings,
+          onDidReceiveNotificationResponse: (details) {
+            print('🔔 Notification response received: ${details.actionId}');
+          },
+        );
+
+        if (success ?? false) {
+          _isInitialized = true;
+          print('✅ Notification service initialized successfully');
+        } else {
+          print('❌ Failed to initialize notification service');
+          _isInitialized = false;
+        }
+      } else if (Platform.isMacOS) {
         final hasPermissions = await requestPermissions();
         if (!hasPermissions) {
           print('❌ Notification permissions denied');
@@ -226,8 +246,26 @@ class NotificationManager {
 
       final fileName = path.basename(filePath);
       final iconPath = await _getAbsoluteIconPath();
+      final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
-      if (Platform.isLinux) {
+      if (Platform.isAndroid) {
+        const androidDetails = AndroidNotificationDetails(
+          'file_transfer_channel',
+          'File Transfer Notifications',
+          channelDescription: 'Notifications for received files',
+          importance: Importance.high,
+          priority: Priority.high,
+          showWhen: true,
+        );
+
+        await _notifications.show(
+          id,
+          'File Received',
+          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
+          NotificationDetails(android: androidDetails),
+        );
+        print('✅ File received notification sent (ID: $id)');
+      } else if (Platform.isLinux) {
         final linuxDetails = LinuxNotificationDetails(
           category: LinuxNotificationCategory.transferComplete,
           urgency: LinuxNotificationUrgency.critical,
@@ -243,7 +281,6 @@ class NotificationManager {
           defaultActionName: 'Open',
           icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
         );
-        final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
         await _notifications.show(
           id,
           'File Received',
@@ -259,7 +296,6 @@ class NotificationManager {
             sound: 'default',
             threadIdentifier: 'file_transfer',
             interruptionLevel: InterruptionLevel.active);
-        final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
         await _notifications.show(
           id,
           'File Received',

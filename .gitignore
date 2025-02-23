@@ -44,3 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 pubspec.lock
+/android/app/.cxx
+packages/flutter_local_notifications/example/*
+packages/flutter_local_notifications/test/*

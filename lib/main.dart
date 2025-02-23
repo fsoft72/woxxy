@@ -19,7 +19,6 @@ void main() async {
   print('📱 Ensuring Flutter binding is initialized...');
   WidgetsFlutterBinding.ensureInitialized();
   print('✅ Flutter binding initialized');
-
   print('🔔 Starting notification manager initialization...');
   await NotificationManager.instance.init();
   print('🔔 Notification manager initialization attempt completed');
@@ -36,57 +35,55 @@ void main() async {
     final downloadsDir = await getApplicationDocumentsDirectory();
     downloadPath = '${downloadsDir.path}/downloads';
   }
-
   await Directory(downloadPath).create(recursive: true);
   FileTransferManager(downloadPath: downloadPath);
 
-  // Initialize window_manager
-  await windowManager.ensureInitialized();
+  // Only initialize window_manager and tray on desktop platforms
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Initialize window_manager
+    await windowManager.ensureInitialized();
+    // Configure window properties
+    WindowOptions windowOptions = const WindowOptions(
+      size: Size(540, 960),
+      minimumSize: Size(540, 960),
+      center: true,
+      title: 'Woxxy',
+      skipTaskbar: false,
+    );
 
-  // Configure window properties
-  WindowOptions windowOptions = const WindowOptions(
-    size: Size(540, 960),
-    minimumSize: Size(540, 960),
-    center: true,
-    title: 'Woxxy',
-    skipTaskbar: false,
-  );
-
-  // Setup tray icon and menu
-  String iconPath = 'assets/icons/head.png';
-  await trayManager.setIcon(iconPath);
-
-  Menu menu = Menu(
-    items: [
-      MenuItem(
-        label: 'Open',
-        onClick: (menuItem) async {
-          await windowManager.show();
-          await windowManager.focus();
-        },
-      ),
-      MenuItem.separator(),
-      MenuItem(
-        label: 'Quit',
-        onClick: (menuItem) async {
-          exit(0);
-        },
-      ),
-    ],
-  );
-  await trayManager.setContextMenu(menu);
-
-  await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-    // Only set icon programmatically on non-macOS platforms
-    if (!Platform.isMacOS) {
-      await windowManager.setIcon('assets/icons/head.png');
-    }
-  });
-
-  // Set close intercept after window is ready
-  await windowManager.setPreventClose(true);
+    // Setup tray icon and menu
+    String iconPath = 'assets/icons/head.png';
+    await trayManager.setIcon(iconPath);
+    Menu menu = Menu(
+      items: [
+        MenuItem(
+          label: 'Open',
+          onClick: (menuItem) async {
+            await windowManager.show();
+            await windowManager.focus();
+          },
+        ),
+        MenuItem.separator(),
+        MenuItem(
+          label: 'Quit',
+          onClick: (menuItem) async {
+            exit(0);
+          },
+        ),
+      ],
+    );
+    await trayManager.setContextMenu(menu);
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+      // Only set icon programmatically on non-macOS platforms
+      if (!Platform.isMacOS) {
+        await windowManager.setIcon('assets/icons/head.png');
+      }
+    });
+    // Set close intercept after window is ready
+    await windowManager.setPreventClose(true);
+  }
 
   runApp(const MyApp());
 }
@@ -121,12 +118,15 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser; // Make nullable
   bool _isLoading = true; // Add loading state
+  bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
     super.initState();
-    trayManager.addListener(this);
-    windowManager.addListener(this);
+    if (_isDesktop) {
+      trayManager.addListener(this);
+      windowManager.addListener(this);
+    }
     _loadSettings();
     _networkService.start();
     // Set file history in FileTransferManager
@@ -175,8 +175,10 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
 
   @override
   void dispose() {
-    trayManager.removeListener(this);
-    windowManager.removeListener(this);
+    if (_isDesktop) {
+      trayManager.removeListener(this);
+      windowManager.removeListener(this);
+    }
     _networkService.dispose();
     super.dispose();
   }
