@@ -40,49 +40,76 @@ void main() async {
 
   // Only initialize window_manager and tray on desktop platforms
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    // Initialize window_manager
     await windowManager.ensureInitialized();
-    // Configure window properties
-    WindowOptions windowOptions = const WindowOptions(
-      size: Size(540, 960),
-      minimumSize: Size(540, 960),
-      center: true,
-      title: 'Woxxy',
-      skipTaskbar: false,
-    );
+    
+    // Configure window properties with explicit non-null values
+    const windowSize = Size(540, 960);
+    const minSize = Size(540, 960);
+    
+    // Set up window first
+    await windowManager.setSize(windowSize);
+    await windowManager.setMinimumSize(minSize);
+    await windowManager.center();
+    await windowManager.setTitle('Woxxy');
+    await windowManager.setPreventClose(true);
+    
+    if (!Platform.isMacOS) {
+      await windowManager.setIcon('assets/icons/head.png');
+    }
 
-    // Setup tray icon and menu
-    String iconPath = 'assets/icons/head.png';
-    await trayManager.setIcon(iconPath);
-    Menu menu = Menu(
-      items: [
-        MenuItem(
-          label: 'Open',
-          onClick: (menuItem) async {
-            await windowManager.show();
-            await windowManager.focus();
-          },
-        ),
-        MenuItem.separator(),
-        MenuItem(
-          label: 'Quit',
-          onClick: (menuItem) async {
-            exit(0);
-          },
-        ),
-      ],
-    );
-    await trayManager.setContextMenu(menu);
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // Initialize window
+    await windowManager.waitUntilReadyToShow();
+
+    try {
+      // Setup tray icon and menu
+      String iconPath = 'assets/icons/head.png';
+      if (Platform.isWindows) {
+        final icoFile = File('assets/icons/head.ico');
+        if (await icoFile.exists()) {
+          iconPath = 'assets/icons/head.ico';
+        }
+      }
+      
+      // Initialize menu first
+      Menu menu = Menu(
+        items: [
+          MenuItem(
+            label: 'Open',
+            onClick: (menuItem) async {
+              await windowManager.show();
+              await windowManager.focus();
+            },
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            label: 'Quit',
+            onClick: (menuItem) async {
+              exit(0);
+            },
+          ),
+        ],
+      );
+
+      // Set up tray icon and menu
+      await trayManager.destroy();  // Ensure clean state
+      await Future.delayed(const Duration(milliseconds: 100));
+      await trayManager.setIcon(iconPath);
+      await Future.delayed(const Duration(milliseconds: 50));
+      await trayManager.setContextMenu(menu);
+      await Future.delayed(const Duration(milliseconds: 50));
+      
+      // Show window after tray is set up
       await windowManager.show();
       await windowManager.focus();
-      // Only set icon programmatically on non-macOS platforms
-      if (!Platform.isMacOS) {
-        await windowManager.setIcon('assets/icons/head.png');
-      }
-    });
-    // Set close intercept after window is ready
-    await windowManager.setPreventClose(true);
+      
+      // Set tooltip last
+      await trayManager.setToolTip('Woxxy');
+    } catch (e) {
+      print('Error setting up tray: $e');
+      // Show window even if tray setup fails
+      await windowManager.show();
+      await windowManager.focus();
+    }
   }
 
   runApp(const MyApp());
@@ -98,6 +125,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
       ),
       home: const HomePage(),
     );
@@ -116,22 +144,31 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   final SettingsService _settingsService = SettingsService();
   final FileHistory _fileHistory = FileHistory();
   int _selectedIndex = 1; // Default to home screen
-  User? _currentUser; // Make nullable
-  bool _isLoading = true; // Add loading state
+  User? _currentUser;
+  bool _isLoading = true;
   bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
     super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
     if (_isDesktop) {
       trayManager.addListener(this);
       windowManager.addListener(this);
     }
-    _loadSettings();
-    _networkService.start();
-    // Set file history in FileTransferManager
+    await _loadSettings();
+    await _networkService.start();
     FileTransferManager.instance.setFileHistory(_fileHistory);
     _setupFileReceivedListener();
+    
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadSettings() async {
