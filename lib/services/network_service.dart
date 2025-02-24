@@ -4,8 +4,6 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
@@ -283,13 +281,19 @@ class NetworkService {
   void _handlePeerAnnouncement(String message, InternetAddress sourceAddress) {
     try {
       final parts = message.split(':');
+      zprint('🔍 Processing peer announcement parts: ${parts.length} parts');
+
       if (parts.length >= 5) {
         final name = parts[1];
         final peerIp = parts[2];
         final peerPort = int.parse(parts[3]);
         final peerId = parts[4];
 
-        if (name != _currentUsername) {
+        zprint('📋 Peer details - Name: $name, IP: $peerIp, Port: $peerPort, ID: $peerId');
+
+        // Check if this is our own IP address
+        if (peerIp != currentIpAddress) {
+          zprint('✨ Creating new peer object');
           final peer = Peer(
             name: name,
             id: peerId,
@@ -297,7 +301,11 @@ class NetworkService {
             port: peerPort,
           );
           _peerManager.addPeer(peer, currentIpAddress!, _port);
+        } else {
+          zprint('⚠️ Skipping own IP address');
         }
+      } else {
+        zprint('❌ Invalid announcement format: $message');
       }
     } catch (e) {
       zprint('❌ Error handling peer announcement: $e');

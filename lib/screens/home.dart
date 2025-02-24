@@ -64,12 +64,16 @@ class _HomeContentState extends State<HomeContent> {
           child: StreamBuilder<List<Peer>>(
             stream: widget.networkService.peerStream,
             builder: (context, snapshot) {
+              zprint(
+                  '🔄 Stream builder update - hasData: ${snapshot.hasData}, data length: ${snapshot.data?.length ?? 0}');
               if (!snapshot.hasData) {
                 return const Center(
                   child: Text('No peers found. Searching...'),
                 );
               }
-              final peers = snapshot.data!.where((peer) => peer.address.address != widget.networkService.currentIpAddress).toList();
+              final peers = snapshot.data!;
+              zprint('📊 Peers found: ${peers.length}');
+
               if (peers.isEmpty) {
                 return const Center(
                   child: Text('No other peers found on the network'),
