@@ -123,7 +123,8 @@ class NetworkService {
             final metadataStr = utf8.decode(metadataBytes);
             receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
 
-            if (receivedInfo!['type'] == 'profile_picture_request' || receivedInfo!['type'] == 'profile_picture_response') {
+            if (receivedInfo!['type'] == 'profile_picture_request' ||
+                receivedInfo!['type'] == 'profile_picture_response') {
               await _handleProfilePictureRequest(socket, receivedInfo!['senderId'], receivedInfo!['senderName']);
               return;
             }
@@ -249,6 +250,7 @@ class NetworkService {
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
       try {
         final message = 'WOXXY_ANNOUNCE:$_currentUsername:$currentIpAddress:$_port:$_currentUsername';
+        zprint('📤 Broadcasting discovery message: $message');
         _discoverySocket?.send(
           utf8.encode(message),
           InternetAddress('255.255.255.255'),
@@ -261,16 +263,20 @@ class NetworkService {
   }
 
   void _startDiscoveryListener() {
+    zprint('👂 Starting discovery listener on port $_discoveryPort...');
     _discoverySocket?.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
         final datagram = _discoverySocket?.receive();
         if (datagram != null) {
           final message = String.fromCharCodes(datagram.data);
+          zprint('📥 Received discovery message: $message from ${datagram.address.address}');
           if (message.startsWith('WOXXY_ANNOUNCE')) {
             _handlePeerAnnouncement(message, datagram.address);
           }
         }
       }
+    }, onError: (error) {
+      zprint('❌ Error in discovery listener: $error');
     });
   }
 
