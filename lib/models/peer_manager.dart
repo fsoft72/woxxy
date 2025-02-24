@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:rxdart/rxdart.dart';
+import 'package:woxxy/funcs/debug.dart';
 import 'peer.dart';
 
 class _PeerStatus {
@@ -18,7 +19,7 @@ class PeerManager {
   factory PeerManager() => _instance;
   PeerManager._internal();
 
-  static const Duration _peerTimeout = Duration(seconds: 15);
+  static const Duration _peerTimeout = Duration(seconds: 30); // Increased timeout
 
   final Map<String, _PeerStatus> _peers = {};
   final BehaviorSubject<List<Peer>> _peerController = BehaviorSubject<List<Peer>>.seeded([]);
@@ -32,9 +33,15 @@ class PeerManager {
     _cleanupTimer = Timer.periodic(_peerTimeout, (timer) {
       final now = DateTime.now();
       final beforeCount = _peers.length;
+
       _peers.removeWhere((key, status) {
-        return now.difference(status.lastSeen) > _peerTimeout;
+        final shouldRemove = now.difference(status.lastSeen) > _peerTimeout;
+        if (shouldRemove) {
+          zprint('🗑️ Removing inactive peer: ${status.peer.name} (${status.peer.address.address})');
+        }
+        return shouldRemove;
       });
+
       if (_peers.length != beforeCount) {
         _peerController.add(currentPeers);
       }
@@ -42,15 +49,22 @@ class PeerManager {
   }
 
   void addPeer(Peer peer, String currentIpAddress, int currentPort) {
-    if (peer.address.address == currentIpAddress && peer.port == currentPort) {
+    zprint('🔄 Attempting to add peer: ${peer.name} (${peer.address.address}:${peer.port})');
+    zprint('📍 Current device: $currentIpAddress:$currentPort');
+
+    // Only filter out the exact same device
+    if (peer.address.address == currentIpAddress) {
+      zprint('⚠️ Skipping peer with same IP address');
       return;
     }
 
     final bool isNewPeer = !_peers.containsKey(peer.id);
     if (isNewPeer) {
+      zprint('✅ Adding new peer: ${peer.name}');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers);
     } else {
+      zprint('🔄 Updating last seen for existing peer: ${peer.name}');
       _peers[peer.id]!.updateLastSeen();
     }
   }
