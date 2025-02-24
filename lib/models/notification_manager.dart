@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications_linux/flutter_local_notifications_linux.dart';
+import 'package:local_notifier/local_notifier.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
 
@@ -39,9 +40,15 @@ class NotificationManager {
 
   Future<bool> requestPermissions() async {
     if (Platform.isAndroid) {
-      final granted = await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestPermission();
-      _isInitialized = granted ?? false;
-      return granted ?? false;
+      // New way to request permissions on Android 13 and above
+      final androidImplementation =
+          _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImplementation != null) {
+        final granted = await androidImplementation.requestNotificationsPermission();
+        _isInitialized = granted ?? false;
+        return granted ?? false;
+      }
+      return false;
     } else if (Platform.isMacOS) {
       print('🍎 Requesting macOS notification permissions...');
 
@@ -102,31 +109,49 @@ class NotificationManager {
           importance: Importance.high,
         );
 
-        // Create the channel before initializing
-        await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+        // Get the Android implementation
+        final androidImplementation =
+            _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-        final androidSettings = AndroidInitializationSettings('head');
-        final initializationSettings = InitializationSettings(
-          android: androidSettings,
-        );
+        if (androidImplementation != null) {
+          // Create the channel before initializing
+          await androidImplementation.createNotificationChannel(channel);
 
-        // Request permissions right after initialization
-        final success = await _notifications.initialize(
-          initializationSettings,
-          onDidReceiveNotificationResponse: (details) {
-            print('🔔 Notification response received: ${details.actionId}');
-          },
-        );
+          final androidSettings = AndroidInitializationSettings('head');
+          final initializationSettings = InitializationSettings(
+            android: androidSettings,
+          );
 
-        if (success ?? false) {
-          // After successful initialization, request permissions
-          final granted = await requestPermissions();
-          _isInitialized = granted;
-          print(granted ? '✅ Notification permissions granted' : '❌ Notification permissions denied');
+          // Initialize notifications
+          final success = await _notifications.initialize(
+            initializationSettings,
+            onDidReceiveNotificationResponse: (details) {
+              print('🔔 Notification response received: ${details.actionId}');
+            },
+          );
+
+          if (success ?? false) {
+            // After successful initialization, request permissions
+            final granted = await requestPermissions();
+            _isInitialized = granted;
+            print(granted ? '✅ Notification permissions granted' : '❌ Notification permissions denied');
+          } else {
+            print('❌ Failed to initialize notification service');
+            _isInitialized = false;
+          }
         } else {
-          print('❌ Failed to initialize notification service');
+          print('❌ Failed to get Android implementation');
           _isInitialized = false;
         }
+      } else if (Platform.isWindows) {
+        // Initialize local_notifier for Windows
+        await localNotifier.setup(
+          appName: 'Woxxy',
+          shortcutPolicy: ShortcutPolicy.requireCreate,
+        );
+        _isInitialized = true;
+        print('✅ Windows notification service initialized successfully');
+        await _showTestNotification();
       } else if (Platform.isMacOS) {
         final hasPermissions = await requestPermissions();
         if (!hasPermissions) {
@@ -197,6 +222,12 @@ class NotificationManager {
           'File transfer notifications enabled',
           const NotificationDetails(android: androidDetails),
         );
+      } else if (Platform.isWindows) {
+        LocalNotification notification = LocalNotification(
+          title: 'Woxxy',
+          body: 'File transfer notifications enabled',
+        );
+        await notification.show();
       } else if (Platform.isLinux) {
         final iconPath = await _getAbsoluteIconPath();
         final linuxDetails = LinuxNotificationDetails(
@@ -221,7 +252,13 @@ class NotificationManager {
           NotificationDetails(linux: linuxDetails),
         );
       } else if (Platform.isMacOS) {
-        final darwinDetails = DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true, sound: 'default', threadIdentifier: 'file_transfer', interruptionLevel: InterruptionLevel.active // Add this to ensure notification is shown
+        final darwinDetails = DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: 'default',
+            threadIdentifier: 'file_transfer',
+            interruptionLevel: InterruptionLevel.active // Add this to ensure notification is shown
             );
         await _notifications.show(
           0,
@@ -285,6 +322,14 @@ class NotificationManager {
           NotificationDetails(android: androidDetails),
         );
         print('✅ File received notification sent (ID: $id)');
+      } else if (Platform.isWindows) {
+        LocalNotification notification = LocalNotification(
+          title: 'File Received',
+          body:
+              'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
+        );
+        await notification.show();
+        print('✅ File received notification sent');
       } else if (Platform.isLinux) {
         final linuxDetails = LinuxNotificationDetails(
           category: LinuxNotificationCategory.transferComplete,
@@ -309,7 +354,13 @@ class NotificationManager {
         );
         print('✅ File received notification sent (ID: $id)');
       } else if (Platform.isMacOS) {
-        final darwinDetails = DarwinNotificationDetails(presentAlert: true, presentBadge: true, presentSound: true, sound: 'default', threadIdentifier: 'file_transfer', interruptionLevel: InterruptionLevel.active);
+        final darwinDetails = DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+            sound: 'default',
+            threadIdentifier: 'file_transfer',
+            interruptionLevel: InterruptionLevel.active);
         await _notifications.show(
           id,
           'File Received',
@@ -331,9 +382,7 @@ class NotificationManager {
           ];
 
           if (iconPath != null) {
-            args.addAll([
-              '--icon=$iconPath'
-            ]);
+            args.addAll(['--icon=$iconPath']);
           }
 
           final result = await Process.run('notify-send', args);
