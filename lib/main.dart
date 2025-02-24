@@ -41,18 +41,18 @@ void main() async {
   // Only initialize window_manager and tray on desktop platforms
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     await windowManager.ensureInitialized();
-    
+
     // Configure window properties with explicit non-null values
     const windowSize = Size(540, 960);
     const minSize = Size(540, 960);
-    
+
     // Set up window first
     await windowManager.setSize(windowSize);
     await windowManager.setMinimumSize(minSize);
     await windowManager.center();
     await windowManager.setTitle('Woxxy');
     await windowManager.setPreventClose(true);
-    
+
     if (!Platform.isMacOS) {
       await windowManager.setIcon('assets/icons/head.png');
     }
@@ -69,7 +69,7 @@ void main() async {
           iconPath = 'assets/icons/head.ico';
         }
       }
-      
+
       // Initialize menu first
       Menu menu = Menu(
         items: [
@@ -91,17 +91,17 @@ void main() async {
       );
 
       // Set up tray icon and menu
-      await trayManager.destroy();  // Ensure clean state
+      await trayManager.destroy(); // Ensure clean state
       await Future.delayed(const Duration(milliseconds: 100));
       await trayManager.setIcon(iconPath);
       await Future.delayed(const Duration(milliseconds: 50));
       await trayManager.setContextMenu(menu);
       await Future.delayed(const Duration(milliseconds: 50));
-      
+
       // Show window after tray is set up
       await windowManager.show();
       await windowManager.focus();
-      
+
       // Set tooltip last
       await trayManager.setToolTip('Woxxy');
     } catch (e) {
@@ -163,7 +163,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     await _networkService.start();
     FileTransferManager.instance.setFileHistory(_fileHistory);
     _setupFileReceivedListener();
-    
+
     if (mounted) {
       setState(() {
         _isLoading = false;
