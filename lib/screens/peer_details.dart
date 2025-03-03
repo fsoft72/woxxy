@@ -52,28 +52,36 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
   bool _transferComplete = false;
   bool _transferCancelled = false;
   StreamSubscription<dynamic>? _progressSubscription;
-  
+
   // Queue management
   final Queue<_FileTransferItem> _fileQueue = Queue<_FileTransferItem>();
   List<_FileTransferItem> _completedFiles = [];
   bool _processingQueue = false;
   int _totalFilesCompleted = 0;
 
+  // Track active transfer ID for cancellation
+  String? _activeTransferId;
+
   @override
   void dispose() {
     _progressSubscription?.cancel();
+    // Ensure active transfers are cancelled when navigating away
+    if (_activeTransferId != null) {
+      widget.networkService.cancelTransfer(_activeTransferId!);
+      _activeTransferId = null;
+    }
     super.dispose();
   }
 
   Future<void> _processFileQueue() async {
     if (_processingQueue || _fileQueue.isEmpty) return;
-    
+
     _processingQueue = true;
     zprint('📁 Processing file queue (${_fileQueue.length} files remaining)');
-    
+
     while (_fileQueue.isNotEmpty && !_transferCancelled) {
       final fileItem = _fileQueue.first;
-      
+
       setState(() {
         _isTransferring = true;
         _transferProgress = 0;
@@ -81,81 +89,78 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         _currentFileName = fileItem.name;
         _transferComplete = false;
       });
-      
+
       zprint('📤 Starting file transfer process');
       zprint('📁 File to send: ${fileItem.path}');
       zprint('👤 Sending to peer: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
-      
+
       try {
         zprint('🔄 Initiating file transfer...');
         final stopwatch = Stopwatch()..start();
         final fileSize = fileItem.size;
-        
-        // Use a more aggressive progress update approach that ensures we reach close to 100%
+
+        // Make sure to cancel any existing subscription
         _progressSubscription?.cancel();
-        _progressSubscription = Stream.periodic(const Duration(milliseconds: 100)).listen((_) {
-          if (mounted && !_transferCancelled && !_transferComplete) {
+        _progressSubscription = null;
+
+        // Cancel any active transfer before starting a new one
+        if (_activeTransferId != null) {
+          widget.networkService.cancelTransfer(_activeTransferId!);
+          _activeTransferId = null;
+        }
+
+        // create the transfer ID
+        _activeTransferId = generateTransferId(fileItem.name);
+
+        // Send the file with real progress tracking and get transfer ID
+        await widget.networkService.sendFile(
+          _activeTransferId!,
+          fileItem.path,
+          widget.peer,
+          onProgress: (totalSize, bytesSent) {
+            if (!mounted || _transferCancelled) return;
+
+            final progress = (bytesSent / totalSize) * 100;
             final elapsedSeconds = stopwatch.elapsed.inMilliseconds / 1000;
+
             if (elapsedSeconds > 0) {
-              // Use a more aggressive curve that approaches 99% more quickly
-              // This is still a simulation but should appear more realistic
-              double progress;
-              if (_transferProgress < 80) {
-                // Move faster at the beginning
-                progress = _transferProgress + (1.5 - (_transferProgress / 100));
-              } else if (_transferProgress >= 80 && _transferProgress < 95) {
-                // Slow down as we approach the end
-                progress = _transferProgress + 0.3;
-              } else {
-                // Almost there, move very slowly
-                progress = _transferProgress + 0.1;
-              }
-              
-              // Cap at 99% until we get confirmation of completion
-              if (progress > 99) progress = 99;
-              
-              final bytesTransferred = (progress / 100) * fileSize;
-              final speed = (bytesTransferred / elapsedSeconds / (1024 * 1024)).toStringAsFixed(2);
-              
+              final speed = (bytesSent / elapsedSeconds / (1024 * 1024)).toStringAsFixed(2);
+
               setState(() {
                 _transferProgress = progress;
                 _transferSpeed = speed;
               });
             }
-          }
-        });
-        
-        // Send the file
-        await widget.networkService.sendFile(fileItem.path, widget.peer);
-        
+          },
+        );
+
         // File transfer completed successfully
         stopwatch.stop();
-        _progressSubscription?.cancel();
-        
+
         if (mounted && !_transferCancelled) {
           setState(() {
             _transferProgress = 100;
             _transferComplete = true;
             _transferSpeed = (fileSize / stopwatch.elapsed.inMilliseconds * 1000 / (1024 * 1024)).toStringAsFixed(2);
-            
+
             // Update status for this file
             fileItem.isCompleted = true;
             _totalFilesCompleted++;
-            
+
             // Move from queue to completed list
             _fileQueue.removeFirst();
             _completedFiles.add(fileItem);
           });
-          
+
           final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
           final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
           final speed = (fileSize / transferTime / 1024 / 1024).toStringAsFixed(2);
-          
+
           showSnackbar(
             context,
             'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)',
           );
-          
+
           // Brief pause between files
           await Future.delayed(const Duration(milliseconds: 500));
         }
@@ -163,33 +168,37 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         zprint('❌ Error during file transfer: $e');
         zprint('📑 Stack trace: $stackTrace');
         _progressSubscription?.cancel();
-        
+
+        // Clear active transfer ID if there was an error
+        _activeTransferId = null;
+
         if (mounted && !_transferCancelled) {
           setState(() {
             // Mark this file as failed
             fileItem.isFailed = true;
             fileItem.errorMessage = e.toString();
-            
+
             // Move to completed list but marked as failed
             _fileQueue.removeFirst();
             _completedFiles.add(fileItem);
           });
-          
+
           showSnackbar(
             context,
             'Error sending ${fileItem.name}: $e',
           );
-          
+
           // Brief pause before moving to next file
           await Future.delayed(const Duration(seconds: 1));
         }
       }
     }
-    
+
     // Queue is empty or transfer was cancelled
     if (mounted) {
       setState(() {
         _processingQueue = false;
+        _activeTransferId = null; // Clear the transfer ID
         if (_fileQueue.isEmpty) {
           // Only hide the progress view if there are no remaining files
           _isTransferring = false;
@@ -200,43 +209,68 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
   Future<void> _addFilesToQueue(List<XFile> files) async {
     if (files.isEmpty) return;
-    
+
     zprint('📁 Adding ${files.length} files to queue');
-    
+
+    // Reset the transfer cancelled flag and related UI state when new files are added
+    setState(() {
+      _transferCancelled = false;
+      // Also ensure the UI knows we're ready to show transfer status
+      if (_isTransferring == false) {
+        _isTransferring = true;
+        _transferProgress = 0;
+        _transferSpeed = '0';
+        _transferComplete = false;
+      }
+    });
+
     bool queueWasEmpty = _fileQueue.isEmpty && !_processingQueue;
     List<_FileTransferItem> newFiles = [];
-    
+
     for (final file in files) {
       final fileSize = await File(file.path).length();
       final fileName = file.path.split(Platform.pathSeparator).last;
-      
+
       final fileItem = _FileTransferItem(
         path: file.path,
         name: fileName,
         size: fileSize,
       );
-      
+
       setState(() {
         _fileQueue.add(fileItem);
       });
-      
+
       newFiles.add(fileItem);
     }
-    
+
     zprint('📁 Queue now contains ${_fileQueue.length} files');
-    
+
     if (queueWasEmpty) {
       // Start processing if the queue was previously empty
       _processFileQueue();
     }
   }
-  
+
   void _cancelAllTransfers() {
     _progressSubscription?.cancel();
+
+    zprint("=== CANCEL: $_activeTransferId");
+
+    // Cancel the active network transfer
+    if (_activeTransferId != null) {
+      widget.networkService.cancelTransfer(_activeTransferId!);
+      _activeTransferId = null;
+    }
+
     setState(() {
       _transferCancelled = true;
       _isTransferring = false;
       _fileQueue.clear();
+      // Reset the completed files counter so new transfers start fresh
+      _totalFilesCompleted = 0;
+      // Optionally clear completed files list to reset UI state completely
+      _completedFiles = [];
     });
     showSnackbar(context, 'All transfers cancelled');
   }
@@ -268,7 +302,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
             // File transfer progress indicator
             if (_isTransferring && !_transferCancelled) _buildTransferProgressIndicator(),
-            
+
             // Queue info
             if (_fileQueue.isNotEmpty || _completedFiles.isNotEmpty) _buildQueueInfo(),
 
@@ -279,7 +313,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                 onDragDone: (details) async {
                   setState(() => _isDragging = false);
                   if (details.files.isEmpty) return;
-                  
+
                   // Add all files to the queue
                   await _addFilesToQueue(details.files);
                 },
@@ -316,13 +350,14 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                             color: _isDragging ? Theme.of(context).colorScheme.primary : null,
                           ),
                         ),
-                        if (_fileQueue.isNotEmpty) Text(
-                          '${_fileQueue.length} files in queue',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                            fontSize: 12,
+                        if (_fileQueue.isNotEmpty)
+                          Text(
+                            '${_fileQueue.length} files in queue',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -370,7 +405,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_fileQueue.length > 0)
+                    if (_fileQueue.isNotEmpty)
                       Text(
                         'File ${_completedFiles.length + 1} of ${_completedFiles.length + _fileQueue.length}',
                         style: const TextStyle(
@@ -418,10 +453,10 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       ),
     );
   }
-  
+
   Widget _buildQueueInfo() {
     final totalFiles = _completedFiles.length + _fileQueue.length;
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -525,7 +560,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       ),
     );
   }
-  
+
   String _formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';

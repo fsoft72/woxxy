@@ -9,6 +9,9 @@ import '../models/peer.dart';
 import '../models/peer_manager.dart';
 import '../models/file_transfer_manager.dart';
 
+/// Callback function type for file transfer progress updates
+typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
+
 class NetworkService {
   static const int _port = 8090;
   static const int _discoveryPort = 8091;
@@ -22,6 +25,9 @@ class NetworkService {
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
   String _currentUsername = 'Unknown';
+
+  // Active outbound transfers - for cancellation support
+  final Map<String, Socket> _activeTransfers = {};
 
   Stream<String> get onFileReceived => _fileReceivedController.stream;
   Stream<List<Peer>> get peerStream => _peerManager.peerStream;
@@ -56,6 +62,12 @@ class NetworkService {
     await _server?.close();
     _discoverySocket?.close();
     await _fileReceivedController.close();
+
+    // Close any active transfer sockets
+    for (final socket in _activeTransfers.values) {
+      socket.destroy();
+    }
+    _activeTransfers.clear();
   }
 
   void setUsername(String username) {
@@ -192,7 +204,23 @@ class NetworkService {
     socket.destroy();
   }
 
-  Future<void> sendFile(String filePath, Peer receiver) async {
+  /// Cancel an active file transfer
+  /// Returns true if transfer was found and canceled, false otherwise
+  bool cancelTransfer(String transferId) {
+    if (_activeTransfers.containsKey(transferId)) {
+      zprint('🛑 Cancelling transfer: $transferId');
+      // final socket = _activeTransfers[transferId];
+      // socket?.destroy(); // Force close the socket
+      _activeTransfers.remove(transferId);
+      return true;
+    }
+    return false;
+  }
+
+  /// Send file to a peer with progress tracking and cancellation support
+  /// Returns the transfer ID which can be used to cancel the transfer
+  Future<String> sendFile(String transferId, String filePath, Peer receiver,
+      {FileTransferProgressCallback? onProgress}) async {
     zprint('📤 Starting file transfer');
     final file = File(filePath);
     if (!await file.exists()) {
@@ -200,6 +228,7 @@ class NetworkService {
     }
 
     final fileSize = await file.length();
+    final filename = file.path.split(Platform.pathSeparator).last;
     Socket? socket;
 
     try {
@@ -208,16 +237,20 @@ class NetworkService {
         receiver.port,
       ).timeout(const Duration(seconds: 5));
 
+      // Store the socket for potential cancellation
+      _activeTransfers[transferId] = socket;
+
       // Calculate MD5 checksum before sending
       final fileBytes = await file.readAsBytes();
       final checksum = md5.convert(fileBytes).toString();
 
       final metadata = {
-        'name': file.path.split(Platform.pathSeparator).last,
+        'name': filename,
         'size': fileSize,
         'sender': currentIpAddress,
         'senderUsername': _currentUsername,
         'md5Checksum': checksum,
+        'transferId': transferId,
       };
 
       // Send metadata
@@ -231,15 +264,54 @@ class NetworkService {
       // Small delay to ensure metadata is processed
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Stream the file
-      socket.add(fileBytes);
+      // Instead of sending the entire file at once, send in chunks
+      // to provide progress updates and allow cancellation
+      const int chunkSize = 64 * 1024; // 64 KB chunks
+      int bytesSent = 0;
+
+      // Report initial progress
+      onProgress?.call(fileSize, 0);
+
+      for (int i = 0; i < fileBytes.length; i += chunkSize) {
+        // Check if transfer was cancelled before sending each chunk
+        if (!_activeTransfers.containsKey(transferId)) {
+          zprint('🛑 Transfer cancelled during transmission: $transferId');
+          throw Exception('Transfer cancelled');
+        }
+
+        // Calculate chunk end position (handle last chunk properly)
+        int end = i + chunkSize;
+        if (end > fileBytes.length) end = fileBytes.length;
+
+        // Extract chunk from file bytes
+        final chunk = fileBytes.sublist(i, end);
+
+        // Send chunk
+        socket.add(chunk);
+        await socket.flush();
+
+        // Update bytes sent and report progress
+        bytesSent += chunk.length;
+        onProgress?.call(fileSize, bytesSent);
+      }
+
+      // Ensure all data has been sent
       await socket.flush();
+
+      // Final progress update at 100%
+      onProgress?.call(fileSize, fileSize);
+
+      zprint('📤 File transfer completed: $fileSize bytes sent');
     } catch (e) {
       zprint('❌ Error in sendFile: $e');
       rethrow;
     } finally {
+      // Clean up regardless of success or failure
+      _activeTransfers.remove(transferId);
       await socket?.close();
     }
+
+    return transferId;
   }
 
   void _startDiscovery() {

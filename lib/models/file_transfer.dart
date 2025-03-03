@@ -51,7 +51,9 @@ class FileTransfer {
 
   /// Creates a new FileTransfer instance and prepares the file for writing
   /// Returns null if the file cannot be created
-  static Future<FileTransfer?> start(String source_ip, String original_filename, int size, String downloadPath, String senderUsername, String? expectedMd5, {OnTransferComplete? onTransferComplete}) async {
+  static Future<FileTransfer?> start(String source_ip, String original_filename, int size, String downloadPath,
+      String senderUsername, String? expectedMd5,
+      {OnTransferComplete? onTransferComplete}) async {
     try {
       zprint("=== downloadPath: $downloadPath");
       // Ensure download directory exists
