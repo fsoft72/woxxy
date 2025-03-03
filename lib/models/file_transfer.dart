@@ -101,6 +101,16 @@ class FileTransfer {
     }
   }
 
+  /// Safely closes the file sink in case of socket closure or exception
+  Future<void> closeOnSocketClosure() async {
+    try {
+      await file_sink.close();
+      zprint('File sink closed due to socket closure');
+    } catch (e) {
+      print('Error closing file sink on socket closure: $e');
+    }
+  }
+
   /// Closes the file and stops the duration tracking
   Future<bool> end() async {
     try {
