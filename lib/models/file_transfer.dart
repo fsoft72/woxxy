@@ -104,10 +104,36 @@ class FileTransfer {
   /// Safely closes the file sink in case of socket closure or exception
   Future<void> closeOnSocketClosure() async {
     try {
+      // Close the file sink first
       await file_sink.close();
       zprint('File sink closed due to socket closure');
+
+      // After closing the sink, validate the file against MD5 and clean up if needed
+      if (expectedMd5 != null) {
+        final actualMd5 = md5.convert(_receivedData).toString();
+        if (actualMd5 != expectedMd5) {
+          zprint('MD5 checksum mismatch on incomplete transfer! Expected: $expectedMd5, Got: $actualMd5');
+          // Delete the incomplete/corrupted file
+          await File(destination_filename).delete();
+          zprint('Deleted incomplete file: $destination_filename');
+          return;
+        }
+        // If MD5 matches even for a partial download, we can consider it complete
+        zprint('MD5 checksum verified on socket closure');
+      } else {
+        // Without MD5, we assume the transfer is incomplete and delete the file
+        await File(destination_filename).delete();
+        zprint('Deleted potentially incomplete file (no MD5): $destination_filename');
+      }
     } catch (e) {
       print('Error closing file sink on socket closure: $e');
+      // Try to delete the file even if there's an error during cleanup
+      try {
+        await File(destination_filename).delete();
+        zprint('Deleted file after error: $destination_filename');
+      } catch (_) {
+        // Ignore errors when trying to delete after an error
+      }
     }
   }
 

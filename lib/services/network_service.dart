@@ -187,8 +187,8 @@ class NetworkService {
             if (receivedInfo != null) {
               final totalSize = receivedInfo!['size'] as int;
               if (receivedBytes < totalSize) {
-                // Transfer was incomplete, use closeOnSocketClosure
-                await FileTransferManager.instance.files[sourceIp]?.closeOnSocketClosure();
+                // Transfer was incomplete, use handleSocketClosure
+                await FileTransferManager.instance.handleSocketClosure(sourceIp);
                 zprint('⚠️ Socket closed before transfer completed, cleaned up resources');
               } else {
                 // Transfer was complete, use normal end method
@@ -207,8 +207,8 @@ class NetworkService {
         zprint('❌ Error during transfer: $error');
         // In case of error, ensure file sink is properly closed
         try {
-          if (metadataReceived && FileTransferManager.instance.files.containsKey(sourceIp)) {
-            await FileTransferManager.instance.files[sourceIp]?.closeOnSocketClosure();
+          if (metadataReceived) {
+            await FileTransferManager.instance.handleSocketClosure(sourceIp);
             zprint('⚠️ Socket error, cleaned up file sink');
           }
         } catch (e) {

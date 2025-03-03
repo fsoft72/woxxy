@@ -40,7 +40,8 @@ class FileTransferManager {
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
-  Future<bool> add(String source_ip, String original_filename, int size, String senderUsername, {String? md5Checksum}) async {
+  Future<bool> add(String source_ip, String original_filename, int size, String senderUsername,
+      {String? md5Checksum}) async {
     try {
       FileTransfer? transfer = await FileTransfer.start(
         source_ip,
@@ -93,6 +94,22 @@ class FileTransferManager {
       return false;
     } catch (e) {
       print('Error ending transfer: $e');
+      return false;
+    }
+  }
+
+  /// Safely closes a file transfer when a socket is closed unexpectedly
+  /// Returns false if the transfer doesn't exist
+  Future<bool> handleSocketClosure(String source_ip) async {
+    try {
+      if (files.containsKey(source_ip)) {
+        await files[source_ip]!.closeOnSocketClosure();
+        files.remove(source_ip);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error handling socket closure: $e');
       return false;
     }
   }
