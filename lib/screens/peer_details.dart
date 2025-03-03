@@ -10,6 +10,7 @@ import 'dart:collection'; // Import for Queue
 
 // Add this for XFile class
 import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart';  // Add this import
 
 class PeerDetailPage extends StatefulWidget {
   final Peer peer;
@@ -26,21 +27,17 @@ class PeerDetailPage extends StatefulWidget {
 }
 
 class _FileTransferItem {
-  final String path;
-  final String name;
-  final int size;
+  String path;
+  String name;
+  int size;
   bool isCompleted;
   bool isFailed;
   String? errorMessage;
 
-  _FileTransferItem({
-    required this.path,
-    required this.name,
-    required this.size,
-    this.isCompleted = false,
-    this.isFailed = false,
-    this.errorMessage,
-  });
+  _FileTransferItem(this.path, this.name, this.size)
+      : isCompleted = false,
+        isFailed = false,
+        errorMessage = null;
 }
 
 class _PeerDetailPageState extends State<PeerDetailPage> {
@@ -231,11 +228,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       final fileSize = await File(file.path).length();
       final fileName = file.path.split(Platform.pathSeparator).last;
 
-      final fileItem = _FileTransferItem(
-        path: file.path,
-        name: fileName,
-        size: fileSize,
-      );
+      final fileItem = _FileTransferItem(file.path, fileName, fileSize);
 
       setState(() {
         _fileQueue.add(fileItem);
@@ -275,6 +268,102 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     showSnackbar(context, 'All transfers cancelled');
   }
 
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      if (result == null) return;
+
+      final files = result.files.map((file) => XFile(file.path!)).toList();
+      await _addFilesToQueue(files);
+    } catch (e) {
+      if (mounted) {
+        showSnackbar(context, 'Error picking files: $e');
+      }
+    }
+  }
+
+  Widget _buildFileSelectionArea() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _pickFiles,
+              icon: const Icon(Icons.file_upload),
+              label: const Text('Select Files to Send'),
+            ),
+            if (_fileQueue.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  '${_fileQueue.length} files in queue',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return DropTarget(
+      onDragDone: (details) async {
+        setState(() => _isDragging = false);
+        if (details.files.isEmpty) return;
+
+        await _addFilesToQueue(details.files);
+      },
+      onDragEntered: (details) {
+        zprint('🎯 File drag entered');
+        setState(() => _isDragging = true);
+      },
+      onDragExited: (details) {
+        zprint('🎯 File drag exited');
+        setState(() => _isDragging = false);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+            width: _isDragging ? 3 : 2,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          color: _isDragging ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.file_upload,
+                size: 48,
+                color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Drag and drop files here to send',
+                style: TextStyle(
+                  color: _isDragging ? Theme.of(context).colorScheme.primary : null,
+                ),
+              ),
+              if (_fileQueue.isNotEmpty)
+                Text(
+                  '${_fileQueue.length} files in queue',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 12,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -309,60 +398,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             const SizedBox(height: 16),
 
             Expanded(
-              child: DropTarget(
-                onDragDone: (details) async {
-                  setState(() => _isDragging = false);
-                  if (details.files.isEmpty) return;
-
-                  // Add all files to the queue
-                  await _addFilesToQueue(details.files);
-                },
-                onDragEntered: (details) {
-                  zprint('🎯 File drag entered');
-                  setState(() => _isDragging = true);
-                },
-                onDragExited: (details) {
-                  zprint('🎯 File drag exited');
-                  setState(() => _isDragging = false);
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
-                      width: _isDragging ? 3 : 2,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    color: _isDragging ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.file_upload,
-                          size: 48,
-                          color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Drag and drop files here to send',
-                          style: TextStyle(
-                            color: _isDragging ? Theme.of(context).colorScheme.primary : null,
-                          ),
-                        ),
-                        if (_fileQueue.isNotEmpty)
-                          Text(
-                            '${_fileQueue.length} files in queue',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                              fontSize: 12,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              child: _buildFileSelectionArea(),
             ),
           ],
         ),

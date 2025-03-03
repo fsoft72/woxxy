@@ -1,8 +1,6 @@
 // ignore_for_file: non_constant_identifier_names, avoid_print
 
-import 'dart:typed_data';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
@@ -37,7 +35,7 @@ class FileTransfer {
   final String? expectedMd5;
 
   /// Buffer to store received data for checksum verification
-  List<int> _receivedData = [];
+  final List<int> _receivedData = [];
 
   FileTransfer._internal({
     required this.source_ip,

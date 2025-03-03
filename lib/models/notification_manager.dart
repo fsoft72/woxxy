@@ -86,23 +86,31 @@ class NotificationManager {
   }
 
   Future<bool> _androidInitialize() async {
-// Create the notification channel first
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'file_transfer_channel',
-      'File Transfer Notifications',
-      description: 'Notifications for received files',
-      importance: Importance.high,
-    );
+    try {
+      zprint('🤖 Starting Android notification initialization...');
+      
+      // Create the notification channel first
+      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+        'file_transfer_channel',
+        'File Transfer Notifications',
+        description: 'Notifications for received files',
+        importance: Importance.high,
+      );
 
-    // Get the Android implementation
-    final androidImplementation =
-        _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      final androidImplementation =
+          _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-    if (androidImplementation != null) {
-      // Create the channel before initializing
+      if (androidImplementation == null) {
+        zprint('❌ Failed to get Android implementation');
+        return false;
+      }
+
+      zprint('📲 Creating notification channel...');
       await androidImplementation.createNotificationChannel(channel);
+      zprint('✅ Notification channel created');
 
-      const androidSettings = AndroidInitializationSettings('head');
+      zprint('🎯 Setting up Android initialization settings...');
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
       const initializationSettings = InitializationSettings(
         android: androidSettings,
       );
@@ -124,8 +132,11 @@ class NotificationManager {
         zprint('❌ Failed to initialize notification service');
         _isInitialized = false;
       }
-    } else {
-      zprint('❌ Failed to get Android implementation');
+    } catch (e, stackTrace) {
+      zprint('❌ Error during Android notification initialization:');
+      zprint(e.toString());
+      zprint('Stack trace:');
+      zprint(stackTrace.toString());
       _isInitialized = false;
     }
 

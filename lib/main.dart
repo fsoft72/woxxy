@@ -16,104 +16,132 @@ import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() async {
-  zprint('🚀 Application starting...');
-  zprint('📱 Ensuring Flutter binding is initialized...');
-  WidgetsFlutterBinding.ensureInitialized();
-  zprint('✅ Flutter binding initialized');
-  zprint('🔔 Starting notification manager initialization...');
-  await NotificationManager.instance.init();
-  zprint('🔔 Notification manager initialization attempt completed');
+  try {
+    zprint('🚀 Application starting...');
+    zprint('📱 Ensuring Flutter binding is initialized...');
+    WidgetsFlutterBinding.ensureInitialized();
+    zprint('✅ Flutter binding initialized');
 
-  // Load user settings first
-  final settingsService = SettingsService();
-  final user = await settingsService.loadSettings();
+    // Load user settings first
+    zprint('📝 Loading user settings...');
+    final settingsService = SettingsService();
+    final user = await settingsService.loadSettings();
+    zprint('✅ User settings loaded');
 
-  // Initialize FileTransferManager with user's preferred directory or default
-  String downloadPath;
-  if (user.defaultDownloadDirectory.isNotEmpty) {
-    downloadPath = user.defaultDownloadDirectory;
-  } else {
-    final downloadsDir = await getApplicationDocumentsDirectory();
-    downloadPath = '${downloadsDir.path}/downloads';
-  }
-  await Directory(downloadPath).create(recursive: true);
-  FileTransferManager(downloadPath: downloadPath);
-
-  // Only initialize window_manager and tray on desktop platforms
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    await windowManager.ensureInitialized();
-
-    // Configure window properties with explicit non-null values
-    const windowSize = Size(540, 960);
-    const minSize = Size(540, 960);
-
-    // Set up window first
-    await windowManager.setSize(windowSize);
-    await windowManager.setMinimumSize(minSize);
-    await windowManager.center();
-    await windowManager.setTitle('Woxxy');
-    await windowManager.setPreventClose(true);
-
-    if (!Platform.isMacOS) {
-      await windowManager.setIcon('assets/icons/head.png');
+    // Initialize FileTransferManager with user's preferred directory or default
+    zprint('📂 Setting up download directory...');
+    String downloadPath;
+    if (user.defaultDownloadDirectory.isNotEmpty) {
+      downloadPath = user.defaultDownloadDirectory;
+    } else {
+      final downloadsDir = await getApplicationDocumentsDirectory();
+      downloadPath = '${downloadsDir.path}/downloads';
     }
+    await Directory(downloadPath).create(recursive: true);
+    FileTransferManager(downloadPath: downloadPath);
+    zprint('✅ Download directory setup complete');
 
-    // Initialize window
-    await windowManager.waitUntilReadyToShow();
+    // Only initialize window_manager and tray on desktop platforms
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      await windowManager.ensureInitialized();
 
-    try {
-      // Setup tray icon and menu
-      String iconPath = 'assets/icons/head.png';
-      if (Platform.isWindows) {
-        final icoFile = File('assets/icons/head.ico');
-        if (await icoFile.exists()) {
-          iconPath = 'assets/icons/head.ico';
-        }
+      // Configure window properties with explicit non-null values
+      const windowSize = Size(540, 960);
+      const minSize = Size(540, 960);
+
+      // Set up window first
+      await windowManager.setSize(windowSize);
+      await windowManager.setMinimumSize(minSize);
+      await windowManager.center();
+      await windowManager.setTitle('Woxxy');
+      await windowManager.setPreventClose(true);
+
+      if (!Platform.isMacOS) {
+        await windowManager.setIcon('assets/icons/head.png');
       }
 
-      // Initialize menu first
-      Menu menu = Menu(
-        items: [
-          MenuItem(
-            label: 'Open',
-            onClick: (menuItem) async {
-              await windowManager.show();
-              await windowManager.focus();
-            },
-          ),
-          MenuItem.separator(),
-          MenuItem(
-            label: 'Quit',
-            onClick: (menuItem) async {
-              exit(0);
-            },
-          ),
-        ],
-      );
+      // Initialize window
+      await windowManager.waitUntilReadyToShow();
 
-      // Set up tray icon and menu
-      await trayManager.destroy(); // Ensure clean state
-      await Future.delayed(const Duration(milliseconds: 100));
-      await trayManager.setIcon(iconPath);
-      await Future.delayed(const Duration(milliseconds: 50));
-      await trayManager.setContextMenu(menu);
-      await Future.delayed(const Duration(milliseconds: 50));
+      try {
+        // Setup tray icon and menu
+        String iconPath = 'assets/icons/head.png';
+        if (Platform.isWindows) {
+          final icoFile = File('assets/icons/head.ico');
+          if (await icoFile.exists()) {
+            iconPath = 'assets/icons/head.ico';
+          }
+        }
 
-      // Show window after tray is set up
-      await windowManager.show();
-      await windowManager.focus();
+        // Initialize menu first
+        Menu menu = Menu(
+          items: [
+            MenuItem(
+              label: 'Open',
+              onClick: (menuItem) async {
+                await windowManager.show();
+                await windowManager.focus();
+              },
+            ),
+            MenuItem.separator(),
+            MenuItem(
+              label: 'Quit',
+              onClick: (menuItem) async {
+                exit(0);
+              },
+            ),
+          ],
+        );
 
-      // Set tooltip last
-      await trayManager.setToolTip('Woxxy');
-    } catch (e) {
-      print('Error setting up tray: $e');
-      // Show window even if tray setup fails
-      await windowManager.show();
-      await windowManager.focus();
+        // Set up tray icon and menu
+        await trayManager.destroy(); // Ensure clean state
+        await Future.delayed(const Duration(milliseconds: 100));
+        await trayManager.setIcon(iconPath);
+        await Future.delayed(const Duration(milliseconds: 50));
+        await trayManager.setContextMenu(menu);
+        await Future.delayed(const Duration(milliseconds: 50));
+
+        // Show window after tray is set up
+        await windowManager.show();
+        await windowManager.focus();
+
+        // Set tooltip last
+        await trayManager.setToolTip('Woxxy');
+      } catch (e) {
+        print('Error setting up tray: $e');
+        // Show window even if tray setup fails
+        await windowManager.show();
+        await windowManager.focus();
+      }
     }
-  }
 
-  runApp(const MyApp());
+    // Initialize notifications after window setup
+    zprint('🔔 Starting notification manager initialization...');
+    await NotificationManager.instance.init();
+    zprint('🔔 Notification manager initialization attempt completed');
+
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    // Log the error and stack trace
+    zprint('❌ Fatal error during initialization: $e');
+    zprint('Stack trace: $stackTrace');
+
+    // Show error dialog if possible, otherwise just print
+    if (WidgetsBinding.instance.isRootWidgetAttached) {
+      runApp(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Text('Failed to initialize: $e'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Rethrow after logging so the error is still visible in console
+    rethrow;
+  }
 }
 
 class MyApp extends StatelessWidget {
