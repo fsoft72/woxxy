@@ -52,21 +52,16 @@ class NotificationManager {
       return false;
     } else if (Platform.isMacOS) {
       zprint('🍎 Requesting macOS notification permissions...');
-
       try {
         // Initialize plugin with default settings first
         final darwinSettings = DarwinInitializationSettings(
-            requestAlertPermission: true, // Request during initialization
-            requestBadgePermission: true,
-            requestSoundPermission: true,
-            onDidReceiveLocalNotification: (id, title, body, payload) async {
-              zprint('🍎 macOS received local notification: $title');
-            });
-
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
         final initializationSettings = InitializationSettings(
           macOS: darwinSettings,
         );
-
         // Initialize the plugin with permission requests
         final initSuccess = await _notifications.initialize(
           initializationSettings,
@@ -74,7 +69,6 @@ class NotificationManager {
             zprint('🔔 Notification response received: ${details.actionId}');
           },
         );
-
         if (initSuccess ?? false) {
           _isInitialized = true;
           zprint('✅ Notification service initialized successfully');
@@ -310,10 +304,6 @@ class NotificationManager {
     } catch (e) {
       print('❌ Error showing notification: $e');
     }
-  }
-
-  Future<void> _showTestNotification() async {
-    await showNotification('Woxxy', 'Notification service TEST');
   }
 
   Future<void> showFileReceivedNotification({
