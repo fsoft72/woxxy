@@ -146,7 +146,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
-  bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
