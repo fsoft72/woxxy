@@ -10,7 +10,7 @@ import 'dart:collection'; // Import for Queue
 
 // Add this for XFile class
 import 'package:cross_file/cross_file.dart';
-import 'package:file_picker/file_picker.dart';  // Add this import
+import 'package:file_picker/file_picker.dart'; // Add this import
 
 class PeerDetailPage extends StatefulWidget {
   final Peer peer;
