@@ -1,21 +1,22 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_local_notifications_linux/flutter_local_notifications_linux.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
+
+import 'package:woxxy/funcs/debug.dart';
 
 class NotificationManager {
   static final NotificationManager _instance = NotificationManager._internal();
   static NotificationManager get instance => _instance;
 
   factory NotificationManager() {
-    print('📲 NotificationManager factory constructor called');
+    zprint('📲 NotificationManager factory constructor called');
     return _instance;
   }
 
   NotificationManager._internal() {
-    print('🏗️ NotificationManager._internal() constructor called');
-    print('📱 Creating FlutterLocalNotificationsPlugin instance');
+    zprint('🏗️ NotificationManager._internal() constructor called');
+    zprint('📱 Creating FlutterLocalNotificationsPlugin instance');
   }
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -27,10 +28,10 @@ class NotificationManager {
     try {
       final iconPath = path.join(Directory.current.path, 'build', 'flutter_assets', 'assets', 'icons', 'head.png');
       if (await File(iconPath).exists()) {
-        print('✅ Found icon at: $iconPath');
+        zprint('✅ Found icon at: $iconPath');
         return iconPath;
       }
-      print('⚠️ Icon not found at: $iconPath');
+      zprint('⚠️ Icon not found at: $iconPath');
       return null;
     } catch (e) {
       print('❌ Error getting icon path: $e');
@@ -50,7 +51,7 @@ class NotificationManager {
       }
       return false;
     } else if (Platform.isMacOS) {
-      print('🍎 Requesting macOS notification permissions...');
+      zprint('🍎 Requesting macOS notification permissions...');
 
       try {
         // Initialize plugin with default settings first
@@ -59,7 +60,7 @@ class NotificationManager {
             requestBadgePermission: true,
             requestSoundPermission: true,
             onDidReceiveLocalNotification: (id, title, body, payload) async {
-              print('🍎 macOS received local notification: $title');
+              zprint('🍎 macOS received local notification: $title');
             });
 
         final initializationSettings = InitializationSettings(
@@ -70,16 +71,16 @@ class NotificationManager {
         final initSuccess = await _notifications.initialize(
           initializationSettings,
           onDidReceiveNotificationResponse: (details) {
-            print('🔔 Notification response received: ${details.actionId}');
+            zprint('🔔 Notification response received: ${details.actionId}');
           },
         );
 
         if (initSuccess ?? false) {
           _isInitialized = true;
-          print('✅ Notification service initialized successfully');
+          zprint('✅ Notification service initialized successfully');
           return true;
         } else {
-          print('❌ Failed to initialize notification service');
+          zprint('❌ Failed to initialize notification service');
           return false;
         }
       } catch (e) {
@@ -90,107 +91,131 @@ class NotificationManager {
     return true; // Other platforms don't need explicit permission
   }
 
+  Future<bool> _androidInitialize() async {
+// Create the notification channel first
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'file_transfer_channel',
+      'File Transfer Notifications',
+      description: 'Notifications for received files',
+      importance: Importance.high,
+    );
+
+    // Get the Android implementation
+    final androidImplementation =
+        _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    if (androidImplementation != null) {
+      // Create the channel before initializing
+      await androidImplementation.createNotificationChannel(channel);
+
+      const androidSettings = AndroidInitializationSettings('head');
+      const initializationSettings = InitializationSettings(
+        android: androidSettings,
+      );
+
+      // Initialize notifications
+      final success = await _notifications.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          zprint('🔔 Notification response received: ${details.actionId}');
+        },
+      );
+
+      if (success ?? false) {
+        // After successful initialization, request permissions
+        final granted = await requestPermissions();
+        _isInitialized = granted;
+        zprint(granted ? '✅ Notification permissions granted' : '❌ Notification permissions denied');
+      } else {
+        zprint('❌ Failed to initialize notification service');
+        _isInitialized = false;
+      }
+    } else {
+      zprint('❌ Failed to get Android implementation');
+      _isInitialized = false;
+    }
+
+    return _isInitialized;
+  }
+
+  Future<bool> _windowsInitialize() async {
+    // Initialize local_notifier for Windows
+    await localNotifier.setup(
+      appName: 'Woxxy',
+      shortcutPolicy: ShortcutPolicy.requireCreate,
+    );
+    _isInitialized = true;
+    zprint('✅ Windows notification service initialized successfully');
+
+    return _isInitialized;
+  }
+
+  Future<bool> _macOSInitialize() async {
+    final hasPermissions = await requestPermissions();
+    if (!hasPermissions) {
+      zprint('❌ Notification permissions denied');
+      _isInitialized = false;
+    }
+
+    return _isInitialized;
+  }
+
+  Future<bool> _linuxInitialize() async {
+    final iconPath = await _getAbsoluteIconPath();
+    zprint('🖼️ Using icon path: $iconPath');
+
+    // Linux-specific initialization
+    final linuxSettings = LinuxInitializationSettings(
+      defaultActionName: 'Open notification',
+      defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+      defaultSound: null,
+    );
+
+    final initializationSettings = InitializationSettings(
+      linux: linuxSettings,
+    );
+
+    // Initialize notifications for Linux
+    final success = await _notifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (details) {
+        zprint('🔔 Notification response received: ${details.actionId}');
+      },
+    );
+
+    if (success ?? false) {
+      _isInitialized = true;
+      zprint('✅ Notification service initialized successfully');
+    } else {
+      zprint('❌ Failed to initialize notification service');
+      zprint('⚠️ Initialize() returned: $success');
+      _isInitialized = false;
+    }
+    return _isInitialized;
+  }
+
   Future<void> init() async {
-    print('🔄 Starting NotificationManager initialization...');
-    print('💻 Running on platform: ${Platform.operatingSystem} (${Platform.operatingSystemVersion})');
-    print('📂 Current directory: ${Directory.current.path}');
     if (_isInitialized) {
-      print('✅ NotificationManager already initialized');
+      zprint('✅ NotificationManager already initialized');
       return;
     }
 
+    zprint('🔄 Starting NotificationManager initialization...');
+    zprint('💻 Running on platform: ${Platform.operatingSystem} (${Platform.operatingSystemVersion})');
+    zprint('📂 Current directory: ${Directory.current.path}');
+
     try {
       if (Platform.isAndroid) {
-        // Create the notification channel first
-        const AndroidNotificationChannel channel = AndroidNotificationChannel(
-          'file_transfer_channel',
-          'File Transfer Notifications',
-          description: 'Notifications for received files',
-          importance: Importance.high,
-        );
-
-        // Get the Android implementation
-        final androidImplementation =
-            _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-
-        if (androidImplementation != null) {
-          // Create the channel before initializing
-          await androidImplementation.createNotificationChannel(channel);
-
-          final androidSettings = AndroidInitializationSettings('head');
-          final initializationSettings = InitializationSettings(
-            android: androidSettings,
-          );
-
-          // Initialize notifications
-          final success = await _notifications.initialize(
-            initializationSettings,
-            onDidReceiveNotificationResponse: (details) {
-              print('🔔 Notification response received: ${details.actionId}');
-            },
-          );
-
-          if (success ?? false) {
-            // After successful initialization, request permissions
-            final granted = await requestPermissions();
-            _isInitialized = granted;
-            print(granted ? '✅ Notification permissions granted' : '❌ Notification permissions denied');
-          } else {
-            print('❌ Failed to initialize notification service');
-            _isInitialized = false;
-          }
-        } else {
-          print('❌ Failed to get Android implementation');
-          _isInitialized = false;
-        }
+        await _androidInitialize();
       } else if (Platform.isWindows) {
-        // Initialize local_notifier for Windows
-        await localNotifier.setup(
-          appName: 'Woxxy',
-          shortcutPolicy: ShortcutPolicy.requireCreate,
-        );
-        _isInitialized = true;
-        print('✅ Windows notification service initialized successfully');
-        await _showTestNotification();
+        await _windowsInitialize();
       } else if (Platform.isMacOS) {
-        final hasPermissions = await requestPermissions();
-        if (!hasPermissions) {
-          print('❌ Notification permissions denied');
-          _isInitialized = false;
-          return;
-        }
+        await _macOSInitialize();
       } else if (Platform.isLinux) {
-        final iconPath = await _getAbsoluteIconPath();
-        print('🖼️ Using icon path: $iconPath');
-
-        // Linux-specific initialization
-        final linuxSettings = LinuxInitializationSettings(
-          defaultActionName: 'Open notification',
-          defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
-          defaultSound: null,
-        );
-
-        final initializationSettings = InitializationSettings(
-          linux: linuxSettings,
-        );
-
-        // Initialize notifications for Linux
-        final success = await _notifications.initialize(
-          initializationSettings,
-          onDidReceiveNotificationResponse: (details) {
-            print('🔔 Notification response received: ${details.actionId}');
-          },
-        );
-
-        if (success ?? false) {
-          _isInitialized = true;
-          print('✅ Notification service initialized successfully');
-          await _showTestNotification();
-        } else {
-          print('❌ Failed to initialize notification service');
-          print('⚠️ Initialize() returned: $success');
-          _isInitialized = false;
-        }
+        await _linuxInitialize();
+      } else {
+        zprint('⚠️ Unsupported platform: ${Platform.operatingSystem}');
+        _isInitialized = false;
       }
     } catch (e, stackTrace) {
       print('❌ Error initializing notifications:');
@@ -200,17 +225,26 @@ class NotificationManager {
     }
   }
 
-  Future<void> _showTestNotification() async {
+  Future<void> showNotification(
+    String title,
+    String body,
+  ) async {
+    zprint("\n\n\n=== NOTIF: $title - $body\n\n\n");
+
     if (!_isInitialized) {
-      print('⚠️ Cannot show test notification - notifications not initialized');
-      return;
+      await init();
+      if (!_isInitialized) {
+        zprint('❌ Notifications not initialized');
+        return;
+      }
     }
+
     try {
       if (Platform.isAndroid) {
         const androidDetails = AndroidNotificationDetails(
-          'file_transfer_channel',
-          'File Transfer Notifications',
-          channelDescription: 'Notifications for received files',
+          'woxxy_channel',
+          'Woxxy Notifications',
+          channelDescription: 'General notifications from Woxxy',
           importance: Importance.high,
           priority: Priority.high,
           showWhen: true,
@@ -218,17 +252,21 @@ class NotificationManager {
 
         await _notifications.show(
           0,
-          'Woxxy',
-          'File transfer notifications enabled',
+          title,
+          body,
           const NotificationDetails(android: androidDetails),
         );
-      } else if (Platform.isWindows) {
+      }
+
+      if (Platform.isWindows) {
         LocalNotification notification = LocalNotification(
-          title: 'Woxxy',
-          body: 'File transfer notifications enabled',
+          title: title,
+          body: body,
         );
         await notification.show();
-      } else if (Platform.isLinux) {
+      }
+
+      if (Platform.isLinux) {
         final iconPath = await _getAbsoluteIconPath();
         final linuxDetails = LinuxNotificationDetails(
           category: LinuxNotificationCategory.presence,
@@ -247,12 +285,14 @@ class NotificationManager {
         );
         await _notifications.show(
           0,
-          'Woxxy',
-          'File transfer notifications enabled',
+          title,
+          body,
           NotificationDetails(linux: linuxDetails),
         );
-      } else if (Platform.isMacOS) {
-        final darwinDetails = DarwinNotificationDetails(
+      }
+
+      if (Platform.isMacOS) {
+        const darwinDetails = DarwinNotificationDetails(
             presentAlert: true,
             presentBadge: true,
             presentSound: true,
@@ -262,14 +302,18 @@ class NotificationManager {
             );
         await _notifications.show(
           0,
-          'Woxxy',
-          'File transfer notifications enabled',
-          NotificationDetails(macOS: darwinDetails),
+          title,
+          body,
+          const NotificationDetails(macOS: darwinDetails),
         );
       }
     } catch (e) {
-      print('❌ Error showing test notification: $e');
+      print('❌ Error showing notification: $e');
     }
+  }
+
+  Future<void> _showTestNotification() async {
+    await showNotification('Woxxy', 'Notification service TEST');
   }
 
   Future<void> showFileReceivedNotification({
@@ -278,125 +322,18 @@ class NotificationManager {
     required double fileSizeMB,
     required double speedMBps,
   }) async {
-    if (!_isInitialized && Platform.isMacOS) {
-      print('⚠️ Notifications not initialized on macOS');
-      // Try to initialize once
-      await init();
-
-      if (!_isInitialized) {
-        print('❌ Failed to initialize notifications - notifications will be disabled');
-        return;
-      }
-    }
-
-    if (!_isInitialized) {
-      print('⚠️ Notifications not initialized and cannot be initialized at this time');
-      return;
-    }
-
-    try {
+    /*
       print('📝 Preparing to show notification:');
       print('- File: $filePath');
       print('- Sender: $senderUsername');
       print('- Size: ${fileSizeMB.toStringAsFixed(2)} MB');
       print('- Speed: ${speedMBps.toStringAsFixed(2)} MB/s');
+			*/
 
-      final fileName = path.basename(filePath);
-      final iconPath = await _getAbsoluteIconPath();
-      final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
+    final fileName = path.basename(filePath);
+    final String body =
+        'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s';
 
-      if (Platform.isAndroid) {
-        const androidDetails = AndroidNotificationDetails(
-          'file_transfer_channel',
-          'File Transfer Notifications',
-          channelDescription: 'Notifications for received files',
-          importance: Importance.high,
-          priority: Priority.high,
-          showWhen: true,
-        );
-
-        await _notifications.show(
-          id,
-          'File Received',
-          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-          NotificationDetails(android: androidDetails),
-        );
-        print('✅ File received notification sent (ID: $id)');
-      } else if (Platform.isWindows) {
-        LocalNotification notification = LocalNotification(
-          title: 'File Received',
-          body:
-              'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-        );
-        await notification.show();
-        print('✅ File received notification sent');
-      } else if (Platform.isLinux) {
-        final linuxDetails = LinuxNotificationDetails(
-          category: LinuxNotificationCategory.transferComplete,
-          urgency: LinuxNotificationUrgency.critical,
-          actions: [
-            const LinuxNotificationAction(
-              key: 'open',
-              label: 'Open file',
-            ),
-          ],
-          resident: true,
-          suppressSound: false,
-          sound: null,
-          defaultActionName: 'Open',
-          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
-        );
-        await _notifications.show(
-          id,
-          'File Received',
-          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-          NotificationDetails(linux: linuxDetails),
-        );
-        print('✅ File received notification sent (ID: $id)');
-      } else if (Platform.isMacOS) {
-        final darwinDetails = DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-            sound: 'default',
-            threadIdentifier: 'file_transfer',
-            interruptionLevel: InterruptionLevel.active);
-        await _notifications.show(
-          id,
-          'File Received',
-          'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-          NotificationDetails(macOS: darwinDetails),
-        );
-        print('✅ File received notification sent (ID: $id)');
-      }
-
-      // Fallback to notify-send if flutter_local_notifications fails
-      if (Platform.isLinux) {
-        try {
-          final iconPath = await _getAbsoluteIconPath();
-          final args = [
-            'File Received',
-            'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s',
-            '--app-name=Woxxy',
-            '--urgency=critical',
-          ];
-
-          if (iconPath != null) {
-            args.addAll(['--icon=$iconPath']);
-          }
-
-          final result = await Process.run('notify-send', args);
-          print('✅ Fallback notification result: ${result.exitCode == 0 ? 'success' : 'failed'}');
-          if (result.stderr.isNotEmpty) {
-            print('⚠️ notify-send stderr: ${result.stderr}');
-          }
-        } catch (e) {
-          print('⚠️ Fallback notification failed: $e');
-        }
-      }
-    } catch (e) {
-      print('❌ Error showing notification: $e');
-      print('Error details: ${e.toString()}');
-    }
+    await showNotification('File Received', body);
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:woxxy/funcs/debug.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
@@ -15,13 +16,13 @@ import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() async {
-  print('🚀 Application starting...');
-  print('📱 Ensuring Flutter binding is initialized...');
+  zprint('🚀 Application starting...');
+  zprint('📱 Ensuring Flutter binding is initialized...');
   WidgetsFlutterBinding.ensureInitialized();
-  print('✅ Flutter binding initialized');
-  print('🔔 Starting notification manager initialization...');
+  zprint('✅ Flutter binding initialized');
+  zprint('🔔 Starting notification manager initialization...');
   await NotificationManager.instance.init();
-  print('🔔 Notification manager initialization attempt completed');
+  zprint('🔔 Notification manager initialization attempt completed');
 
   // Load user settings first
   final settingsService = SettingsService();

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/models/notification_manager.dart';
 
 typedef OnTransferComplete = void Function(FileTransfer);
 
@@ -154,6 +155,14 @@ class FileTransfer {
       }
 
       onTransferComplete?.call(this);
+
+      NotificationManager.instance.showFileReceivedNotification(
+        filePath: destination_filename,
+        senderUsername: senderUsername,
+        fileSizeMB: size / (1024 * 1024),
+        speedMBps: getSpeedMBps(),
+      );
+
       return true;
     } catch (e) {
       print('Error closing file: $e');
