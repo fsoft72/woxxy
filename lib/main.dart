@@ -14,6 +14,7 @@ import 'models/user.dart';
 import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 void main() async {
   try {
@@ -65,11 +66,15 @@ void main() async {
 
       try {
         // Setup tray icon and menu
-        String iconPath = 'assets/icons/head.png';
+        String iconPath = Platform.isWindows
+            ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico')
+            : 'assets/icons/head.png';
+
+        // For Windows, ensure we fall back to .png if .ico doesn't exist
         if (Platform.isWindows) {
-          final icoFile = File('assets/icons/head.ico');
-          if (await icoFile.exists()) {
-            iconPath = 'assets/icons/head.ico';
+          final icoFile = File(iconPath);
+          if (!await icoFile.exists()) {
+            iconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
           }
         }
 
@@ -93,20 +98,27 @@ void main() async {
           ],
         );
 
-        // Set up tray icon and menu
+        // Set up tray icon and menu with proper delays
         await trayManager.destroy(); // Ensure clean state
-        await Future.delayed(const Duration(milliseconds: 100));
-        await trayManager.setIcon(iconPath);
-        await Future.delayed(const Duration(milliseconds: 50));
-        await trayManager.setContextMenu(menu);
-        await Future.delayed(const Duration(milliseconds: 50));
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // On Windows, we need to ensure the icon is set before the menu
+        if (Platform.isWindows) {
+          await trayManager.setIcon(iconPath);
+          await Future.delayed(const Duration(milliseconds: 100));
+          await trayManager.setContextMenu(menu);
+          await Future.delayed(const Duration(milliseconds: 100));
+        } else {
+          await trayManager.setIcon(iconPath);
+          await trayManager.setContextMenu(menu);
+        }
+
+        // Set tooltip last
+        await trayManager.setToolTip('Woxxy');
 
         // Show window after tray is set up
         await windowManager.show();
         await windowManager.focus();
-
-        // Set tooltip last
-        await trayManager.setToolTip('Woxxy');
       } catch (e) {
         print('Error setting up tray: $e');
         // Show window even if tray setup fails
