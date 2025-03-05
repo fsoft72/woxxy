@@ -78,8 +78,12 @@ void main() async {
           }
         }
 
-        // Initialize menu first
-        Menu menu = Menu(
+        // Initialize tray manager first
+        await trayManager.destroy(); // Ensure clean state
+        await Future.delayed(const Duration(milliseconds: 100));
+
+        // Create the menu
+        final menu = Menu(
           items: [
             MenuItem(
               label: 'Open',
@@ -98,23 +102,19 @@ void main() async {
           ],
         );
 
-        // Set up tray icon and menu with proper delays
-        await trayManager.destroy(); // Ensure clean state
-        await Future.delayed(const Duration(milliseconds: 200));
-
-        // On Windows, we need to ensure the icon is set before the menu
         if (Platform.isWindows) {
+          // For Windows, set up everything in sequence with small delays
           await trayManager.setIcon(iconPath);
-          await Future.delayed(const Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 50));
+          await trayManager.setToolTip('Woxxy');
+          await Future.delayed(const Duration(milliseconds: 50));
           await trayManager.setContextMenu(menu);
-          await Future.delayed(const Duration(milliseconds: 100));
         } else {
+          // For other platforms, we can set everything at once
           await trayManager.setIcon(iconPath);
+          await trayManager.setToolTip('Woxxy');
           await trayManager.setContextMenu(menu);
         }
-
-        // Set tooltip last
-        await trayManager.setToolTip('Woxxy');
 
         // Show window after tray is set up
         await windowManager.show();
