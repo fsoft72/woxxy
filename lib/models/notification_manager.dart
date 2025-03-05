@@ -54,12 +54,12 @@ class NotificationManager {
       zprint('🍎 Requesting macOS notification permissions...');
       try {
         // Initialize plugin with default settings first
-        final darwinSettings = DarwinInitializationSettings(
+        const darwinSettings = DarwinInitializationSettings(
           requestAlertPermission: true,
           requestBadgePermission: true,
           requestSoundPermission: true,
         );
-        final initializationSettings = InitializationSettings(
+        const initializationSettings = InitializationSettings(
           macOS: darwinSettings,
         );
         // Initialize the plugin with permission requests
@@ -88,7 +88,7 @@ class NotificationManager {
   Future<bool> _androidInitialize() async {
     try {
       zprint('🤖 Starting Android notification initialization...');
-      
+
       // Create the notification channel first
       const AndroidNotificationChannel channel = AndroidNotificationChannel(
         'file_transfer_channel',
@@ -276,12 +276,14 @@ class NotificationManager {
         final linuxDetails = LinuxNotificationDetails(
           category: LinuxNotificationCategory.presence,
           urgency: LinuxNotificationUrgency.critical,
+          /*
           actions: [
             const LinuxNotificationAction(
               key: 'test',
               label: 'Test',
             ),
           ],
+					*/
           sound: null,
           suppressSound: false,
           resident: true,
