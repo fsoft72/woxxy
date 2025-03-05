@@ -74,7 +74,8 @@ void main() async {
         if (Platform.isWindows) {
           final icoFile = File(iconPath);
           if (!await icoFile.exists()) {
-            iconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
+            iconPath = path.join(
+                Directory.current.path, 'assets', 'icons', 'head.png');
           }
         }
 
@@ -82,35 +83,44 @@ void main() async {
         await trayManager.destroy(); // Ensure clean state
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Create the menu
-        final menu = Menu(
-          items: [
-            MenuItem(
-              label: 'Open',
-              onClick: (menuItem) async {
-                await windowManager.show();
-                await windowManager.focus();
-              },
-            ),
-            MenuItem.separator(),
-            MenuItem(
-              label: 'Quit',
-              onClick: (menuItem) async {
-                exit(0);
-              },
-            ),
-          ],
-        );
+        // Create the menu items first
+        final menuItems = [
+          MenuItem(
+            label: 'Open',
+            onClick: (menuItem) async {
+              await windowManager.show();
+              await windowManager.focus();
+            },
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            label: 'Quit',
+            onClick: (menuItem) async {
+              exit(0);
+            },
+          ),
+        ];
 
-        if (Platform.isWindows) {
-          // For Windows, set up everything in sequence with small delays
+        // Create the menu with the items
+        final menu = Menu(items: menuItems);
+
+        if (Platform.isLinux) {
+          // For Linux, set everything up at once to avoid DBus menu issues
           await trayManager.setIcon(iconPath);
-          await Future.delayed(const Duration(milliseconds: 50));
+          await trayManager.setContextMenu(menu);
           await trayManager.setToolTip('Woxxy');
-          await Future.delayed(const Duration(milliseconds: 50));
+        } else if (Platform.isWindows) {
+          // For Windows, set up everything in sequence with small delays
+          // Increased delays for Windows to avoid context menu issues
+          await trayManager.setIcon(iconPath);
+          await Future.delayed(
+              const Duration(milliseconds: 200)); // Increased from 50ms
+          await trayManager.setToolTip('Woxxy');
+          await Future.delayed(
+              const Duration(milliseconds: 200)); // Increased from 50ms
           await trayManager.setContextMenu(menu);
         } else {
-          // For other platforms, we can set everything at once
+          // For other platforms (macOS), we can set everything at once
           await trayManager.setIcon(iconPath);
           await trayManager.setToolTip('Woxxy');
           await trayManager.setContextMenu(menu);
@@ -187,7 +197,8 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
-  final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  final bool _isDesktop =
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
@@ -275,6 +286,13 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       await windowManager.show();
       await windowManager.focus();
     }
+  }
+
+  // Added method to handle right-click on tray icon (crucial for Windows)
+  @override
+  void onTrayIconRightMouseDown() {
+    // Explicitly show the context menu on right-click
+    trayManager.popUpContextMenu();
   }
 
   void _updateUser(User updatedUser) {
