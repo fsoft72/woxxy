@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:tray_manager/tray_manager.dart';
+import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
@@ -74,8 +75,7 @@ void main() async {
         if (Platform.isWindows) {
           final icoFile = File(iconPath);
           if (!await icoFile.exists()) {
-            iconPath = path.join(
-                Directory.current.path, 'assets', 'icons', 'head.png');
+            iconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
           }
         }
 
@@ -113,11 +113,9 @@ void main() async {
           // For Windows, set up everything in sequence with small delays
           // Increased delays for Windows to avoid context menu issues
           await trayManager.setIcon(iconPath);
-          await Future.delayed(
-              const Duration(milliseconds: 200)); // Increased from 50ms
+          await Future.delayed(const Duration(milliseconds: 200)); // Increased from 50ms
           await trayManager.setToolTip('Woxxy');
-          await Future.delayed(
-              const Duration(milliseconds: 200)); // Increased from 50ms
+          await Future.delayed(const Duration(milliseconds: 200)); // Increased from 50ms
           await trayManager.setContextMenu(menu);
         } else {
           // For other platforms (macOS), we can set everything at once
@@ -197,8 +195,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
-  final bool _isDesktop =
-      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+  final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
@@ -337,15 +334,19 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               height: 48,
             ),
             const SizedBox(width: 16),
-            Row(
+            Column(
               children: [
                 const Text('Woxxy - LAN File Sharing'),
                 const SizedBox(width: 16),
-                if (_networkService.currentIpAddress != null)
-                  Text(
-                    'IP: ${_networkService.currentIpAddress}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                Row(children: [
+                  if (_networkService.currentIpAddress != null)
+                    Text(
+                      'IP: ${_networkService.currentIpAddress}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  const SizedBox(width: 16),
+                  Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
+                ]),
               ],
             ),
           ],
