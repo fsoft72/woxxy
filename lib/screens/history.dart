@@ -16,44 +16,6 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  Future<void> _openFileLocation(String filePath) async {
-    final file = File(filePath);
-    if (!await file.exists()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File no longer exists')),
-        );
-      }
-      return;
-    }
-
-    final Uri uri;
-    if (Platform.isWindows) {
-      // Use Process.run instead of url_launcher for Windows
-      try {
-        await Process.run('explorer.exe', ['/select,', file.path]);
-        return;
-      } catch (e) {
-        if (mounted) {
-          showSnackbar(context, 'Could not open file location: $e');
-        }
-        return;
-      }
-    } else if (Platform.isLinux) {
-      uri = Uri.parse('file://${path.dirname(file.path)}');
-    } else if (Platform.isMacOS) {
-      uri = Uri.parse('file://${path.dirname(file.path)}');
-    } else {
-      return;
-    }
-
-    if (!await launchUrl(uri)) {
-      if (mounted) {
-        showSnackbar(context, 'Could not open file location');
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,7 +75,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.folder_open),
-                  onPressed: () => _openFileLocation(entry.destinationPath),
+                  onPressed: () => openFileLocation(entry.destinationPath),
                 ),
               ),
             ),
