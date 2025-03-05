@@ -82,27 +82,33 @@ void main() async {
         await trayManager.destroy(); // Ensure clean state
         await Future.delayed(const Duration(milliseconds: 100));
 
-        // Create the menu
-        final menu = Menu(
-          items: [
-            MenuItem(
-              label: 'Open',
-              onClick: (menuItem) async {
-                await windowManager.show();
-                await windowManager.focus();
-              },
-            ),
-            MenuItem.separator(),
-            MenuItem(
-              label: 'Quit',
-              onClick: (menuItem) async {
-                exit(0);
-              },
-            ),
-          ],
-        );
+        // Create the menu items first
+        final menuItems = [
+          MenuItem(
+            label: 'Open',
+            onClick: (menuItem) async {
+              await windowManager.show();
+              await windowManager.focus();
+            },
+          ),
+          MenuItem.separator(),
+          MenuItem(
+            label: 'Quit',
+            onClick: (menuItem) async {
+              exit(0);
+            },
+          ),
+        ];
 
-        if (Platform.isWindows) {
+        // Create the menu with the items
+        final menu = Menu(items: menuItems);
+
+        if (Platform.isLinux) {
+          // For Linux, set everything up at once to avoid DBus menu issues
+          await trayManager.setIcon(iconPath);
+          await trayManager.setContextMenu(menu);
+          await trayManager.setToolTip('Woxxy');
+        } else if (Platform.isWindows) {
           // For Windows, set up everything in sequence with small delays
           await trayManager.setIcon(iconPath);
           await Future.delayed(const Duration(milliseconds: 50));
@@ -110,7 +116,7 @@ void main() async {
           await Future.delayed(const Duration(milliseconds: 50));
           await trayManager.setContextMenu(menu);
         } else {
-          // For other platforms, we can set everything at once
+          // For other platforms (macOS), we can set everything at once
           await trayManager.setIcon(iconPath);
           await trayManager.setToolTip('Woxxy');
           await trayManager.setContextMenu(menu);
