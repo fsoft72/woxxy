@@ -1,6 +1,7 @@
 // ignore: unused_import
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
@@ -45,21 +46,22 @@ class _HomeContentState extends State<HomeContent> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: ElevatedButton.icon(
-            onPressed: () {
-              NotificationManager.instance.showFileReceivedNotification(
-                filePath: '/tmp/test.txt',
-                senderUsername: 'Test User',
-                fileSizeMB: 10.5,
-                speedMBps: 5.2,
-              );
-            },
-            icon: const Icon(Icons.notification_add),
-            label: const Text('Test Notification'),
+        if (kDebugMode)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                NotificationManager.instance.showFileReceivedNotification(
+                  filePath: '/tmp/test.txt',
+                  senderUsername: 'Test User',
+                  fileSizeMB: 10.5,
+                  speedMBps: 5.2,
+                );
+              },
+              icon: const Icon(Icons.notification_add),
+              label: const Text('Test Notification'),
+            ),
           ),
-        ),
         Expanded(
           child: StreamBuilder<List<Peer>>(
             stream: widget.networkService.peerStream,
