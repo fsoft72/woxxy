@@ -349,12 +349,24 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   color: _isDragging ? Theme.of(context).colorScheme.primary : null,
                 ),
               ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _pickFiles,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Browse Files'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
               if (_fileQueue.isNotEmpty)
-                Text(
-                  '${_fileQueue.length} files in queue',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontSize: 12,
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    '${_fileQueue.length} files in queue',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
             ],
