@@ -172,6 +172,29 @@ if not args.skip_android:
         )
         exit(1)
 
+    if "flutter.versionCode" in build_gradle:
+        print("Error: flutter.versionCode should be changed to a valid version number")
+        print(
+            "       change: `versionCode flutter.versionCode` to `versionCode 1` in android/app/build.gradle"
+        )
+        exit(1)
+
+    # Check if versionCode is a real number
+    # Use grep and sed to extract the versionCode from build.gradle
+    vscode = os.system(
+        "grep 'versionCode [0-9]' android/app/build.gradle | sed -E 's/.*versionCode ([0-9]+).*/\\1/'"
+    )
+    # if vcode is empty, then the versionCode is not a number
+    if vscode == "":
+        print("Error: versionCode must be a real number in android/app/build.gradle")
+        print(
+            "       check: android/app/build.gradle  - change versionCode to a real number"
+        )
+        print(
+            "       example: versionCode 1 (be sure to remove the flutter.versionCode and not use any = !!!"
+        )
+        exit(1)
+
     # check if build.gradle contains the signingConfigs directives
 
     if "signingConfigs {" not in build_gradle:
