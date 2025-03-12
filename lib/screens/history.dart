@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../models/history.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../funcs/utils.dart';
 
 class HistoryScreen extends StatefulWidget {
