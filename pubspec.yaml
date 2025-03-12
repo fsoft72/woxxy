@@ -2,7 +2,7 @@ name: woxxy
 description: LAN File Sharing App
 publish_to: 'none'
 
-version: 0.2.4
+version: 0.2.5
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
@@ -21,7 +21,7 @@ dependencies:
   flutter_svg: ^2.0.9
   shared_preferences: ^2.2.2
   path: ^1.8.3
-  url_launcher: ^6.2.2
+  url_launcher: ^6.1.11
   crypto: ^3.0.3
   tray_manager: ^0.2.4
   flutter_local_notifications: ^18.0.0
