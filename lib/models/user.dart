@@ -14,7 +14,8 @@ class User {
     return User(
       username: json['username'] as String,
       profileImage: json['profileImage'] as String?,
-      defaultDownloadDirectory: json['defaultDownloadDirectory'] as String,
+      // Handle potential null if upgrading or if key doesn't exist yet
+      defaultDownloadDirectory: json['defaultDownloadDirectory'] as String? ?? '',
     );
   }
 
@@ -34,8 +35,8 @@ class User {
     String? defaultDownloadDirectory,
   }) {
     return User(
-      username: username ?? this.username,
-      profileImage: profileImage ?? this.profileImage,
+      username: username ?? this.username, // If username is null use current
+      profileImage: profileImage ?? this.profileImage, // If profileImage is null use current
       defaultDownloadDirectory: defaultDownloadDirectory ?? this.defaultDownloadDirectory,
     );
   }

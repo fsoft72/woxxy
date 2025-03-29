@@ -1,0 +1,15 @@
+{
+	"patterns": [
+		".*",
+		"*.md",
+		"*.lock",
+		"android/*",
+		"build/*",
+		"ios/*",
+		"*.svg",
+		"windows/*",
+		"linux/*",
+		"macos/*",
+		"packages/*"
+	]
+}

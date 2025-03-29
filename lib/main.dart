@@ -16,6 +16,7 @@ import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'models/avatars.dart'; // Keep AvatarStore import
 
 void main() async {
   try {
@@ -27,6 +28,7 @@ void main() async {
     // Load user settings first
     zprint('📝 Loading user settings...');
     final settingsService = SettingsService();
+    // Load user details (username, profile image path, download dir)
     final user = await settingsService.loadSettings();
     zprint('✅ User settings loaded');
 
@@ -36,10 +38,21 @@ void main() async {
     if (user.defaultDownloadDirectory.isNotEmpty) {
       downloadPath = user.defaultDownloadDirectory;
     } else {
-      final downloadsDir = await getApplicationDocumentsDirectory();
-      downloadPath = '${downloadsDir.path}/downloads';
+      // Default to a 'downloads' subfolder within app documents
+      final docDir = await getApplicationDocumentsDirectory();
+      downloadPath = path.join(docDir.path, 'WoxxyDownloads'); // Use a specific folder name
     }
-    await Directory(downloadPath).create(recursive: true);
+    // Ensure the directory exists
+    try {
+      await Directory(downloadPath).create(recursive: true);
+      zprint('✅ Download directory ensured: $downloadPath');
+    } catch (e) {
+      zprint('❌ Error creating download directory: $e');
+      // Fallback to default documents directory if creation fails
+      final docDir = await getApplicationDocumentsDirectory();
+      downloadPath = docDir.path;
+      zprint('⚠️ Falling back to documents directory: $downloadPath');
+    }
     FileTransferManager(downloadPath: downloadPath);
     zprint('✅ Download directory setup complete');
 
@@ -56,10 +69,29 @@ void main() async {
       await windowManager.setMinimumSize(minSize);
       await windowManager.center();
       await windowManager.setTitle('Woxxy');
-      await windowManager.setPreventClose(true);
+      await windowManager.setPreventClose(true); // Ensure window hides on close
 
       if (!Platform.isMacOS) {
-        await windowManager.setIcon('assets/icons/head.png');
+        // Set icon path relative to assets
+        String iconAssetPath = 'assets/icons/head.png';
+        // On Windows, the icon path for setIcon might need adjustment
+        // depending on how Flutter bundles assets. Let's try the asset path first.
+        try {
+          await windowManager.setIcon(iconAssetPath);
+        } catch (e) {
+          zprint("❌ Failed to set window icon using asset path: $e");
+          // Try absolute path if relative fails (less ideal)
+          try {
+            String absoluteIconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
+            if (await File(absoluteIconPath).exists()) {
+              await windowManager.setIcon(absoluteIconPath);
+            } else {
+              zprint("⚠️ Absolute icon path not found either: $absoluteIconPath");
+            }
+          } catch (e2) {
+            zprint("❌ Failed to set window icon using absolute path: $e2");
+          }
+        }
       }
 
       // Initialize window
@@ -67,17 +99,27 @@ void main() async {
 
       try {
         // Setup tray icon and menu
-        String iconPath = Platform.isWindows
-            ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico')
-            : 'assets/icons/head.png';
+        String iconPath = Platform.isWindows ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico') : 'assets/icons/head.png'; // Use PNG for Linux/Mac
 
         // For Windows, ensure we fall back to .png if .ico doesn't exist
         if (Platform.isWindows) {
           final icoFile = File(iconPath);
           if (!await icoFile.exists()) {
+            zprint("⚠️ head.ico not found at $iconPath, falling back to PNG.");
             iconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
+            if (!await File(iconPath).exists()) {
+              zprint("❌ Fallback head.png also not found at $iconPath");
+              // Handle case where no icon file exists?
+            }
+          }
+        } else {
+          // Ensure the PNG exists for Linux/Mac
+          if (!await File(iconPath).exists()) {
+            zprint("❌ Icon head.png not found at $iconPath");
+            // Handle case where no icon file exists?
           }
         }
+        zprint("🔧 Using tray icon path: $iconPath");
 
         // Initialize tray manager first
         await trayManager.destroy(); // Ensure clean state
@@ -96,7 +138,10 @@ void main() async {
           MenuItem(
             label: 'Quit',
             onClick: (menuItem) async {
-              exit(0);
+              // Optionally add cleanup here before exiting
+              zprint("🛑 Quit requested from tray menu.");
+              await windowManager.destroy(); // Close window properly
+              exit(0); // Exit application
             },
           ),
         ];
@@ -123,12 +168,13 @@ void main() async {
           await trayManager.setToolTip('Woxxy');
           await trayManager.setContextMenu(menu);
         }
+        zprint("✅ Tray setup complete.");
 
         // Show window after tray is set up
         await windowManager.show();
         await windowManager.focus();
       } catch (e) {
-        print('Error setting up tray: $e');
+        zprint('❌ Error setting up tray: $e');
         // Show window even if tray setup fails
         await windowManager.show();
         await windowManager.focus();
@@ -140,7 +186,8 @@ void main() async {
     await NotificationManager.instance.init();
     zprint('🔔 Notification manager initialization attempt completed');
 
-    runApp(const MyApp());
+    // Pass the loaded user object to the MyApp widget
+    runApp(MyApp(initialUser: user)); // Pass initial user data
   } catch (e, stackTrace) {
     // Log the error and stack trace
     zprint('❌ Fatal error during initialization: $e');
@@ -165,7 +212,8 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final User initialUser; // Receive initial user data
+  const MyApp({super.key, required this.initialUser});
 
   @override
   Widget build(BuildContext context) {
@@ -176,13 +224,15 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const HomePage(),
+      // Pass initial user data to HomePage
+      home: HomePage(initialUser: initialUser),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final User initialUser; // Receive initial user data
+  const HomePage({super.key, required this.initialUser});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -200,6 +250,8 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   @override
   void initState() {
     super.initState();
+    // Use the initial user data passed to the widget
+    _currentUser = widget.initialUser;
     _initializeApp();
   }
 
@@ -207,35 +259,38 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     if (_isDesktop) {
       trayManager.addListener(this);
       windowManager.addListener(this);
+      // Ensure preventClose is set correctly if not done in main() for some reason
+      // await windowManager.setPreventClose(true);
     }
-    await _loadSettings();
-    await _networkService.start();
+    // No need to load settings again here, use widget.initialUser
+    _networkService.setUsername(_currentUser!.username);
+    // _networkService.setUserId(_currentUser!.userId); // Removed setUserId
+
+    // Start network service *after* setting username (and potentially IP)
+    await _networkService.start(); // Start discovers peers, etc.
+
     FileTransferManager.instance.setFileHistory(_fileHistory);
     _setupFileReceivedListener();
 
     if (mounted) {
       setState(() {
-        _isLoading = false;
+        _isLoading = false; // Loading is complete as initialUser is provided
       });
     }
   }
 
-  Future<void> _loadSettings() async {
-    final user = await _settingsService.loadSettings();
-    setState(() {
-      _currentUser = user;
-      _isLoading = false;
-    });
-    _networkService.setUsername(user.username);
-  }
+  // Removed _loadSettings method as initial user is passed via constructor
 
   void _setupFileReceivedListener() {
     _networkService.onFileReceived.listen((fileInfo) async {
+      // Ensure mounted check
+      if (!mounted) return;
+
       final parts = fileInfo.split('|');
       if (parts.length >= 4) {
         final filePath = parts[0];
-        final fileSizeMB = double.parse(parts[1]);
-        final speedMBps = double.parse(parts[3]);
+        final fileSizeMB = double.tryParse(parts[1]) ?? 0.0; // Safer parsing
+        final speedMBps = double.tryParse(parts[3]) ?? 0.0; // Safer parsing
         final senderUsername = parts.length >= 5 ? parts[4] : 'Unknown';
 
         final entry = FileHistoryEntry(
@@ -244,6 +299,9 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
           fileSize: (fileSizeMB * 1024 * 1024).toInt(),
           uploadSpeedMBps: speedMBps,
         );
+
+        // Check mounted again before setState
+        if (!mounted) return;
         setState(() {
           _fileHistory.addEntry(entry);
         });
@@ -255,68 +313,91 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
           fileSizeMB: fileSizeMB,
           speedMBps: speedMBps,
         );
+      } else {
+        zprint("⚠️ Received invalid file info format: $fileInfo");
       }
     });
   }
 
   @override
   void dispose() {
+    zprint("👋 HomePage disposing...");
     if (_isDesktop) {
       trayManager.removeListener(this);
       windowManager.removeListener(this);
     }
-    _networkService.dispose();
+    _networkService.dispose(); // Ensure network service resources are cleaned up
+    zprint("✅ HomePage disposed.");
     super.dispose();
   }
 
   @override
   void onWindowClose() async {
     // Just hide the window instead of closing the app
+    zprint("🔒 Window close requested, hiding window.");
     await windowManager.hide();
   }
 
   @override
   void onTrayIconMouseDown() async {
+    zprint("🖱️ Tray icon clicked (left).");
     // Show and focus window when tray icon is clicked
     final isVisible = await windowManager.isVisible();
     if (!isVisible) {
+      zprint(" M-> Showing window.");
       await windowManager.show();
+      await windowManager.focus();
+    } else {
+      // Optionally, bring to front if already visible but not focused
+      zprint(" M-> Window already visible, focusing.");
       await windowManager.focus();
     }
   }
 
-  // Added method to handle right-click on tray icon (crucial for Windows)
+  // Added method to handle right-click on tray icon (crucial for Windows/Linux)
   @override
   void onTrayIconRightMouseDown() {
+    zprint("🖱️ Tray icon clicked (right).");
     // Explicitly show the context menu on right-click
     trayManager.popUpContextMenu();
   }
 
   void _updateUser(User updatedUser) {
+    // SettingsService now handles saving only the relevant fields
+    if (!mounted) return;
     setState(() {
       _currentUser = updatedUser;
     });
     _networkService.setUsername(updatedUser.username);
+    // Update profile image path in network service if it changed
+    _networkService.setProfileImagePath(updatedUser.profileImage);
     _settingsService.saveSettings(updatedUser);
   }
 
   List<Widget> _getScreens() {
+    // Ensure _currentUser is not null before building screens dependent on it
+    if (_currentUser == null) {
+      // This shouldn't happen if initialized correctly, but handle defensively
+      return [
+        const Center(child: Text("Error: User data not available.")),
+        const Center(child: CircularProgressIndicator()), // Home placeholder
+        const Center(child: Text("Error: User data not available.")),
+      ];
+    }
     return [
       HistoryScreen(history: _fileHistory),
       HomeContent(networkService: _networkService),
-      if (_currentUser != null)
-        SettingsScreen(
-          user: _currentUser!,
-          onUserUpdated: _updateUser,
-        )
-      else
-        const Center(child: CircularProgressIndicator()),
+      SettingsScreen(
+        user: _currentUser!,
+        onUserUpdated: _updateUser,
+      )
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_isLoading || _currentUser == null) {
+      // Check for currentUser null as well
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(),
@@ -334,20 +415,32 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
               height: 48,
             ),
             const SizedBox(width: 16),
-            Column(
-              children: [
-                const Text('Woxxy - LAN File Sharing'),
-                const SizedBox(width: 16),
-                Row(children: [
-                  if (_networkService.currentIpAddress != null)
-                    Text(
-                      'IP: ${_networkService.currentIpAddress}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  const SizedBox(width: 16),
-                  Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
-                ]),
-              ],
+            // Use Expanded to prevent overflow if IP/Version is long
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, // Align text left
+                children: [
+                  const Text(
+                    'Woxxy - LAN File Sharing',
+                    overflow: TextOverflow.ellipsis, // Prevent title overflow
+                  ),
+                  const SizedBox(height: 4), // Add space between title and info row
+                  Row(children: [
+                    if (_networkService.currentIpAddress != null)
+                      // Use Flexible to allow text wrapping or ellipsis for IP
+                      Flexible(
+                        child: Text(
+                          'IP: ${_networkService.currentIpAddress}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    // Add spacing only if IP is shown
+                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16),
+                    Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
+                  ]),
+                ],
+              ),
             ),
           ],
         ),
@@ -355,9 +448,12 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       body: screens[_selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() {
-          _selectedIndex = index;
-        }),
+        onDestinationSelected: (index) {
+          if (!mounted) return; // Check mounted before setState
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.history),

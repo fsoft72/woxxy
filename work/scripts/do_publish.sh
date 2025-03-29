@@ -18,21 +18,35 @@ then
     exit 1
 fi
 
-# Check that the flag '--new' is provided
-newFlag=$1
-if [ "$newFlag" != "" ]; then
-    if [ "$newFlag" != "--new" ]; then
-        echo "Usage: ./do_publish.sh --new"
-        exit 1
-    fi
-fi
+# Parse these parameters:
+#
+# --new: create a new release
+# --force: force the release even if it is not on master branch
+
+newFlag=""
+forceFlag=""
+
+while [ "$1" != "" ]; do
+    case $1 in
+        --new )         newFlag="--new"
+                        ;;
+        --force )       forceFlag="--force"
+                        ;;
+        * )             echo "Usage: ./do_publish.sh --new [--force]"
+                        exit 1
+    esac
+    shift
+done
+
 # This script only works if we are on the 'master' branch
 
-# Check the current branch
-branch=$(git rev-parse --abbrev-ref HEAD)
-if [ "$branch" != "master" ]; then
-    echo "You must be on the 'master' branch to publish a new release."
-    exit 1
+if [ "$forceFlag" != "--force" ]; then
+    # Check if we are on the 'master' branch
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    if [ "$branch" != "master" ]; then
+        echo "You must be on the 'master' branch to publish a new release."
+        exit 1
+    fi
 fi
 
 # Check that key.properties exists

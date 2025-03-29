@@ -2,7 +2,7 @@ name: woxxy
 description: LAN File Sharing App
 publish_to: 'none'
 
-version: 0.2.5
+version: 0.3.1
 
 environment:
   sdk: '>=3.2.3 <4.0.0'
