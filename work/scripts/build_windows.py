@@ -56,7 +56,11 @@ def zip_release_folder():
 
 
 def move_zip_to_desktop():
-    os.unlink(os.path.join(os.path.expanduser("~"), "Desktop", FINAL_ZIP))
+    try:
+        os.unlink(os.path.join(os.path.expanduser("~"), "Desktop", FINAL_ZIP))
+    except FileNotFoundError:
+        pass
+
     os.rename(FINAL_ZIP, os.path.join(os.path.expanduser("~"), "Desktop", FINAL_ZIP))
 
 
