@@ -1,4 +1,3 @@
-// ignore: unused_import
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -87,7 +86,8 @@ class _HomeContentState extends State<HomeContent> {
                   final peer = peers[index];
                   zprint('🎭 [Avatar UI] Getting avatar for peer: ${peer.name} (${peer.id})');
                   final peerAvatar = _avatarStore.getAvatar(peer.id); // Use peer.id instead of address
-                  zprint('🖼️ [Avatar UI] Avatar ${peerAvatar != null ? 'found' : 'not found'} for ${peer.name}');
+                  zprint(
+                      '🖼️ [Avatar UI] Avatar ${peerAvatar != null ? 'found' : 'not found'} for ${peer.name} (ID: ${peer.id})');
 
                   return ListTile(
                     leading: SizedBox(

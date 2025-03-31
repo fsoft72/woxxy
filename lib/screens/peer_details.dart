@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../models/peer.dart';
+import '../models/avatars.dart'; // Import AvatarStore
+import 'dart:ui' as ui; // Import ui for RawImage
 import '../services/network_service.dart';
 import '../funcs/utils.dart';
 import 'dart:collection'; // Import for Queue
 
-// Add this for XFile class
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart'; // Add this import
 
@@ -50,19 +51,16 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
   bool _transferCancelled = false;
   StreamSubscription<dynamic>? _progressSubscription;
 
-  // Queue management
   final Queue<_FileTransferItem> _fileQueue = Queue<_FileTransferItem>();
   List<_FileTransferItem> _completedFiles = [];
   bool _processingQueue = false;
   int _totalFilesCompleted = 0;
 
-  // Track active transfer ID for cancellation
   String? _activeTransferId;
 
   @override
   void dispose() {
     _progressSubscription?.cancel();
-    // Ensure active transfers are cancelled when navigating away
     if (_activeTransferId != null) {
       widget.networkService.cancelTransfer(_activeTransferId!);
       _activeTransferId = null;
@@ -96,20 +94,16 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         final stopwatch = Stopwatch()..start();
         final fileSize = fileItem.size;
 
-        // Make sure to cancel any existing subscription
         _progressSubscription?.cancel();
         _progressSubscription = null;
 
-        // Cancel any active transfer before starting a new one
         if (_activeTransferId != null) {
           widget.networkService.cancelTransfer(_activeTransferId!);
           _activeTransferId = null;
         }
 
-        // create the transfer ID
         _activeTransferId = generateTransferId(fileItem.name);
 
-        // Send the file with real progress tracking and get transfer ID
         await widget.networkService.sendFile(
           _activeTransferId!,
           fileItem.path,
@@ -131,7 +125,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           },
         );
 
-        // File transfer completed successfully
         stopwatch.stop();
 
         if (mounted && !_transferCancelled) {
@@ -140,11 +133,9 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             _transferComplete = true;
             _transferSpeed = (fileSize / stopwatch.elapsed.inMilliseconds * 1000 / (1024 * 1024)).toStringAsFixed(2);
 
-            // Update status for this file
             fileItem.isCompleted = true;
             _totalFilesCompleted++;
 
-            // Move from queue to completed list
             _fileQueue.removeFirst();
             _completedFiles.add(fileItem);
           });
@@ -158,7 +149,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)',
           );
 
-          // Brief pause between files
           await Future.delayed(const Duration(milliseconds: 500));
         }
       } catch (e, stackTrace) {
@@ -166,16 +156,13 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         zprint('📑 Stack trace: $stackTrace');
         _progressSubscription?.cancel();
 
-        // Clear active transfer ID if there was an error
         _activeTransferId = null;
 
         if (mounted && !_transferCancelled) {
           setState(() {
-            // Mark this file as failed
             fileItem.isFailed = true;
             fileItem.errorMessage = e.toString();
 
-            // Move to completed list but marked as failed
             _fileQueue.removeFirst();
             _completedFiles.add(fileItem);
           });
@@ -185,19 +172,16 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             'Error sending ${fileItem.name}: $e',
           );
 
-          // Brief pause before moving to next file
           await Future.delayed(const Duration(seconds: 1));
         }
       }
     }
 
-    // Queue is empty or transfer was cancelled
     if (mounted) {
       setState(() {
         _processingQueue = false;
         _activeTransferId = null; // Clear the transfer ID
         if (_fileQueue.isEmpty) {
-          // Only hide the progress view if there are no remaining files
           _isTransferring = false;
         }
       });
@@ -209,10 +193,8 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
     zprint('📁 Adding ${files.length} files to queue');
 
-    // Reset the transfer cancelled flag and related UI state when new files are added
     setState(() {
       _transferCancelled = false;
-      // Also ensure the UI knows we're ready to show transfer status
       if (_isTransferring == false) {
         _isTransferring = true;
         _transferProgress = 0;
@@ -240,7 +222,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     zprint('📁 Queue now contains ${_fileQueue.length} files');
 
     if (queueWasEmpty) {
-      // Start processing if the queue was previously empty
       _processFileQueue();
     }
   }
@@ -250,7 +231,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
     zprint("=== CANCEL: $_activeTransferId");
 
-    // Cancel the active network transfer
     if (_activeTransferId != null) {
       widget.networkService.cancelTransfer(_activeTransferId!);
       _activeTransferId = null;
@@ -260,9 +240,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       _transferCancelled = true;
       _isTransferring = false;
       _fileQueue.clear();
-      // Reset the completed files counter so new transfers start fresh
       _totalFilesCompleted = 0;
-      // Optionally clear completed files list to reset UI state completely
       _completedFiles = [];
     });
     showSnackbar(context, 'All transfers cancelled');
@@ -391,30 +369,102 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Peer Details',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 16),
-            Text('Name: ${widget.peer.name}'),
-            Text('IP Address: ${widget.peer.address.address}'),
-            Text('Port: ${widget.peer.port}'),
-            const SizedBox(height: 32),
-
-            // File transfer progress indicator
+            _buildProfileHeader(),
+            const Divider(height: 32),
             if (_isTransferring && !_transferCancelled) _buildTransferProgressIndicator(),
-
-            // Queue info
             if (_fileQueue.isNotEmpty || _completedFiles.isNotEmpty) _buildQueueInfo(),
-
             const SizedBox(height: 16),
-
             Expanded(
               child: _buildFileSelectionArea(),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildProfileHeader() {
+    final initials = widget.peer.name.isNotEmpty
+        ? widget.peer.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join()
+        : '?';
+
+    // Get the avatar using peer.id
+    final ui.Image? peerAvatar = AvatarStore().getAvatar(widget.peer.id);
+    zprint(
+        '🖼️ [Peer Details] Avatar for ${widget.peer.name} (ID: ${widget.peer.id}) ${peerAvatar != null ? 'found' : 'not found'}');
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Conditional display: Avatar or Initials
+        if (peerAvatar != null)
+          ClipOval(
+            child: RawImage(
+              image: peerAvatar,
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+            ),
+          )
+        else
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary, // Use theme color for background
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                initials.toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.peer.name,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.computer, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      widget.peer.address.address,
+                      style: const TextStyle(color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.settings_ethernet, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Port: ${widget.peer.port}',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

@@ -2,10 +2,6 @@ import 'dart:async';
 import 'package:rxdart/rxdart.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'peer.dart';
-// REMOVE direct NetworkService import here if it causes issues,
-// but keep it if PeerManager needs other parts of NetworkService directly.
-// For now, we only need the Peer type.
-// import '../services/network_service.dart';
 import '../models/avatars.dart'; // Import AvatarStore
 
 class _PeerStatus {
@@ -64,15 +60,14 @@ class PeerManager {
     _cleanupTimer?.cancel();
     _cleanupTimer = Timer.periodic(_peerTimeout, (timer) {
       final now = DateTime.now();
-      final initialCount = _peers.length;
-      // zprint('🧹 Running peer cleanup check. Current count: $initialCount');
 
       bool changed = false;
       _peers.removeWhere((key, status) {
         final timeSinceLastSeen = now.difference(status.lastSeen);
         final shouldRemove = timeSinceLastSeen > _peerTimeout;
         if (shouldRemove) {
-          zprint('🗑️ Removing inactive peer: ${status.peer.name} (${status.peer.id}) - Last seen: ${timeSinceLastSeen.inSeconds}s ago');
+          zprint(
+              '🗑️ Removing inactive peer: ${status.peer.name} (${status.peer.id}) - Last seen: ${timeSinceLastSeen.inSeconds}s ago');
           changed = true;
         }
         return shouldRemove;
