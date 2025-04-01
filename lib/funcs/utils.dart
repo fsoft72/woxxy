@@ -18,7 +18,7 @@ String generateTransferId(String filename) {
   int date = DateTime.now().millisecondsSinceEpoch;
 
   // calc md5 hash
-  String s = '${filename}_${date}';
+  String s = '${filename}_$date';
 
   return md5.convert(utf8.encode(s)).toString();
 }
