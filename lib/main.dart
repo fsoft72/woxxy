@@ -56,6 +56,18 @@ void main() async {
     FileTransferManager(downloadPath: downloadPath);
     zprint('✅ Download directory setup complete');
 
+    zprint('🖼️ Setting up avatars cache directory...');
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      final avatarsPath = path.join(supportDir.path, 'avatars');
+      await Directory(avatarsPath).create(recursive: true);
+      await AvatarStore().init(avatarsPath); // Initialize AvatarStore with the path
+      zprint('✅ Avatars cache directory ensured: avatarsPath');
+    } catch (e) {
+      zprint('❌ Error creating avatars cache directory: e');
+      // Application can likely continue without avatar caching, but log the error.
+    }
+
     // Only initialize window_manager and tray on desktop platforms
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       await windowManager.ensureInitialized();
