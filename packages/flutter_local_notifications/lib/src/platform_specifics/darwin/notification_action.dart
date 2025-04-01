@@ -23,8 +23,7 @@ class DarwinNotificationAction {
   factory DarwinNotificationAction.plain(
     String identifier,
     String title, {
-    Set<DarwinNotificationActionOption> options =
-        const <DarwinNotificationActionOption>{},
+    Set<DarwinNotificationActionOption> options = const <DarwinNotificationActionOption>{},
   }) =>
       DarwinNotificationAction._(
         _DarwinNotificationActionType.plain,
@@ -39,8 +38,7 @@ class DarwinNotificationAction {
     String title, {
     required String buttonTitle,
     String? placeholder,
-    Set<DarwinNotificationActionOption> options =
-        const <DarwinNotificationActionOption>{},
+    Set<DarwinNotificationActionOption> options = const <DarwinNotificationActionOption>{},
   }) =>
       DarwinNotificationAction._(
         _DarwinNotificationActionType.text,
@@ -61,6 +59,7 @@ class DarwinNotificationAction {
   });
 
   /// Notification Action type.
+  // ignore: library_private_types_in_public_api
   final _DarwinNotificationActionType type;
 
   /// The unique string that your app uses to identify the action.

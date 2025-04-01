@@ -28,8 +28,6 @@ String generateTransferId(String filename) {
 Future<void> openFileLocation(String filePath) async {
   if (filePath.isEmpty) return;
 
-  final File file = File(filePath);
-
   final String dirPath = path.dirname(filePath);
 
   try {

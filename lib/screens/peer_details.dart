@@ -10,6 +10,7 @@ import '../services/network_service.dart';
 import '../funcs/utils.dart';
 import 'dart:collection'; // Import for Queue
 
+// ignore: depend_on_referenced_packages
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart'; // Add this import
 
@@ -577,12 +578,12 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
               if (_fileQueue.isNotEmpty)
                 TextButton(
                   onPressed: _cancelAllTransfers,
-                  child: const Text('Cancel All'),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
+                  child: const Text('Cancel All'),
                 ),
             ],
           ),

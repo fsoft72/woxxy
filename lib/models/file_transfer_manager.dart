@@ -53,7 +53,8 @@ class FileTransferManager {
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
   /// `key` is typically the source IP address.
-  Future<bool> add(String key, String original_filename, int size, String senderUsername, Map<String, dynamic> metadata, // Accept metadata
+  Future<bool> add(String key, String originalFilename, int size, String senderUsername,
+      Map<String, dynamic> metadata, // Accept metadata
       {String? md5Checksum}) async {
     // md5Checksum can be derived from metadata
     try {
@@ -65,13 +66,13 @@ class FileTransferManager {
         // await handleSocketClosure(key); // Clean up the old one first?
       }
 
-      zprint("➕ Adding transfer for '$original_filename' from '$key'");
+      zprint("➕ Adding transfer for '$originalFilename' from '$key'");
       // md5Checksum from metadata overrides the optional parameter if present
       final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
 
       FileTransfer? transfer = await FileTransfer.start(
         key, // Use the provided key (source IP)
-        original_filename,
+        originalFilename,
         size,
         downloadPath,
         senderUsername, // Corrected parameter name if it was mismatched
@@ -95,10 +96,10 @@ class FileTransferManager {
 
   /// Writes data to an existing file transfer identified by `key`.
   /// Returns false if the transfer doesn't exist.
-  Future<bool> write(String key, List<int> binary_data) async {
+  Future<bool> write(String key, List<int> binaryData) async {
     try {
       if (files.containsKey(key)) {
-        await files[key]!.write(binary_data);
+        await files[key]!.write(binaryData);
         return true;
       }
       zprint("⚠️ Attempted to write to non-existent transfer key: $key");

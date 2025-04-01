@@ -92,12 +92,12 @@ class PeerManager {
 
   void addPeer(Peer peer, String currentIpAddress, int currentPort) {
     // Peer ID is now the IP address
-    zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
     // No need to check against currentIpAddress here, as NetworkService listener already filters self-announcements.
 
     final bool isNewPeer = !_peers.containsKey(peer.id);
 
     if (isNewPeer) {
+      zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
       zprint('✅ Adding NEW peer: ${peer.name} (${peer.id})');
       _peers[peer.id] = _PeerStatus(peer);
       _peerController.add(currentPeers); // Notify listeners about the new peer

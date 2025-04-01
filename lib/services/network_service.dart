@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
-import 'package:woxxy/models/user.dart';
 import 'package:woxxy/services/settings_service.dart';
 
 import '../models/avatars.dart';

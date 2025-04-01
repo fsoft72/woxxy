@@ -96,7 +96,8 @@ class FileTransfer {
 
       // Create file and get sink
       File file = File(finalPath);
-      IOSink sink = file.openWrite(mode: FileMode.writeOnlyAppend); // Use Append initially? Or WriteOnly? WriteOnly seems safer for new file.
+      IOSink sink = file.openWrite(
+          mode: FileMode.writeOnlyAppend); // Use Append initially? Or WriteOnly? WriteOnly seems safer for new file.
       zprint("   Opened file sink for writing.");
 
       // Create and start stopwatch
@@ -272,7 +273,7 @@ class FileTransfer {
       zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
       filePath = path.join(
         directory,
-        '$baseName\_$counter$extension', // Append counter before extension
+        '${baseName}_$counter$extension', // Append counter before extension
       );
       counter++;
     }

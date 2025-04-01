@@ -146,7 +146,6 @@ class DiscoveryService {
       zprint('❌ Critical error in discovery listener socket: $error\n$stackTrace');
       _discoverySocket = null;
       _discoveryTimer?.cancel();
-      // TODO: Implement recovery logic? Restart the listener?
     }, onDone: () {
       zprint("✅ Discovery listener socket closed (onDone).");
       _discoverySocket = null;

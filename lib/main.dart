@@ -16,7 +16,6 @@ import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'models/avatars.dart'; // Keep AvatarStore import
 
 void main() async {
   try {
