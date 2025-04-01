@@ -826,12 +826,17 @@ class NetworkService {
       return;
     }
     if (_avatarStore.hasAvatar(peer.id)) {
-      // zprint('🖼️ Avatar already present for ${peer.name} (${peer.id}). Skipping request.');
+      zprint('🖼️ (CHECK 1) Avatar already present for ${peer.name} (${peer.id}). Skipping request.');
       return;
     }
     if (_discoverySocket == null) {
       zprint('⚠️ Cannot request avatar: Discovery socket is null.');
       return;
+    }
+
+    if (_avatarStore.hasAvatar(peer.id)) {
+      zprint('🖼️ (CHECK 2) Avatar already present for ${peer.name} (${peer.id}). Skipping request.');
+      return; // Avatar already exists, no need to request
     }
 
     zprint('❓ Requesting avatar from ${peer.name} (${peer.id}) at ${peer.address.address}:${_discoveryPort}');
