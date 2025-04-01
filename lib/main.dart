@@ -99,7 +99,9 @@ void main() async {
 
       try {
         // Setup tray icon and menu
-        String iconPath = Platform.isWindows ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico') : 'assets/icons/head.png'; // Use PNG for Linux/Mac
+        String iconPath = Platform.isWindows
+            ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico')
+            : 'assets/icons/head.png'; // Use PNG for Linux/Mac
 
         // For Windows, ensure we fall back to .png if .ico doesn't exist
         if (Platform.isWindows) {
@@ -371,6 +373,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     _networkService.setUsername(updatedUser.username);
     // Update profile image path in network service if it changed
     _networkService.setProfileImagePath(updatedUser.profileImage);
+    _networkService.setEnableMd5Checksum(updatedUser.enableMd5Checksum);
     _settingsService.saveSettings(updatedUser);
   }
 

@@ -1,46 +1,53 @@
-// ignore_for_file: non_constant_identifier_names, avoid_print
-
 import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/models/notification_manager.dart';
 
-typedef OnTransferComplete = void Function(FileTransfer);
+/// Callback signature for when a FileTransfer completes successfully.
+typedef OnTransferComplete = void Function(FileTransfer transfer);
 
-/// Represents a single file transfer operation with progress tracking
+/// Represents an active file transfer being received.
+/// Manages the file writing, progress tracking, and optional MD5 verification.
 class FileTransfer {
-  /// IP address of the source sending the file (used as the key in FileTransferManager)
+  /// The IP address of the sender. Used as the key in FileTransferManager.
   final String source_ip;
 
-  /// The filename on the local filesystem where the file will be saved
+  /// The final, potentially unique, path where the file is being saved.
   final String destination_filename;
 
-  /// Total size of the file in bytes, as reported in metadata
+  /// The total expected size of the file in bytes.
   final int size;
 
-  /// File sink for writing the incoming data
+  /// The sink used to write incoming data to the destination file.
   final IOSink file_sink;
 
-  /// Stopwatch to measure the transfer duration
+  /// A stopwatch to measure the duration of the transfer.
   final Stopwatch duration;
 
-  /// Username of the sender, as reported in metadata
+  /// The username provided by the sender.
   final String senderUsername;
 
-  /// Callback when transfer completes successfully (after end() returns true)
+  /// An optional callback function invoked when the transfer completes successfully
+  /// *after* all checks (including MD5 if applicable) have passed.
   final OnTransferComplete? onTransferComplete;
 
-  /// Expected MD5 checksum of the file, as reported in metadata
+  /// The expected MD5 checksum string received from the sender's metadata.
+  /// Can be a valid MD5 hash, "no-check", or "CHECKSUM_ERROR".
   final String? expectedMd5;
 
-  /// Full metadata map received from sender at the beginning of the transfer
-  final Map<String, dynamic> metadata; // Add metadata here
+  /// Metadata associated with the file transfer, received from the sender.
+  final Map<String, dynamic> metadata;
 
-  /// Buffer to store received data for checksum verification if MD5 is present
-  final List<int> _receivedData = [];
-  bool _calculatingMd5 = false; // Flag to indicate if we need to buffer for MD5
+  /// Buffer to hold received data *only* if MD5 calculation is needed.
+  /// Null if MD5 check is skipped.
+  List<int>? _receivedData;
 
+  /// Flag indicating if MD5 verification is required and possible for this transfer.
+  /// Determined based on the value of `expectedMd5`.
+  bool _calculatingMd5 = false;
+
+  /// Private constructor used by the static `start` method.
   FileTransfer._internal({
     required this.source_ip,
     required this.destination_filename,
@@ -48,21 +55,25 @@ class FileTransfer {
     required this.file_sink,
     required this.duration,
     required this.senderUsername,
-    required this.metadata, // Initialize metadata
+    required this.metadata,
     required this.expectedMd5,
     this.onTransferComplete,
   }) {
-    // Decide if we need to buffer data for MD5 check
-    // FIX: Add '!' after expectedMd5 when accessing isNotEmpty
-    _calculatingMd5 = expectedMd5 != null && expectedMd5!.isNotEmpty && expectedMd5 != "CHECKSUM_ERROR";
+    // Determine if we need to buffer and calculate MD5 based on the checksum string
+    _calculatingMd5 = expectedMd5 != null && expectedMd5 != "no-check" && expectedMd5 != "CHECKSUM_ERROR";
+
     if (_calculatingMd5) {
-      zprint(" M-> MD5 check required for $destination_filename. Buffering enabled.");
+      zprint(" M-> MD5 check required for '$destination_filename' (expected: $expectedMd5). Buffering enabled.");
+      _receivedData = []; // Initialize buffer only if MD5 calculation is needed
+    } else {
+      zprint(" M-> MD5 check skipped for '$destination_filename' (reason: $expectedMd5).");
     }
   }
 
-  /// Creates a new FileTransfer instance and prepares the file for writing.
-  /// Returns null if the file cannot be created.
-  /// `key` (source_ip) is the identifier used in FileTransferManager.
+  /// Creates and initializes a new FileTransfer instance.
+  ///
+  /// Generates a unique file path, opens a file sink, and starts the timer.
+  /// Returns the FileTransfer instance or null if an error occurs (e.g., file system error).
   static Future<FileTransfer?> start(
       String key, // Typically source IP
       String original_filename,
@@ -70,7 +81,7 @@ class FileTransfer {
       String downloadPath,
       String senderUsername,
       Map<String, dynamic> metadata, // Accept metadata map
-      String? expectedMd5, // Accept expected checksum
+      String? expectedMd5, // Accept expected checksum ("no-check", "CHECKSUM_ERROR", or hash)
       {OnTransferComplete? onTransferComplete}) async {
     try {
       zprint("🏁 Starting new file transfer preparation for '$original_filename' from '$key'");
@@ -78,28 +89,32 @@ class FileTransfer {
       zprint("   Size: $size bytes");
       zprint("   Sender: $senderUsername");
       zprint("   Expected MD5: $expectedMd5");
-      zprint("   Metadata: $metadata");
+      // zprint("   Metadata: $metadata"); // Can be verbose
 
-      // Ensure download directory exists
       Directory dir = Directory(downloadPath);
       if (!await dir.exists()) {
         zprint("   Creating download directory: $downloadPath");
         await dir.create(recursive: true);
       }
 
-      // Generate unique filename to avoid overwriting
+      // Ensure filename doesn't contain invalid characters before joining path
+      String sanitizedFilename = original_filename.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+      if (sanitizedFilename != original_filename) {
+        zprint("   ⚠️ Sanitized original filename: '$original_filename' -> '$sanitizedFilename'");
+      }
+
       String finalPath = await _generateUniqueFilePath(
         downloadPath,
-        original_filename,
+        sanitizedFilename, // Use sanitized name
       );
       zprint("   Unique destination path determined: $finalPath");
 
-      // Create file and get sink
       File file = File(finalPath);
-      IOSink sink = file.openWrite(mode: FileMode.writeOnlyAppend); // Use Append initially? Or WriteOnly? WriteOnly seems safer for new file.
+      // Open in writeOnly mode. Append is usually for logging or existing files.
+      // If the file exists due to race condition, writeOnly will overwrite.
+      IOSink sink = file.openWrite(mode: FileMode.writeOnly);
       zprint("   Opened file sink for writing.");
 
-      // Create and start stopwatch
       Stopwatch watch = Stopwatch()..start();
       zprint("   Stopwatch started.");
 
@@ -116,148 +131,193 @@ class FileTransfer {
       );
     } catch (e, s) {
       zprint('❌ Error creating FileTransfer for key $key: $e\n$s');
-      return null;
+      return null; // Indicate failure to create the transfer object
     }
   }
 
-  /// Writes binary data to the file sink. Buffers data if MD5 check is needed.
+  /// Writes a chunk of binary data to the file sink.
+  /// If MD5 calculation is enabled, data is also added to the internal buffer.
   Future<void> write(List<int> binary_data) async {
     try {
-      // If MD5 calculation is needed, buffer the data
-      if (_calculatingMd5) {
-        _receivedData.addAll(binary_data);
+      // If MD5 calculation is required, buffer the data
+      if (_calculatingMd5 && _receivedData != null) {
+        // Assertion check (optional): Ensures _receivedData is non-null when _calculatingMd5 is true
+        // assert(_receivedData != null, "_receivedData should not be null when _calculatingMd5 is true");
+        _receivedData!.addAll(binary_data);
       }
-      // Always write to the file sink
+      // Always write data to the file sink
       file_sink.add(binary_data);
-      // Avoid awaiting flush here for performance, rely on close() or closeOnSocketClosure()
-      // await file_sink.flush();
     } catch (e, s) {
       zprint('❌ Error writing chunk to file sink for $destination_filename: $e\n$s');
-      // Consider how to handle write errors - maybe close and delete?
-      // For now, rethrow to let the caller (NetworkService) handle it.
-      rethrow;
+      // Consider closing the sink and deleting the file here if a write error occurs
+      // await closeWithError(); // Example cleanup method
+      rethrow; // Rethrow to signal the error upwards
     }
   }
 
-  /// Safely closes the file sink when the connection is closed unexpectedly (onDone/onError).
-  /// Verifies MD5 if applicable and deletes the file if incomplete or checksum fails.
+  /// Cleans up the transfer when the underlying socket closes unexpectedly.
+  ///
+  /// Flushes and closes the file sink. If MD5 was required, it attempts verification
+  /// on the buffered data. If verification fails or wasn't possible, the potentially
+  /// incomplete/corrupted file is deleted.
   Future<void> closeOnSocketClosure() async {
     zprint("🔌 Closing file sink due to unexpected socket closure: $destination_filename");
     try {
-      // Ensure all buffered data is written before closing
       await file_sink.flush();
       await file_sink.close();
       duration.stop(); // Stop timer as transfer is definitively over (failed or succeeded partially)
       zprint('   File sink flushed and closed.');
 
-      // Check MD5 if required and data was buffered
-      if (_calculatingMd5) {
+      // Verify MD5 only if calculation was required and data was buffered
+      if (_calculatingMd5 && _receivedData != null) {
         zprint('   Verifying MD5 checksum on incomplete transfer...');
-        final actualMd5 = md5.convert(_receivedData).toString();
-        if (actualMd5 != expectedMd5) {
-          zprint('   ❌ MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
+        final actualMd5 = md5.convert(_receivedData!).toString();
+
+        if (expectedMd5 == "CHECKSUM_ERROR") {
+          zprint('   ⚠️ Sender reported checksum error. Deleting potentially corrupted file...');
+          await _deleteFile(); // Treat sender error as failure
+        } else if (actualMd5 != expectedMd5) {
+          zprint('   ❌ MD5 checksum MISMATCH on socket closure! Expected: $expectedMd5, Got: $actualMd5');
           zprint('   Deleting potentially corrupted file...');
           await _deleteFile();
-          return; // Exit after deleting
         } else {
-          zprint('   ✅ MD5 checksum MATCHED despite socket closure (transfer might be complete).');
-          // File is kept as it seems valid, even if socket closed early.
-          // Potentially trigger notification here? Or let end() handle it if called later?
-          // Let's assume only end() triggers notifications.
+          // MD5 matches what was expected, even though socket closed early.
+          // This *might* mean the transfer was actually complete right before closure.
+          // We keep the file in this specific case, but log a warning.
+          zprint('   ✅ MD5 checksum MATCHED despite socket closure. File kept, but transfer may be incomplete.');
+          // Decide if you want to call onTransferComplete here. Probably not, as it wasn't a clean end().
+          // onTransferComplete?.call(this); // Consider implications carefully
         }
       } else {
-        // No MD5 check needed or possible. Assume incomplete if socket closed early.
-        zprint('   No MD5 check required/possible. Assuming incomplete.');
-        zprint('   Deleting potentially incomplete file...');
+        // MD5 check was not required OR buffering didn't happen (shouldn't occur if _calculatingMd5 is true)
+        zprint('   No MD5 check required/possible. Deleting potentially incomplete file...');
         await _deleteFile();
       }
     } catch (e, s) {
       zprint('❌ Error closing/cleaning file sink on socket closure: $e\n$s');
-      // Attempt to delete the file even if closing/checking failed
+      // Attempt deletion as a fallback cleanup
       await _deleteFile();
+    } finally {
+      _receivedData = null; // Clear buffer regardless of outcome
     }
   }
 
-  /// Finalizes the transfer: closes the file, verifies MD5, calls completion callback, and triggers notification.
-  /// Returns `true` if the transfer is considered successful (file closed, MD5 matches if applicable).
-  /// Returns `false` if MD5 verification fails (file is deleted in this case).
+  /// Finalizes the file transfer cleanly.
+  ///
+  /// Flushes and closes the file sink, stops the timer. If MD5 verification
+  /// is required, calculates the checksum from buffered data and compares it
+  /// with the expected value. If successful, invokes the `onTransferComplete`
+  /// callback and shows a notification (unless it's an avatar).
+  ///
+  /// Returns `true` if the transfer finalized successfully (including MD5 check pass),
+  /// `false` otherwise (e.g., MD5 mismatch, sender error, file system error).
+  /// The file is deleted automatically on failure within this method.
   Future<bool> end() async {
     zprint("✅ Finalizing transfer for: $destination_filename");
-    bool success = false;
+    bool md5CheckPassed = false; // Assume failure initially if check is needed
+    bool md5CheckNeeded = _calculatingMd5; // Was check required?
+
     try {
-      // Ensure data is written and close the file sink
       await file_sink.flush();
       await file_sink.close();
       duration.stop(); // Stop the timer
       zprint('   File sink flushed and closed. Duration: ${duration.elapsedMilliseconds}ms');
 
-      // Verify MD5 checksum if required
-      if (_calculatingMd5) {
+      // Perform MD5 check only if it was required and data was buffered
+      if (md5CheckNeeded && _receivedData != null) {
         zprint('   Verifying final MD5 checksum...');
-        final actualMd5 = md5.convert(_receivedData).toString();
-        if (actualMd5 != expectedMd5) {
+        final actualMd5 = md5.convert(_receivedData!).toString();
+
+        if (expectedMd5 == "CHECKSUM_ERROR") {
+          zprint('   ❌ Final verification failed: Sender reported checksum calculation error.');
+          md5CheckPassed = false;
+        } else if (actualMd5 != expectedMd5) {
           zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
-          zprint('   Deleting corrupted file...');
-          await _deleteFile();
-          return false; // Indicate failure due to checksum mismatch
+          md5CheckPassed = false;
+        } else {
+          zprint('   ✅ Final MD5 checksum verified successfully.');
+          md5CheckPassed = true;
         }
-        zprint('   ✅ Final MD5 checksum verified successfully.');
-        success = true;
       } else {
-        zprint('   Skipping MD5 verification (not required or not possible).');
-        success = true; // Assume success if no MD5 check needed
+        // Check wasn't needed or buffering failed (shouldn't happen if md5CheckNeeded=true)
+        if (!md5CheckNeeded) {
+          zprint('   Skipping MD5 verification (not required).');
+          md5CheckPassed = true; // Success if check wasn't required
+        } else {
+          // This case indicates an internal issue (check needed but no buffer)
+          zprint('   ❌ MD5 check was required but data buffer is null. Finalization failed.');
+          md5CheckPassed = false;
+        }
       }
 
-      // If successful so far, call the completion callback and show notification
-      if (success) {
+      // --- Post-Verification Actions ---
+      if (md5CheckPassed) {
+        // MD5 passed or wasn't needed, proceed with completion steps
         onTransferComplete?.call(this); // Call internal completion callback (e.g., for history add)
 
-        // Trigger user notification only for successful, non-avatar files
+        // Show notification only for non-avatar files
         final transferType = metadata['type'] as String? ?? 'FILE';
         if (transferType != 'AVATAR_FILE') {
-          NotificationManager.instance.showFileReceivedNotification(
-            filePath: destination_filename,
-            senderUsername: senderUsername,
-            fileSizeMB: size / (1024 * 1024),
-            speedMBps: getSpeedMBps(),
-          );
+          // Use NotificationManager safely
+          try {
+            await NotificationManager.instance.showFileReceivedNotification(
+              filePath: destination_filename,
+              senderUsername: senderUsername,
+              fileSizeMB: size / (1024 * 1024),
+              speedMBps: getSpeedMBps(),
+            );
+          } catch (notifError) {
+            zprint("⚠️ Error showing notification: $notifError");
+          }
         } else {
           zprint("   Skipping notification for AVATAR_FILE type.");
         }
+        zprint("✅ Transfer finalized successfully (MD5 check passed or skipped).");
+        _receivedData = null; // Clear buffer on success
+        return true; // Indicate overall success
+      } else {
+        // MD5 check failed (mismatch or sender error)
+        zprint('   Deleting corrupted/failed file due to MD5 check failure...');
+        await _deleteFile();
+        _receivedData = null; // Clear buffer on failure
+        return false; // Indicate failure
       }
-
-      return success; // Return true if closed and MD5 passed (or wasn't needed)
     } catch (e, s) {
       zprint('❌ Error finalizing transfer or closing file: $e\n$s');
-      // Attempt to delete the file as finalization failed
+      // Attempt deletion on unexpected error during finalization
       await _deleteFile();
+      _receivedData = null; // Clear buffer on error
       return false; // Indicate failure
     }
   }
 
-  /// Helper method to safely delete the destination file.
+  /// Safely deletes the destination file associated with this transfer.
   Future<void> _deleteFile() async {
     try {
       final file = File(destination_filename);
       if (await file.exists()) {
         await file.delete();
         zprint("   🗑️ Deleted file: $destination_filename");
+      } else {
+        zprint("   ℹ️ File not found for deletion (already deleted?): $destination_filename");
       }
     } catch (e) {
       zprint("   ❌ Error deleting file $destination_filename: $e");
     }
   }
 
-  /// Calculate transfer speed in MB/s based on total size and elapsed time.
+  /// Calculates the transfer speed in Megabytes per second (MB/s).
+  /// Returns 0.0 if duration or size is zero or negative.
   double getSpeedMBps() {
     final elapsedSeconds = duration.elapsedMilliseconds / 1000.0;
     if (elapsedSeconds <= 0 || size <= 0) return 0.0;
-    // Speed = (Total Bytes / Elapsed Seconds) / Bytes per MB
+    // Speed = (Total Bytes / Time in Seconds) / Bytes per Megabyte
     return (size / elapsedSeconds) / (1024 * 1024);
   }
 
-  /// Helper method to generate a unique filename if the target file already exists.
-  /// Appends _1, _2, etc., before the extension.
+  /// Generates a unique file path within the target directory.
+  /// If a file with the original name exists, it appends `_1`, `_2`, etc.,
+  /// before the extension until a unique name is found.
   static Future<String> _generateUniqueFilePath(
     String directory,
     String originalFilename,
@@ -267,9 +327,16 @@ class FileTransfer {
     String filePath = path.join(directory, originalFilename);
     int counter = 1;
 
-    // Use async exists check
+    // Loop while a file at the current filePath exists
     while (await File(filePath).exists()) {
-      zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
+      // This check prevents infinite loops if file checking fails unexpectedly, though unlikely.
+      if (counter > 999) {
+        // Safety break
+        zprint("   ⚠️ Could not generate unique filename after 999 attempts for '$originalFilename'. Using timestamp.");
+        filePath = path.join(directory, '${baseName}_${DateTime.now().millisecondsSinceEpoch}$extension');
+        break;
+      }
+      // zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
       filePath = path.join(
         directory,
         '$baseName\_$counter$extension', // Append counter before extension
@@ -277,6 +344,7 @@ class FileTransfer {
       counter++;
     }
     if (counter > 1) {
+      // Log only if a new name was actually generated
       zprint("   Generated unique name: $filePath");
     }
     return filePath;

@@ -14,7 +14,6 @@ import '../services/settings_service.dart'; // To get profile image path
 import 'package:path/path.dart' as path; // Keep path import
 import '../models/user.dart'; // To get profile image path
 
-/// Callback function type for file transfer progress updates
 typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
 
 class NetworkService {
@@ -23,7 +22,6 @@ class NetworkService {
   static const Duration _pingInterval = Duration(seconds: 5);
 
   final _fileReceivedController = StreamController<String>.broadcast();
-  // Instantiate PeerManager here - this is safe now as PeerManager no longer instantiates NetworkService
   final _peerManager = PeerManager();
   final _avatarStore = AvatarStore(); // Add AvatarStore instance
 
@@ -32,10 +30,9 @@ class NetworkService {
   String? currentIpAddress;
   RawDatagramSocket? _discoverySocket;
   String _currentUsername = 'WoxxyUser'; // Default username
-  // Removed _currentUserId
   String? _profileImagePath; // Store path to own profile image
+  bool _enableMd5Checksum = true; // Store checksum preference locally
 
-  // Active outbound transfers - for cancellation support
   final Map<String, Socket> _activeTransfers = {};
 
   Stream<String> get onFileReceived => _fileReceivedController.stream;
@@ -48,7 +45,6 @@ class NetworkService {
       currentIpAddress = await _getIpAddress();
       if (currentIpAddress == null) {
         zprint("❌ FATAL: Could not determine IP address. Network service cannot start.");
-        // Optionally, notify the user or handle this state gracefully
         return; // Prevent further initialization
       }
       zprint('🚀 Starting network service on IP: $currentIpAddress');
@@ -62,12 +58,9 @@ class NetworkService {
       _discoverySocket!.broadcastEnabled = true;
       zprint('📡 Discovery socket bound to port $_discoveryPort');
 
-      // Load profile image path AFTER IP is known, as IP is now the ID
       await _loadCurrentUserDetails();
 
-      // *** Set the callback in PeerManager ***
       _peerManager.setRequestAvatarCallback(requestAvatar);
-      // **************************************
 
       _startDiscoveryListener();
       await _startServer();
@@ -75,7 +68,6 @@ class NetworkService {
       _peerManager.startPeerCleanup(); // Start removing inactive peers
     } catch (e, s) {
       zprint('❌ Error starting network service: $e\n$s');
-      // Rethrow or handle the error appropriately in the UI
       rethrow;
     }
   }
@@ -86,11 +78,7 @@ class NetworkService {
     _discoveryTimer?.cancel();
     await _server?.close();
     _discoverySocket?.close();
-    // Don't close _fileReceivedController if it might be listened to elsewhere,
-    // or ensure listeners are removed before closing. Let's assume it's managed by HomePage.
-    // await _fileReceivedController.close();
 
-    // Close any active transfer sockets
     for (final socket in _activeTransfers.values) {
       try {
         socket.destroy();
@@ -112,17 +100,17 @@ class NetworkService {
     _updateDiscoveryMessage(); // Update broadcast if username changes
   }
 
-  // Add this method to update profile image path dynamically
   void setProfileImagePath(String? imagePath) {
     _profileImagePath = imagePath;
     zprint("🖼️ Profile image path updated: $_profileImagePath");
-    // Optional: If profile image changes, maybe rebroadcast or notify peers?
-    // For simplicity, we'll rely on the periodic discovery broadcast.
   }
 
-  // Load User profile image path initially
+  void setEnableMd5Checksum(bool enabled) {
+    _enableMd5Checksum = enabled;
+    zprint(" M-> MD5 Checksum preference updated: $_enableMd5Checksum");
+  }
+
   Future<void> _loadCurrentUserDetails() async {
-    // Loads username and profile image path. IP is already set.
     final settings = SettingsService();
     final user = await settings.loadSettings();
     _setInternalUserDetails(user);
@@ -132,14 +120,12 @@ class NetworkService {
     try {
       final info = NetworkInfo();
       final wifiIP = await info.getWifiIP();
-      // Prioritize WiFi IP as it's most common for LAN scenarios
       if (wifiIP != null && wifiIP.isNotEmpty && wifiIP != '0.0.0.0') {
         zprint("✅ Found WiFi IP: $wifiIP");
         return wifiIP;
       }
       zprint("⚠️ WiFi IP not found or invalid ($wifiIP). Checking other interfaces...");
 
-      // Fallback to checking network interfaces
       final interfaces = await NetworkInterface.list(
         includeLoopback: false,
         includeLinkLocal: false, // Usually exclude link-local (169.254.x.x)
@@ -152,15 +138,39 @@ class NetworkService {
         zprint("  - Interface: ${interface.name}");
         for (var addr in interface.addresses) {
           zprint("    - Address: ${addr.address}");
-          // Basic sanity check for private IP ranges or potentially valid public IPs
-          // Avoid 127.0.0.1 (already excluded by includeLoopback)
-          // Avoid 169.254.x.x (already excluded by includeLinkLocal)
-          // Check if it's not obviously invalid like 0.0.0.0
-          if (addr.address != '0.0.0.0' && !addr.address.startsWith('169.254')) {
+          // Basic check for private IP ranges, adjust as needed
+          if (addr.address != '0.0.0.0' &&
+              !addr.address.startsWith('169.254') &&
+              (addr.address.startsWith('192.168.') ||
+                  addr.address.startsWith('10.') ||
+                  addr.address.startsWith('172.'))) {
+            // Refine 172 check (172.16.0.0 to 172.31.255.255)
+            if (addr.address.startsWith('172.')) {
+              var parts = addr.address.split('.');
+              if (parts.length == 4) {
+                var secondOctet = int.tryParse(parts[1]) ?? -1;
+                if (secondOctet < 16 || secondOctet > 31) {
+                  continue; // Skip if not in 172.16-172.31 range
+                }
+              } else {
+                continue; // Skip invalid format
+              }
+            }
             zprint("✅ Using IP from interface ${interface.name}: ${addr.address}");
             return addr.address;
           }
         }
+      }
+
+      // Fallback: If no private IP found, maybe take the first non-loopback/link-local? Risky.
+      if (interfaces.isNotEmpty && interfaces.first.addresses.isNotEmpty) {
+        final firstAddr = interfaces.first.addresses.firstWhere(
+            (addr) => addr.address != '0.0.0.0' && !addr.address.startsWith('169.254'),
+            orElse: () => interfaces.first.addresses.first // Last resort, might be public IP
+            );
+        zprint(
+            "⚠️ No private IP found, falling back to first suitable address: ${firstAddr.address} from ${interfaces.first.name}");
+        return firstAddr.address;
       }
 
       zprint('❌ Could not determine a suitable IP address.');
@@ -171,12 +181,12 @@ class NetworkService {
     }
   }
 
-  // Helper to set details and update profile image path
   void _setInternalUserDetails(User user) {
-    // IP Address (currentIpAddress) is set before this is called
     _currentUsername = user.username.isNotEmpty ? user.username : "WoxxyUser";
     _profileImagePath = user.profileImage;
-    zprint('👤 NetworkService User Details Updated: IP=$currentIpAddress, Name=$_currentUsername, Avatar=$_profileImagePath');
+    _enableMd5Checksum = user.enableMd5Checksum; // Store the preference
+    zprint(
+        '👤 NetworkService User Details Updated: IP=$currentIpAddress, Name=$_currentUsername, Avatar=$_profileImagePath, MD5=$_enableMd5Checksum');
   }
 
   Future<void> _startServer() async {
@@ -187,7 +197,6 @@ class NetworkService {
         (socket) => _handleNewConnection(socket),
         onError: (e, s) {
           zprint('❌ Server socket error: $e\n$s');
-          // Consider recovery or logging strategy
         },
         onDone: () {
           zprint('ℹ️ Server socket closed.');
@@ -195,7 +204,6 @@ class NetworkService {
       );
     } catch (e, s) {
       zprint('❌ FATAL: Could not bind server socket to port $_port: $e\n$s');
-      // This is critical, potentially notify user or stop the app part
       throw Exception("Failed to start listening server: $e");
     }
   }
@@ -211,73 +219,62 @@ class NetworkService {
     var receivedBytes = 0;
 
     String? transferType; // To track if it's a regular file or avatar
-    // FIX: Declare fileTransferKey as String since sourceIp is String
     final String fileTransferKey = sourceIp; // Use source IP as the key
 
     socket.listen(
       (data) async {
-        // ... (rest of the try-catch block for processing data) ...
         try {
           if (!metadataReceived) {
             buffer.addAll(data);
-            // Basic check: Metadata length field itself is 4 bytes
             if (buffer.length < 4) {
-              zprint("  [Meta] Buffer too small for length (< 4 bytes)");
+              // zprint("  [Meta] Buffer too small for length (< 4 bytes)");
               return; // Not enough data for length yet
             }
 
             final metadataLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
-            // Sanity check for metadata length (e.g., max 1MB?)
             if (metadataLength > 1024 * 1024) {
-              zprint("❌ Metadata length ($metadataLength) exceeds limit. Closing connection.");
+              // Limit metadata size
+              zprint("❌ Metadata length ($metadataLength) exceeds limit (1MB). Closing connection.");
               socket.destroy();
               return;
             }
-            zprint("  [Meta] Expecting metadata length: $metadataLength bytes");
+            // zprint("  [Meta] Expecting metadata length: $metadataLength bytes");
 
-            // Check if we have the complete metadata + length prefix
             if (buffer.length < 4 + metadataLength) {
-              zprint("  [Meta] Buffer has ${buffer.length} bytes, need ${4 + metadataLength}. Waiting...");
+              // zprint("  [Meta] Buffer has ${buffer.length} bytes, need ${4 + metadataLength}. Waiting...");
               return; // Not enough data for metadata yet
             }
 
-            // Extract and decode metadata
             final metadataBytes = buffer.sublist(4, 4 + metadataLength);
-            // Allow malformed just in case, though ideally sender ensures valid UTF-8
             final metadataStr = utf8.decode(metadataBytes, allowMalformed: true);
-            zprint("  [Meta] Received metadata string: $metadataStr");
+            // zprint("  [Meta] Received metadata string: $metadataStr");
 
             try {
               receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
             } catch (e) {
-              zprint("❌ Error decoding metadata JSON: $e. Closing connection.");
+              zprint("❌ Error decoding metadata JSON: $e. Metadata string: '$metadataStr'. Closing connection.");
               socket.destroy();
               return;
             }
 
             transferType = receivedInfo!['type'] as String? ?? 'FILE'; // Default to FILE
-            final senderIp = receivedInfo!['senderIp'] as String?; // Get sender's IP Address (now used as ID)
-            // Provide defaults for potentially missing fields
+            // final senderIp = receivedInfo!['senderIp'] as String?; // Not needed here, key is sourceIP
             final fileName = receivedInfo!['name'] as String? ?? 'unknown_file';
             final fileSize = receivedInfo!['size'] as int? ?? 0;
             final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
-            final md5Checksum = receivedInfo!['md5Checksum'] as String?; // MD5 Checksum is still useful
+            final md5Checksum = receivedInfo!['md5Checksum'] as String?; // Can be hash, "no-check", "CHECKSUM_ERROR"
 
-            zprint('📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername ($senderIp)');
+            zprint(
+                '📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername ($sourceIp), md5=$md5Checksum');
 
-            // Use sourceIP (socket's remote address) as the key for FileTransferManager
-            // fileTransferKey is already defined as non-nullable 'sourceIp'
-
-            // --- THIS CALL IS NOW CORRECT ---
             final added = await FileTransferManager.instance.add(
-              fileTransferKey, // Now guaranteed to be String
+              fileTransferKey, // Now guaranteed to be String (the source IP)
               fileName,
               fileSize,
               senderUsername, // Sender's display name
               receivedInfo!, // Pass full metadata map
-              md5Checksum: md5Checksum,
+              md5Checksum: md5Checksum, // Pass the checksum from metadata
             );
-            // ---------------------------------
 
             if (!added) {
               zprint("❌ Failed to add transfer for $fileName from $fileTransferKey. Closing connection.");
@@ -288,92 +285,82 @@ class NetworkService {
             metadataReceived = true;
             zprint("✅ Metadata processed. Ready for file data.");
 
-            // Process any data that came *after* the metadata in the initial buffer
+            // Handle any data received along with metadata
             if (buffer.length > 4 + metadataLength) {
               final remainingData = buffer.sublist(4 + metadataLength);
-              zprint("  [Data] Processing ${remainingData.length} bytes remaining in initial buffer.");
+              // zprint("  [Data] Processing ${remainingData.length} bytes remaining in initial buffer.");
               await FileTransferManager.instance.write(fileTransferKey, remainingData);
               receivedBytes += remainingData.length;
             }
             buffer.clear(); // Clear buffer after processing metadata and initial data
           } else {
-            // Metadata already received, process incoming file data
+            // Metadata already received, just write data
             await FileTransferManager.instance.write(fileTransferKey, data);
             receivedBytes += data.length;
           }
         } catch (e, s) {
           zprint('❌ Error processing incoming data chunk from $fileTransferKey: $e\n$s');
-          // Attempt to clean up and close
-          await FileTransferManager.instance.handleSocketClosure(fileTransferKey);
+          await FileTransferManager.instance.handleSocketClosure(fileTransferKey); // Clean up transfer manager state
           socket.destroy();
         }
       },
       onDone: () async {
-        // ... (rest of onDone logic remains the same) ...
         stopwatch.stop();
-        zprint('✅ Socket closed (onDone) from $fileTransferKey after ${stopwatch.elapsedMilliseconds}ms. Received $receivedBytes bytes.');
+        zprint(
+            '✅ Socket closed (onDone) from $fileTransferKey after ${stopwatch.elapsedMilliseconds}ms. Received $receivedBytes bytes.');
         try {
-          if (metadataReceived) {
-            // Use the new method for proper cleanup if transfer was not completed
+          if (metadataReceived && receivedInfo != null) {
+            // Ensure metadata was received before proceeding
             final fileTransfer = FileTransferManager.instance.files[fileTransferKey];
-            if (receivedInfo != null && fileTransfer != null) {
-              final totalSize = receivedInfo!['size'] as int? ?? 0;
+            final totalSize = receivedInfo!['size'] as int? ?? 0;
+
+            if (fileTransfer != null) {
               if (receivedBytes < totalSize) {
-                zprint('⚠️ Transfer incomplete ($receivedBytes/$totalSize). Cleaning up...');
-                // Transfer was incomplete, use handleSocketClosure
+                zprint('⚠️ Transfer incomplete ($receivedBytes/$totalSize bytes). Cleaning up...');
                 await FileTransferManager.instance.handleSocketClosure(fileTransferKey);
-                zprint('⚠️ Socket closed before transfer completed, cleaned up resources');
               } else {
-                zprint('✅ Transfer complete ($receivedBytes/$totalSize). Finalizing...');
-                // Transfer seems complete, call end()
-                final success = await FileTransferManager.instance.end(fileTransferKey);
-                if (success && transferType == 'AVATAR_FILE') {
-                  // Handle completed avatar transfer
-                  final senderIp = receivedInfo!['senderIp'] as String?; // Get sender IP from metadata
-                  if (senderIp != null) {
-                    await _processReceivedAvatar(fileTransfer.destination_filename, senderIp); // Use IP as key
-                  } else {
-                    zprint("⚠️ Avatar received but sender IP missing in metadata.");
+                zprint('✅ Transfer potentially complete ($receivedBytes/$totalSize bytes). Finalizing...');
+                final success =
+                    await FileTransferManager.instance.end(fileTransferKey); // Calls end(), which handles MD5 check
+
+                if (success) {
+                  zprint('✅ Transfer finalized successfully.');
+                  // Handle avatar processing only if successful and type matches
+                  if (transferType == 'AVATAR_FILE') {
+                    await _processReceivedAvatar(
+                        fileTransfer.destination_filename, fileTransferKey); // Key is sender IP
                   }
-                } else if (success) {
-                  zprint('✅ File transfer finalized successfully.');
-                  // Optionally add to file received stream for UI feedback
-                  // final sizeMiB = (receivedBytes / (1024*1024)).toStringAsFixed(2);
-                  // final speedMiBps = ... calculation ...
-                  // _fileReceivedController.add("$filePath|$sizeMiB|$transferTime|$speedMiBps|$senderUsername");
                 } else {
-                  zprint('❌ File transfer finalization failed (end() returned false). Already cleaned up?');
+                  zprint(
+                      '❌ Transfer finalization failed (end() returned false - likely MD5 mismatch or sender error). File deleted.');
+                  // FileTransferManager.end() already removed the entry and deleted the file on failure
                 }
               }
             } else {
-              zprint("ℹ️ Socket closed (onDone), but no metadata was received or transfer not found for key $fileTransferKey.");
+              zprint(
+                  "⚠️ Socket closed (onDone), but FileTransfer object not found for key $fileTransferKey (already cleaned up?).");
             }
           } else {
-            zprint("ℹ️ Socket closed (onDone) before metadata was received for key $fileTransferKey.");
+            zprint(
+                "ℹ️ Socket closed (onDone) before metadata was fully processed or receivedInfo was null for key $fileTransferKey.");
           }
         } catch (e, s) {
-          zprint('❌ Error completing transfer (onDone) for key $fileTransferKey: $e\n$s');
-          // Ensure cleanup happens even if end() or processing throws error
-          await FileTransferManager.instance.handleSocketClosure(fileTransferKey);
+          zprint('❌ Error during transfer finalization (onDone) for key $fileTransferKey: $e\n$s');
+          await FileTransferManager.instance.handleSocketClosure(fileTransferKey); // Ensure cleanup on error
         } finally {
-          // Ensure socket is destroyed, though onDone implies it's already closing/closed.
+          // Ensure socket is destroyed regardless of path
           try {
             socket.destroy();
           } catch (_) {}
         }
       },
       onError: (error, stackTrace) async {
-        // ... (rest of onError logic remains the same) ...
         zprint('❌ Socket error during transfer from $fileTransferKey: $error\n$stackTrace');
-        // In case of error, ensure file sink is properly closed and resources cleaned up
         try {
-          if (metadataReceived) {
-            zprint("🧨 Cleaning up transfer due to socket error...");
-            await FileTransferManager.instance.handleSocketClosure(fileTransferKey);
-            zprint('💣 File sink closed and resources cleaned up due to socket error.');
-          } else {
-            zprint("🧨 Socket error occurred before metadata received for $fileTransferKey. No transfer cleanup needed.");
-          }
+          // No need to check metadataReceived here, handleSocketClosure handles missing keys
+          zprint("🧨 Cleaning up transfer due to socket error...");
+          await FileTransferManager.instance.handleSocketClosure(fileTransferKey);
+          zprint('💣 Transfer resources cleaned up due to socket error.');
         } catch (e) {
           zprint('❌ Error during cleanup after socket error: $e');
         } finally {
@@ -384,14 +371,12 @@ class NetworkService {
     );
   }
 
-  // Process the received avatar file
   Future<void> _processReceivedAvatar(String filePath, String senderIp) async {
     zprint('🖼️ Processing received avatar for IP: $senderIp from path: $filePath');
     try {
       final file = File(filePath);
       if (await file.exists()) {
         final bytes = await file.readAsBytes();
-        // Check if bytes are valid image data? (Optional, basic check)
         if (bytes.isNotEmpty) {
           await _avatarStore.setAvatar(senderIp, bytes); // Use IP as the key
           zprint('✅ Avatar stored for $senderIp');
@@ -399,7 +384,7 @@ class NetworkService {
         } else {
           zprint('⚠️ Received avatar file is empty: $filePath');
         }
-        // Delete the temporary avatar file after processing
+        // Delete the temporary file regardless of whether it was empty or processed
         try {
           await file.delete();
           zprint('🗑️ Deleted temporary avatar file: $filePath');
@@ -414,8 +399,6 @@ class NetworkService {
     }
   }
 
-  /// Cancel an active file transfer
-  /// Returns true if transfer was found and canceled, false otherwise
   bool cancelTransfer(String transferId) {
     if (_activeTransfers.containsKey(transferId)) {
       zprint('🛑 Cancelling transfer: $transferId');
@@ -426,15 +409,16 @@ class NetworkService {
       } catch (e) {
         zprint("⚠️ Error destroying socket for cancelled transfer $transferId: $e");
       }
+      // Note: We don't call FileTransferManager.handleSocketClosure here,
+      // because the cancellation is initiated locally. The receiving end will get an error/onDone.
       return true;
     }
     zprint("⚠️ Attempted to cancel non-existent transfer: $transferId");
     return false;
   }
 
-  /// Send file to a peer with progress tracking and cancellation support
-  /// Returns the transfer ID which can be used to cancel the transfer
-  Future<String> sendFile(String transferId, String filePath, Peer receiver, {FileTransferProgressCallback? onProgress}) async {
+  Future<String> sendFile(String transferId, String filePath, Peer receiver,
+      {FileTransferProgressCallback? onProgress}) async {
     zprint('📤 Starting file transfer process for $filePath to ${receiver.name} (${receiver.id})');
     final file = File(filePath);
     if (!await file.exists()) {
@@ -442,39 +426,56 @@ class NetworkService {
       throw Exception('File does not exist: $filePath');
     }
 
-    // Ensure we have the current IP address (should be set during start())
     if (currentIpAddress == null) {
       zprint("❌ Cannot send file: Local IP address is unknown.");
       throw Exception('Local IP address is unknown.');
     }
 
+    Socket? socket; // Declare socket here to use in finally block
+
     try {
-      // Create metadata first
       final metadata = await _createFileMetadata(file, transferId);
       zprint("  [Send] Generated metadata: ${json.encode(metadata)}");
 
-      // Use the helper that sends metadata and then streams the file
-      await _sendFileWithMetadata(transferId, filePath, receiver, metadata, onProgress: onProgress);
+      // Connect the socket
+      zprint("  [Send Meta] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
+      socket = await Socket.connect(receiver.address, receiver.port).timeout(const Duration(seconds: 10));
+      zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
+      _activeTransfers[transferId] = socket; // Add BEFORE sending data
 
-      zprint('✅ File transfer completed successfully: $transferId');
+      // Send metadata
+      await _sendMetadata(socket, metadata);
+
+      // Send file data
+      await _streamFileData(socket, file, metadata['size'] as int, transferId, onProgress);
+
+      zprint('✅ File transfer process completed for: $transferId');
+      return transferId; // Return ID on successful completion
     } catch (e, s) {
-      // Log specific error from _sendFileWithMetadata or initial checks
       zprint('❌ Error during sendFile process ($transferId): $e\n$s');
-      // Ensure cleanup if _sendFileWithMetadata throws before removing from map
-      if (_activeTransfers.containsKey(transferId)) {
-        final socket = _activeTransfers.remove(transferId);
-        try {
-          socket?.destroy();
-        } catch (_) {}
-      }
+      // Cleanup is handled in finally block
       rethrow; // Rethrow to signal failure to the caller
+    } finally {
+      zprint("🧼 Final cleanup for sending $transferId...");
+      if (_activeTransfers.containsKey(transferId)) {
+        _activeTransfers.remove(transferId);
+        zprint("  -> Removed from active transfers.");
+      }
+      if (socket != null) {
+        try {
+          await socket.close(); // Graceful close
+          zprint("  -> Socket closed gracefully.");
+        } catch (e) {
+          zprint("⚠️ Error closing socket gracefully, destroying: $e");
+          try {
+            socket.destroy();
+          } catch (_) {} // Force destroy
+        }
+      }
+      zprint("✅ Send cleanup complete for $transferId.");
     }
-    // No finally block needed here as _sendFileWithMetadata handles its own cleanup
-
-    return transferId;
   }
 
-  // Send avatar file (uses sendFile internally with special metadata)
   Future<void> sendAvatar(Peer receiver) async {
     if (_profileImagePath == null || _profileImagePath!.isEmpty) {
       zprint('🚫 Cannot send avatar: No profile image set.');
@@ -492,32 +493,136 @@ class NetworkService {
     }
 
     zprint('🖼️ Sending avatar from $_profileImagePath to ${receiver.name} (${receiver.id})');
-    final transferId = 'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}'; // Unique ID for avatar transfer
+    final transferId =
+        'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}'; // Unique ID for avatar transfer
+    Socket? socket; // Declare here for finally block
 
     try {
-      // Use sendFile, but modify the metadata before sending
       final originalMetadata = await _createFileMetadata(avatarFile, transferId);
       final avatarMetadata = {
         ...originalMetadata,
         'type': 'AVATAR_FILE', // Mark as avatar file
-        'senderIp': currentIpAddress, // Ensure correct sender IP
+        // senderIp is already in originalMetadata
       };
       zprint("  [Avatar Send] Metadata: ${json.encode(avatarMetadata)}");
 
-      // Call helper to send metadata and stream file
-      await _sendFileWithMetadata(transferId, _profileImagePath!, receiver, avatarMetadata);
+      // Connect socket
+      zprint("  [Avatar Send] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
+      socket = await Socket.connect(receiver.address, receiver.port).timeout(const Duration(seconds: 10));
+      zprint("  [Avatar Send] Connected. Adding to active transfers: $transferId");
+      _activeTransfers[transferId] = socket;
+
+      // Send metadata and file data
+      await _sendMetadata(socket, avatarMetadata);
+      await _streamFileData(socket, avatarFile, avatarMetadata['size'] as int, transferId,
+          null); // No progress for avatars needed typically
+
       zprint('✅ Avatar sent successfully to ${receiver.name}');
     } catch (e, s) {
       zprint('❌ Error sending avatar ($transferId): $e\n$s');
-      // Cleanup is handled by _sendFileWithMetadata
+      // Cleanup handled in finally
+    } finally {
+      zprint("🧼 Final cleanup for sending avatar $transferId...");
+      if (_activeTransfers.containsKey(transferId)) {
+        _activeTransfers.remove(transferId);
+        zprint("  -> Removed avatar from active transfers.");
+      }
+      if (socket != null) {
+        try {
+          await socket.close();
+          zprint("  -> Avatar socket closed gracefully.");
+        } catch (e) {
+          zprint("⚠️ Error closing avatar socket gracefully, destroying: $e");
+          try {
+            socket.destroy();
+          } catch (_) {}
+        }
+      }
+      zprint("✅ Avatar send cleanup complete for $transferId.");
     }
+  }
+
+  Future<void> _sendMetadata(Socket socket, Map<String, dynamic> metadata) async {
+    final metadataBytes = utf8.encode(json.encode(metadata));
+    final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
+    zprint(
+        "  [Send Meta] Sending length (${lengthBytes.buffer.asUint8List().length} bytes) and metadata (${metadataBytes.length} bytes)...");
+    socket.add(lengthBytes.buffer.asUint8List());
+    socket.add(metadataBytes);
+    await socket.flush(); // Flush after metadata essential
+    zprint("  [Send Meta] Metadata sent and flushed.");
+    // Optional delay if needed, e.g., await Future.delayed(const Duration(milliseconds: 50));
+  }
+
+  Future<void> _streamFileData(
+      Socket socket, File file, int fileSize, String transferId, FileTransferProgressCallback? onProgress) async {
+    zprint("  [Send Data] Starting file stream for ${file.path} (transferId: $transferId)...");
+    int bytesSent = 0;
+    final fileStream = file.openRead();
+    final completer = Completer<void>();
+
+    onProgress?.call(fileSize, 0); // Initial progress
+
+    StreamSubscription? subscription;
+    subscription = fileStream.listen(
+      (chunk) {
+        // Check for cancellation *before* adding chunk
+        if (!_activeTransfers.containsKey(transferId)) {
+          zprint("🛑 Transfer $transferId cancelled during stream chunk processing.");
+          subscription?.cancel(); // Cancel the stream subscription
+          if (!completer.isCompleted) completer.completeError(Exception('Transfer $transferId cancelled'));
+          return;
+        }
+        try {
+          socket.add(chunk); // Add the chunk to the socket buffer
+          bytesSent += chunk.length;
+          onProgress?.call(fileSize, bytesSent); // Report progress after adding
+        } catch (e, s) {
+          // This catch might handle errors if the socket is closed unexpectedly while adding
+          zprint("❌ Error writing chunk to socket for $transferId: $e\n$s");
+          subscription?.cancel();
+          if (!completer.isCompleted) completer.completeError(e);
+        }
+      },
+      onDone: () async {
+        // Check for cancellation *before* final flush
+        if (!_activeTransfers.containsKey(transferId)) {
+          zprint("🛑 Transfer $transferId cancelled just before stream completion.");
+          if (!completer.isCompleted) completer.completeError(Exception('Transfer $transferId cancelled'));
+          return;
+        }
+        zprint("✅ File stream finished for $transferId. Bytes sent: $bytesSent. Flushing socket...");
+        try {
+          await socket.flush(); // Ensure all buffered data is sent
+          zprint("  [Send Data] Final flush complete for $transferId.");
+          if (bytesSent != fileSize) {
+            zprint(
+                "⚠️ WARNING: Bytes sent ($bytesSent) does not match file size ($fileSize) for $transferId after stream done.");
+            // Still report 100% as the stream is done, but log the warning.
+          }
+          onProgress?.call(fileSize, fileSize); // Final progress report
+          if (!completer.isCompleted) completer.complete();
+        } catch (e, s) {
+          zprint("❌ Error during final flush for $transferId: $e\n$s");
+          if (!completer.isCompleted) completer.completeError(e);
+        }
+      },
+      onError: (error, stackTrace) {
+        zprint("❌ Error reading file stream for $transferId: $error\n$stackTrace");
+        if (!completer.isCompleted) completer.completeError(error);
+      },
+      cancelOnError: true, // Stop stream on error
+    );
+
+    await completer.future; // Wait for the stream processing (or error) to complete
+    zprint("✅ Stream processing finished successfully for $transferId.");
+    // The socket is closed in the `finally` block of the calling method (sendFile/sendAvatar)
   }
 
   void _startDiscovery() {
     zprint('🔍 Starting peer discovery broadcast service...');
     _discoveryTimer?.cancel(); // Cancel existing timer if any
     _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
-      // Ensure IP is available before broadcasting
       if (currentIpAddress == null) {
         zprint("⚠️ Skipping discovery broadcast: IP address unknown.");
         return;
@@ -529,35 +634,43 @@ class NetworkService {
 
       try {
         final message = _buildDiscoveryMessage();
-        // zprint('📤 Broadcasting discovery message: $message'); // Can be verbose
+        // Use a more specific broadcast address if possible, e.g., 192.168.1.255
+        // based on currentIpAddress and subnet mask, but 255.255.255.255 is generally fine.
+        InternetAddress broadcastAddr = InternetAddress('255.255.255.255');
+        // Simple attempt to get subnet broadcast address (often works for /24)
+        if (currentIpAddress!.contains('.')) {
+          var parts = currentIpAddress!.split('.');
+          if (parts.length == 4) {
+            try {
+              broadcastAddr = InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255');
+              // zprint("  -> Broadcasting to subnet: ${broadcastAddr.address}");
+            } catch (_) {
+              // Fallback if parsing fails
+              broadcastAddr = InternetAddress('255.255.255.255');
+            }
+          }
+        }
+
         _discoverySocket?.send(
           utf8.encode(message),
-          InternetAddress('255.255.255.255'), // Standard broadcast address
+          broadcastAddr,
           _discoveryPort,
         );
+        // zprint("📢 Broadcast sent: $message to ${broadcastAddr.address}:$_discoveryPort");
       } catch (e, s) {
-        // Handle potential socket errors (e.g., if socket gets closed unexpectedly)
         zprint('❌ Error broadcasting discovery message: $e\n$s');
-        // Optionally try to restart the socket or stop the timer
-        // _discoveryTimer?.cancel();
-        // _discoverySocket?.close();
-        // _discoverySocket = null; // Mark as closed
       }
     });
     zprint('✅ Discovery broadcast timer started.');
   }
 
-  // Method to update discovery message when user details change
   void _updateDiscoveryMessage() {
-    // No need to explicitly call send here, the timer will pick up the new message
     zprint('🔄 Discovery message parameters updated (e.g., username). Next broadcast will use new info.');
   }
 
-  // Builds the current discovery message string
   String _buildDiscoveryMessage() {
-    // Use current IP Address as the last part (the ID)
-    final ipId = currentIpAddress ?? 'NO_IP';
-    final message = 'WOXXY_ANNOUNCE:$_currentUsername:$ipId:$_port:$ipId';
+    final ipId = currentIpAddress ?? 'NO_IP'; // Use IP as the ID
+    final message = 'WOXXY_ANNOUNCE:$_currentUsername:$ipId:$_port:$ipId'; // Name:IP:Port:ID (ID=IP)
     return message;
   }
 
@@ -569,22 +682,20 @@ class NetworkService {
         if (datagram != null) {
           try {
             final message = String.fromCharCodes(datagram.data);
-            // Optional: Log raw received message for debugging
-            // zprint('📬 Received UDP message: "$message" from ${datagram.address.address}:${datagram.port}');
             if (message.startsWith('WOXXY_ANNOUNCE:')) {
-              // Avoid processing self-announcements if they somehow arrive
+              // Ignore own announcements
               if (datagram.address.address != currentIpAddress) {
                 _handlePeerAnnouncement(message, datagram.address);
               } else {
-                // zprint("🤫 Ignoring self-announcement.");
+                // zprint("📢 Ignored own announcement: $message");
               }
             } else if (message.startsWith('AVATAR_REQUEST:')) {
+              // Handle avatar requests (even if from self, though unlikely needed)
               _handleAvatarRequest(message, datagram.address);
             } else {
-              zprint('❓ Unknown UDP message type received: $message');
+              zprint('❓ Unknown UDP message received from ${datagram.address.address}: $message');
             }
           } catch (e, s) {
-            // Catch errors decoding or processing the message
             zprint("❌ Error processing received datagram from ${datagram.address.address}: $e\n$s");
           }
         }
@@ -592,16 +703,14 @@ class NetworkService {
         zprint("⚠️ Discovery socket closed event received.");
         _discoverySocket = null; // Mark socket as closed
         _discoveryTimer?.cancel(); // Stop broadcasting if socket closed
-        // Consider attempting to re-bind the socket?
       }
     }, onError: (error, stackTrace) {
-      // This typically handles errors with the socket itself
       zprint('❌ Critical error in discovery listener socket: $error\n$stackTrace');
+      _discoverySocket?.close(); // Attempt to close socket on error
       _discoverySocket = null;
       _discoveryTimer?.cancel();
-      // TODO: Implement recovery logic? Restart the listener?
+      // Consider attempting to restart the listener after a delay
     }, onDone: () {
-      // This usually means the socket was explicitly closed
       zprint("✅ Discovery listener socket closed (onDone).");
       _discoverySocket = null; // Ensure it's marked as closed
       _discoveryTimer?.cancel();
@@ -609,118 +718,126 @@ class NetworkService {
     zprint("✅ Discovery listener started.");
   }
 
-  // Handle incoming avatar requests via UDP
   void _handleAvatarRequest(String message, InternetAddress sourceAddress) {
+    // AVATAR_REQUEST:RequesterID:RequesterIP:RequesterListenPort
+    // Where RequesterID and RequesterIP should be the same (the IP of the requester)
     try {
-      // Format: AVATAR_REQUEST:<requesterIp>:<requesterIp>:<requesterListenPort> (Requester ID is their IP)
       final parts = message.split(':');
       if (parts.length == 4) {
-        final requesterId = parts[1]; // This is the requester's IP address
-        final requesterIp = parts[2]; // Should match requesterId
-        final requesterListenPort = int.tryParse(parts[3]);
+        final requesterId = parts[1];
+        final requesterIp = parts[2];
+        final requesterListenPortStr = parts[3];
 
         if (requesterId != requesterIp) {
-          zprint("⚠️ AVATAR_REQUEST format mismatch: ID ($requesterId) != IP ($requesterIp). Ignoring.");
+          zprint(
+              "⚠️ AVATAR_REQUEST format mismatch: ID ($requesterId) != IP ($requesterIp). Source: ${sourceAddress.address}. Ignoring.");
+          return;
+        }
+        // Optional: Verify source address matches reported IP
+        if (requesterIp != sourceAddress.address) {
+          zprint(
+              "⚠️ AVATAR_REQUEST source IP mismatch: Reported IP ($requesterIp) != Packet Source (${sourceAddress.address}). Ignoring.");
           return;
         }
 
+        final requesterListenPort = int.tryParse(requesterListenPortStr);
+
         if (requesterListenPort != null) {
-          zprint('🖼️ Received avatar request from $requesterId at $requesterIp:$requesterListenPort');
-          // Create a temporary Peer object for the requester to send the avatar back
-          // Use the requester's IP (requesterId) as the Peer ID
+          zprint('🖼️ Received avatar request from $requesterId at $requesterIp:$requesterListenPortStr');
+
+          // Create a temporary peer object to send the avatar back
+          // We send back to their main listening port (_port = 8090)
           final requesterPeer = Peer(
-            name: 'Requester', // Name doesn't matter much here
-            id: requesterId,
+            name: 'Requester_$requesterId', // Placeholder name
+            id: requesterId, // Use their IP as ID
             address: InternetAddress(requesterIp),
-            port: _port, // Send back to their main listening port (8090)
+            port: _port, // Send avatar data back to the main file transfer port
           );
-          // Trigger sending the avatar file (runs async)
-          zprint("  -> Triggering avatar send to ${requesterPeer.id}");
-          sendAvatar(requesterPeer);
+          zprint(
+              "  -> Triggering avatar send to ${requesterPeer.id} at ${requesterPeer.address.address}:${requesterPeer.port}");
+          sendAvatar(requesterPeer); // Asynchronously send the avatar
         } else {
-          zprint('❌ Invalid avatar request format (port not integer): $message');
+          zprint('❌ Invalid avatar request format (port not integer): $message from ${sourceAddress.address}');
         }
       } else {
-        zprint('❌ Invalid avatar request format (expected 4 parts): $message');
+        zprint('❌ Invalid avatar request format (expected 4 parts): $message from ${sourceAddress.address}');
       }
     } catch (e, s) {
-      zprint('❌ Error handling avatar request: $e\n$s');
+      zprint('❌ Error handling avatar request from ${sourceAddress.address}: $e\n$s');
     }
   }
 
   void _handlePeerAnnouncement(String message, InternetAddress sourceAddress) {
+    // WOXXY_ANNOUNCE:Name:IP:Port:ID (where ID is currently also IP)
     try {
-      // Format: WOXXY_ANNOUNCE:<Username>:<AnnouncerIP>:<AnnouncerPort>:<AnnouncerIP>
       final parts = message.split(':');
-      // zprint('🔍 Processing peer announcement: "$message"'); // Can be verbose
 
       if (parts.length == 5) {
         final name = parts[1];
         final peerIp = parts[2]; // The IP address they announced
         final peerPortStr = parts[3];
-        final announcedId = parts[4]; // The ID they announced (should be their IP)
+        final announcedId = parts[4]; // The ID they announced (should match their IP)
 
-        // Validate: Announced ID should match announced IP
+        // --- Sanity Checks ---
         if (peerIp != announcedId) {
-          zprint("⚠️ Peer announcement mismatch: Announced IP ($peerIp) != Announced ID ($announcedId). Ignoring.");
+          zprint(
+              "⚠️ Peer announcement mismatch: Announced IP ($peerIp) != Announced ID ($announcedId). Source: ${sourceAddress.address}. Ignoring.");
           return;
         }
-        // Validate: Announced IP should match the source IP of the UDP packet
         if (peerIp != sourceAddress.address) {
-          zprint("⚠️ Peer announcement mismatch: Announced IP ($peerIp) != Packet Source IP (${sourceAddress.address}). Ignoring.");
+          zprint(
+              "⚠️ Peer announcement source IP mismatch: Announced IP ($peerIp) != Packet Source (${sourceAddress.address}). Ignoring.");
+          return;
+        }
+        // Basic IP format check (very simple)
+        if (!peerIp.contains('.') || peerIp.split('.').length != 4) {
+          zprint("⚠️ Invalid IP format in peer announcement: '$peerIp'. Source: ${sourceAddress.address}. Ignoring.");
           return;
         }
 
         final peerPort = int.tryParse(peerPortStr);
-        if (peerPort == null) {
-          zprint("⚠️ Invalid port in peer announcement: '$peerPortStr'. Ignoring.");
+        if (peerPort == null || peerPort <= 0 || peerPort > 65535) {
+          zprint("⚠️ Invalid port in peer announcement: '$peerPortStr'. Source: ${sourceAddress.address}. Ignoring.");
           return;
         }
+        // --- End Sanity Checks ---
 
-        // ID for the Peer object is their IP address
-        final peerId = peerIp;
+        final peerId = peerIp; // Use the validated IP as the unique Peer ID
 
-        // zprint('📋 Valid Peer Ann. - Name: $name, IP: $peerIp, Port: $peerPort, ID: $peerId'); // Can be verbose
-
-        // Check if this is our own IP address - already checked sourceIP != currentIP in listener
-        // We trust the peerId (peerIp) received now.
-
-        // zprint('✨ Creating/Updating peer object'); // Can be verbose
         final peer = Peer(
-          // IMPORTANT: Use the peer's IP address as the Peer.id
-          name: name,
+          name: name.isNotEmpty ? name : "Peer_$peerId", // Use a default name if empty
           id: peerId,
-          address: InternetAddress(peerIp), // Use the validated peer IP
+          address: sourceAddress, // Use the actual source address from the datagram
           port: peerPort,
         );
-        // Add/update the peer in the manager (handles new vs existing)
-        _peerManager.addPeer(peer, currentIpAddress!, _port);
+        // Add or update the peer in the manager
+        _peerManager.addPeer(peer, currentIpAddress!, _port); // Pass own details for context if needed
       } else {
-        zprint('❌ Invalid announcement format (expected 5 parts): $message');
+        zprint('❌ Invalid announcement format (expected 5 parts): $message from ${sourceAddress.address}');
       }
     } catch (e, s) {
-      zprint('❌ Error handling peer announcement: $e\n$s');
+      zprint('❌ Error handling peer announcement from ${sourceAddress.address}: $e\n$s');
     }
   }
 
-  // New method to request avatar via UDP
   void requestAvatar(Peer peer) {
-    // peer.id is now the IP address of the peer
     if (currentIpAddress == null) {
       zprint('⚠️ Cannot request avatar: Missing local IP.');
       return;
     }
-    // Check if we already have the avatar using the peer's IP as the key
     if (_avatarStore.hasAvatar(peer.id)) {
-      // zprint('✅ Avatar for ${peer.name} (${peer.id}) already exists.'); // Can be verbose
+      // zprint('🖼️ Avatar already present for ${peer.name} (${peer.id}). Skipping request.');
+      return;
+    }
+    if (_discoverySocket == null) {
+      zprint('⚠️ Cannot request avatar: Discovery socket is null.');
       return;
     }
 
     zprint('❓ Requesting avatar from ${peer.name} (${peer.id}) at ${peer.address.address}:${_discoveryPort}');
-    // Format: AVATAR_REQUEST:<myIp>:<myIp>:<myListenPort>
+    // AVATAR_REQUEST:MyID:MyIP:MyListenPort (MyID = MyIP)
     final requestMessage = 'AVATAR_REQUEST:$currentIpAddress:$currentIpAddress:$_port';
     try {
-      // Send directly to the peer's IP address on the discovery port
       _discoverySocket?.send(
         utf8.encode(requestMessage),
         peer.address, // Send directly to the peer's IP
@@ -732,157 +849,65 @@ class NetworkService {
     }
   }
 
-  // Helper to create metadata map (used by sendFile and sendAvatar)
   Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId) async {
     final fileSize = await file.length();
     final filename = path.basename(file.path);
-    // Stream checksum calculation
     final hashCompleter = Completer<Digest>();
-    // Handle potential errors during file open/read for checksum
-    try {
-      file.openRead().transform(md5).listen((digest) {
-        if (!hashCompleter.isCompleted) hashCompleter.complete(digest);
-      }, onError: (e) {
-        if (!hashCompleter.isCompleted) hashCompleter.completeError(e);
-      }, cancelOnError: true // Cancel stream on error
-          );
-    } catch (e) {
-      if (!hashCompleter.isCompleted) hashCompleter.completeError(e);
-    }
 
     String checksum;
-    try {
-      final hash = await hashCompleter.future;
-      checksum = hash.toString();
-    } catch (e) {
-      zprint("⚠️ Error calculating MD5 checksum for ${file.path}: $e. Sending without checksum.");
-      checksum = "CHECKSUM_ERROR"; // Or null, depending on receiver handling
+    if (_enableMd5Checksum) {
+      // zprint(" M-> MD5 Checksum enabled. Calculating for $filename...");
+      try {
+        // Start calculation asynchronously
+        file.openRead().transform(md5).listen((digest) {
+          if (!hashCompleter.isCompleted) hashCompleter.complete(digest);
+        }, onError: (e, s) {
+          // Catch errors during stream processing
+          zprint(" M-> Error during MD5 stream for $filename: $e\n$s");
+          if (!hashCompleter.isCompleted) hashCompleter.completeError(e);
+        }, cancelOnError: true // Cancel stream on error
+            );
+
+        // Await the result with a timeout
+        try {
+          final hash = await hashCompleter.future.timeout(const Duration(seconds: 30), // Timeout for MD5 calc
+              onTimeout: () {
+            zprint(" M-> MD5 calculation timed out for $filename.");
+            throw TimeoutException("MD5 calculation timed out");
+          });
+          checksum = hash.toString();
+          // zprint(" M-> MD5 Calculated: $checksum for $filename");
+        } catch (e) {
+          // Catch timeout or other errors from the completer
+          zprint("⚠️ Error finalizing MD5 checksum for ${file.path}: $e. Sending CHECKSUM_ERROR.");
+          checksum = "CHECKSUM_ERROR";
+        }
+      } catch (e) {
+        // Catch potential errors instantiating the stream
+        zprint("⚠️ Error initiating MD5 calculation for ${file.path}: $e. Sending CHECKSUM_ERROR.");
+        if (!hashCompleter.isCompleted) {
+          // Ensure completer finishes if stream init failed
+          try {
+            hashCompleter.completeError(e);
+          } catch (_) {}
+        }
+        checksum = "CHECKSUM_ERROR";
+      }
+    } else {
+      zprint(" M-> MD5 Checksum disabled. Sending 'no-check'.");
+      checksum = "no-check";
     }
 
     return {
       'name': filename,
       'size': fileSize,
       'senderUsername': _currentUsername,
-      'senderIp': currentIpAddress, // Send sender IP as ID
-      'md5Checksum': checksum,
-      'transferId': transferId,
-      'type': 'FILE', // Default type
+      'senderIp': currentIpAddress ?? 'unknown-ip', // Send sender IP (used as ID)
+      'md5Checksum': checksum, // Can be hash, "no-check", or "CHECKSUM_ERROR"
+      'transferId': transferId, // Include the transfer ID if needed by receiver logic
+      'type': 'FILE', // Default type, override for avatar
     };
   }
 
-  // Modified _sendFileWithMetadata to handle potential errors and ensure cleanup
-  Future<void> _sendFileWithMetadata(String transferId, String filePath, Peer receiver, Map<String, dynamic> metadata, {FileTransferProgressCallback? onProgress}) async {
-    final file = File(filePath);
-    // Existence check already done in callers (sendFile, sendAvatar)
-    final fileSize = metadata['size'] as int; // Get size from metadata
-    Socket? socket;
-
-    try {
-      zprint("  [Send Meta] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
-      socket = await Socket.connect(receiver.address, receiver.port).timeout(const Duration(seconds: 10)); // Increased timeout slightly
-      zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
-      _activeTransfers[transferId] = socket; // Add BEFORE sending data
-
-      // Send metadata
-      final metadataBytes = utf8.encode(json.encode(metadata));
-      final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
-      zprint("  [Send Meta] Sending length (${lengthBytes.buffer.asUint8List().length} bytes) and metadata (${metadataBytes.length} bytes)...");
-      socket.add(lengthBytes.buffer.asUint8List());
-      // await socket.flush(); // Flush after length might be good
-      socket.add(metadataBytes);
-      await socket.flush(); // Flush after metadata essential
-      zprint("  [Send Meta] Metadata sent and flushed.");
-
-      // Small delay might help receiver process metadata before data burst
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      // Send file data using streaming
-      zprint("  [Send Data] Starting file stream for $filePath...");
-      int bytesSent = 0;
-      final fileStream = file.openRead();
-      final completer = Completer<void>();
-
-      // Report initial progress (0 bytes sent)
-      onProgress?.call(fileSize, 0);
-
-      StreamSubscription? subscription;
-      subscription = fileStream.listen(
-        (chunk) {
-          // CRITICAL: Check for cancellation BEFORE attempting to write
-          if (!_activeTransfers.containsKey(transferId)) {
-            zprint("🛑 Transfer $transferId cancelled during stream chunk processing.");
-            subscription?.cancel(); // Cancel the stream subscription
-            if (!completer.isCompleted) completer.completeError(Exception('Transfer cancelled'));
-            // No need to destroy socket here, finally block will handle it
-            return;
-          }
-          try {
-            // zprint("  [Send Data] Sending chunk: ${chunk.length} bytes"); // Verbose
-            socket?.add(chunk);
-            bytesSent += chunk.length;
-            onProgress?.call(fileSize, bytesSent); // Report progress after adding
-          } catch (e, s) {
-            // Catch potential errors during socket.add (e.g., if socket closed)
-            zprint("❌ Error writing chunk to socket for $transferId: $e\n$s");
-            subscription?.cancel();
-            if (!completer.isCompleted) completer.completeError(e);
-          }
-        },
-        onDone: () async {
-          zprint("✅ File stream finished for $transferId. Bytes sent: $bytesSent");
-          // Check cancellation one last time before final flush/completion
-          if (!_activeTransfers.containsKey(transferId)) {
-            zprint("🛑 Transfer $transferId cancelled just before stream completion.");
-            if (!completer.isCompleted) completer.completeError(Exception('Transfer cancelled'));
-            return;
-          }
-          try {
-            await socket?.flush(); // Ensure all buffered data is sent
-            zprint("  [Send Data] Final flush complete.");
-            onProgress?.call(fileSize, fileSize); // Final progress report
-            if (!completer.isCompleted) completer.complete();
-          } catch (e, s) {
-            zprint("❌ Error during final flush for $transferId: $e\n$s");
-            if (!completer.isCompleted) completer.completeError(e);
-          }
-        },
-        onError: (error, stackTrace) {
-          zprint("❌ Error reading file stream for $transferId: $error\n$stackTrace");
-          // No need to cancel subscription explicitly here, cancelOnError=true handles it
-          if (!completer.isCompleted) completer.completeError(error);
-        },
-        cancelOnError: true, // Stop stream on error
-      );
-
-      // Wait for the stream processing to complete or error out
-      await completer.future;
-      zprint("✅ Stream processing finished for $transferId.");
-    } catch (e, s) {
-      zprint("❌ Error in _sendFileWithMetadata ($transferId): $e\n$s");
-      // Rethrow the error so the caller knows it failed
-      rethrow;
-    } finally {
-      // CRITICAL Cleanup: Always remove from active transfers and close socket
-      zprint("🧼 Final cleanup for $transferId...");
-      if (_activeTransfers.containsKey(transferId)) {
-        _activeTransfers.remove(transferId);
-        zprint("  -> Removed from active transfers.");
-      }
-      if (socket != null) {
-        try {
-          // Close the socket gracefully first
-          await socket.close();
-          zprint("  -> Socket closed gracefully.");
-        } catch (e) {
-          zprint("⚠️ Error closing socket gracefully, destroying: $e");
-          // Fallback to destroy if close fails
-          try {
-            socket.destroy();
-          } catch (_) {}
-        }
-      }
-      zprint("✅ Cleanup complete for $transferId.");
-    }
-    // No return needed as it's void now
-  }
+  // _sendFileWithMetadata is now split into sendFile/sendAvatar -> _sendMetadata -> _streamFileData
 } // End of NetworkService class

@@ -7,6 +7,7 @@ class SettingsService {
   static const String _usernameKey = 'username';
   static const String _profileImageKey = 'profile_image';
   static const String _downloadDirKey = 'download_directory';
+  static const String _md5ChecksumKey = 'enable_md5_checksum';
 
   Future<User> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -15,6 +16,7 @@ class SettingsService {
       username: prefs.getString(_usernameKey) ?? 'User', // Provide default 'User'
       profileImage: prefs.getString(_profileImageKey),
       defaultDownloadDirectory: prefs.getString(_downloadDirKey) ?? '', // Default to empty string
+      enableMd5Checksum: prefs.getBool(_md5ChecksumKey) ?? true,
     );
   }
 
@@ -28,5 +30,6 @@ class SettingsService {
       await prefs.remove(_profileImageKey); // Remove key if image is null or empty
     }
     await prefs.setString(_downloadDirKey, user.defaultDownloadDirectory);
+    await prefs.setBool(_md5ChecksumKey, user.enableMd5Checksum);
   }
 }

@@ -1,240 +1,304 @@
+import 'dart:io'; // Import io library
+import 'package:path/path.dart' as path; // Import path library and alias it as 'path' <--- ADD THIS LINE
+
 import 'file_transfer.dart';
-import 'dart:io';
 import 'history.dart';
 import 'package:woxxy/funcs/debug.dart'; // Import zprint
 
-/// Manages multiple file transfers from different sources
 class FileTransferManager {
-  /// Singleton instance
   static FileTransferManager? _instance;
 
-  /// Map of active file transfers, keyed by source IP
+  // Map key is the source IP address (String)
   final Map<String, FileTransfer> files = {};
 
-  /// Path where downloaded files will be stored
-  String downloadPath;
+  String downloadPath; // The current path where files will be saved
 
-  /// File history manager
-  FileHistory? _fileHistory;
+  FileHistory? _fileHistory; // Optional reference to the history manager
 
-  // Instance of AvatarStore - No longer needed here as processing moved to NetworkService
-  // final AvatarStore _avatarStore = AvatarStore();
-
-  /// Private constructor
+  // Private constructor
   FileTransferManager._({required this.downloadPath});
 
-  /// Factory constructor to get or create the singleton instance
+  // Factory constructor to manage the singleton instance
   factory FileTransferManager({required String downloadPath}) {
-    // Ensure downloadPath is set or updated if instance exists
     if (_instance != null) {
-      _instance!.downloadPath = downloadPath;
+      // If instance exists, update its download path if different
+      if (_instance!.downloadPath != downloadPath) {
+        zprint("🔄 Updating existing FileTransferManager instance download path to: $downloadPath");
+        _instance!.downloadPath = downloadPath;
+        // Optionally, re-verify the path exists?
+        // Directory(downloadPath).create(recursive: true);
+      }
     } else {
+      // Create the instance if it doesn't exist
+      zprint("✨ Creating new FileTransferManager instance with download path: $downloadPath");
       _instance = FileTransferManager._(downloadPath: downloadPath);
     }
     return _instance!;
   }
 
-  /// Get the singleton instance
+  // Static getter for easy access to the singleton instance
   static FileTransferManager get instance {
     if (_instance == null) {
-      // This state should ideally not be reached if initialized correctly in main.dart
       zprint("❌ FATAL: FileTransferManager accessed before initialization!");
-      throw StateError('FileTransferManager not initialized. Call FileTransferManager() with downloadPath first.');
+      // It's better to throw an error than to return a potentially null or uninitialized instance.
+      // Initialization should happen early, typically in main.dart.
+      throw StateError(
+          'FileTransferManager not initialized. Call the factory constructor FileTransferManager(downloadPath: ...) first.');
     }
     return _instance!;
   }
 
-  /// Set the FileHistory instance for tracking transfers
+  // Method to link the history manager after initialization
   void setFileHistory(FileHistory history) {
     _fileHistory = history;
     zprint("📜 FileHistory instance set for FileTransferManager.");
   }
 
-  /// Creates a new file transfer instance and adds it to the manager
-  /// Returns true if the transfer was successfully created
-  /// `key` is typically the source IP address.
-  Future<bool> add(String key, String original_filename, int size, String senderUsername, Map<String, dynamic> metadata, // Accept metadata
+  /// Starts tracking a new file transfer.
+  ///
+  /// [key]: Typically the source IP address of the sender.
+  /// [original_filename]: The original name of the file being sent.
+  /// [size]: The total size of the file in bytes.
+  /// [senderUsername]: The display name of the user sending the file.
+  /// [metadata]: A map containing additional information about the transfer (e.g., type, checksum).
+  /// [md5Checksum]: The expected MD5 checksum string (can be hash, "no-check", or "CHECKSUM_ERROR").
+  /// Returns true if the transfer was successfully added, false otherwise.
+  Future<bool> add(String key, String original_filename, int size, String senderUsername, Map<String, dynamic> metadata,
       {String? md5Checksum}) async {
-    // md5Checksum can be derived from metadata
     try {
-      // Check if a transfer with the same key is already active
       if (files.containsKey(key)) {
-        zprint("⚠️ Transfer already active for key '$key'. Overwriting?");
-        // Optionally handle this differently, e.g., reject the new transfer
-        // For now, let's allow overwriting the old (potentially stalled) one
-        // await handleSocketClosure(key); // Clean up the old one first?
+        zprint("⚠️ Transfer already active for key '$key'. Previous transfer might be overwritten or fail.");
+        // Consider how to handle this: maybe cancel the old one? Or reject the new one?
+        // For now, we allow overwriting, but the old FileTransfer object will be lost.
+        // await files[key]?.closeOnSocketClosure(); // Example: try closing old one first
       }
 
-      zprint("➕ Adding transfer for '$original_filename' from '$key'");
-      // md5Checksum from metadata overrides the optional parameter if present
-      final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
+      zprint("➕ Adding transfer for '$original_filename' (size: $size) from '$key' (sender: $senderUsername)");
+      // The md5Checksum is already passed in, potentially derived from metadata by NetworkService
+      final effectiveMd5 = md5Checksum; // Use the provided checksum directly
 
       FileTransfer? transfer = await FileTransfer.start(
         key, // Use the provided key (source IP)
         original_filename,
         size,
-        downloadPath,
-        senderUsername, // Corrected parameter name if it was mismatched
-        metadata, // Pass metadata to FileTransfer.start
-        effectiveMd5, // Pass the derived/provided checksum
-        onTransferComplete: _handleTransferComplete, // Callback on successful end()
+        downloadPath, // Use the manager's current download path
+        senderUsername,
+        metadata, // Pass the full metadata map
+        effectiveMd5, // Pass the checksum (hash, "no-check", or "CHECKSUM_ERROR")
+        onTransferComplete: _handleTransferComplete, // Set internal callback for history logging
       );
 
       if (transfer != null) {
-        files[key] = transfer;
+        files[key] = transfer; // Store the new transfer object
         zprint("✅ Transfer added successfully for key '$key'.");
         return true;
+      } else {
+        // FileTransfer.start returned null, likely due to file system error
+        zprint("❌ Failed to start FileTransfer object for key '$key' (check permissions/paths).");
+        return false;
       }
-      zprint("❌ Failed to start FileTransfer object for key '$key'.");
-      return false;
     } catch (e, s) {
       zprint('❌ Error adding file transfer for key $key: $e\n$s');
       return false;
     }
   }
 
-  /// Writes data to an existing file transfer identified by `key`.
-  /// Returns false if the transfer doesn't exist.
+  /// Writes a chunk of binary data to the file associated with the given key.
+  ///
+  /// [key]: The identifier (source IP) of the ongoing transfer.
+  /// [binary_data]: The list of bytes (chunk) to write.
+  /// Returns true if the write was successful, false if the key doesn't exist or an error occurred.
   Future<bool> write(String key, List<int> binary_data) async {
-    try {
-      if (files.containsKey(key)) {
-        await files[key]!.write(binary_data);
-        return true;
-      }
-      zprint("⚠️ Attempted to write to non-existent transfer key: $key");
+    if (!files.containsKey(key)) {
+      // This can happen if the connection closed unexpectedly before writing started
+      zprint("⚠️ Attempted to write to non-existent transfer key: $key. Data ignored.");
       return false;
+    }
+    try {
+      await files[key]!.write(binary_data);
+      return true; // Assume success if no exception
     } catch (e, s) {
-      zprint('❌ Error writing to transfer key $key: $e\n$s');
-      // Consider removing the problematic transfer?
-      // await handleSocketClosure(key);
+      zprint('❌ Error writing chunk to transfer key $key: $e\n$s');
+      // Don't remove the transfer here, let the error propagate or be handled by socket closure
       return false;
     }
   }
 
-  /// Ends a file transfer identified by `key` and removes it from the manager.
-  /// Returns true if the transfer existed and ended successfully (MD5 check passed).
-  /// Returns false otherwise (transfer not found, end() failed, MD5 mismatch).
+  /// Finalizes the file transfer associated with the given key.
+  /// This typically involves closing the file stream and performing final checks (like MD5).
+  ///
+  /// [key]: The identifier (source IP) of the transfer to end.
+  /// Returns true if the transfer ended successfully (including MD5 check if applicable), false otherwise.
   Future<bool> end(String key) async {
-    FileTransfer? transfer; // To access transfer details after removal
-    try {
-      if (files.containsKey(key)) {
-        transfer = files[key]!; // Get reference before potentially removing
-        zprint("🏁 Attempting to end transfer for key '$key'.");
-        final success = await transfer.end(); // Calls onTransferComplete if successful
-        if (success) {
-          zprint("✅ Transfer ended successfully for key '$key'.");
-          files.remove(key); // Remove AFTER successful end
-          return true;
-        } else {
-          // end() returned false, likely MD5 mismatch or file closing error
-          zprint("❌ Transfer end failed for key '$key' (MD5 mismatch or file error).");
-          // File should have been deleted by transfer.end() on mismatch.
-          // Remove from manager anyway.
-          files.remove(key);
-          return false;
-        }
-      }
+    FileTransfer? transfer = files[key]; // Get reference before potentially removing
+
+    if (transfer == null) {
       zprint("⚠️ Attempted to end non-existent transfer key: $key");
-      return false;
+      return false; // Key not found
+    }
+
+    zprint("🏁 Attempting to end transfer for key '$key'.");
+    try {
+      final success = await transfer.end(); // Calls end() which includes MD5 check and onTransferComplete
+
+      // Remove from active transfers ONLY AFTER end() call completes, regardless of success/failure
+      files.remove(key);
+      zprint("🗑️ Removed transfer entry for key '$key' after end() attempt.");
+
+      if (success) {
+        zprint("✅ Transfer ended successfully for key '$key'.");
+        return true;
+      } else {
+        zprint(
+            "❌ Transfer end failed for key '$key' (likely MD5 mismatch or sender error). File was deleted by FileTransfer.end().");
+        // File deletion is handled within transfer.end() on failure
+        return false;
+      }
     } catch (e, s) {
-      zprint('❌ Error ending transfer key $key: $e\n$s');
-      // Ensure removal even if end() throws an unexpected error
+      zprint('❌ Error during transfer finalization (end()) for key $key: $e\n$s');
+      // Ensure removal and attempt deletion even if end() throws an unexpected error
       if (files.containsKey(key)) {
-        files.remove(key);
+        files.remove(key); // Ensure removal on unexpected error
+        zprint("🗑️ Removed transfer entry for key '$key' after error during end().");
       }
-      // Try to delete the potentially corrupted file if transfer object is available
-      if (transfer != null) {
-        try {
-          await File(transfer.destination_filename).delete();
-          zprint("🗑️ Deleted potentially problematic file after error during end(): ${transfer.destination_filename}");
-        } catch (_) {} // Ignore delete error
+      try {
+        // Attempt to delete the file just in case end() failed before cleanup
+        final file = File(transfer.destination_filename);
+        if (await file.exists()) {
+          await file.delete();
+          zprint(
+              "   🗑️ Deleted potentially problematic file after error during end(): ${transfer.destination_filename}");
+        }
+      } catch (delErr) {
+        zprint("   ❌ Error deleting file after error during end(): $delErr");
       }
-      return false;
+      return false; // Indicate failure
     }
   }
 
-  /// Safely closes a file transfer when a socket is closed unexpectedly (e.g., onDone, onError).
-  /// Identified by `key`. Removes the transfer from the manager.
-  /// Returns false if the transfer doesn't exist.
+  /// Handles cleanup when the underlying network socket closes unexpectedly.
+  /// Closes the file stream and may perform checks/deletion based on the transfer state.
+  ///
+  /// [key]: The identifier (source IP) of the transfer whose socket closed.
+  /// Returns true if cleanup was handled, false if the key didn't exist.
   Future<bool> handleSocketClosure(String key) async {
-    try {
-      if (files.containsKey(key)) {
-        zprint("🔌 Handling unexpected socket closure for key '$key'.");
-        // closeOnSocketClosure handles file cleanup (MD5 check, delete if mismatch/incomplete)
-        await files[key]!.closeOnSocketClosure();
-        files.remove(key); // Remove from active transfers
-        zprint("🧹 Resources cleaned up for key '$key' after socket closure.");
-        return true;
-      }
+    FileTransfer? transfer = files[key]; // Get reference
+
+    if (transfer == null) {
       zprint("⚠️ Attempted socket closure handling for non-existent key: $key");
       return false;
+    }
+
+    zprint("🔌 Handling unexpected socket closure for key '$key'.");
+    try {
+      await transfer.closeOnSocketClosure(); // Perform cleanup within FileTransfer
+      zprint("🧹 Resources cleaned up by FileTransfer for key '$key' after socket closure.");
+      return true;
     } catch (e, s) {
-      zprint('❌ Error handling socket closure for key $key: $e\n$s');
-      // Ensure removal even on error during cleanup
-      if (files.containsKey(key)) {
-        files.remove(key);
+      zprint('❌ Error during FileTransfer.closeOnSocketClosure() for key $key: $e\n$s');
+      // Attempt to delete the file as a last resort cleanup
+      try {
+        final file = File(transfer.destination_filename);
+        if (await file.exists()) {
+          await file.delete();
+          zprint("   🗑️ Deleted file after error during closeOnSocketClosure(): ${transfer.destination_filename}");
+        }
+      } catch (delErr) {
+        zprint("   ❌ Error deleting file after error during closeOnSocketClosure(): $delErr");
       }
-      return false;
+      return false; // Indicate that an error occurred during cleanup
+    } finally {
+      // Always remove the transfer entry from the map after handling closure
+      files.remove(key);
+      zprint("🗑️ Removed transfer entry for key '$key' after handling socket closure.");
     }
   }
 
-  /// Updates the download path for future file transfers.
-  /// Creates the directory if it doesn't exist.
-  /// Returns true if the path was successfully updated and directory created/exists.
+  /// Updates the default download directory path used by the manager.
+  /// Attempts to create the directory if it doesn't exist.
+  ///
+  /// [newPath]: The absolute path for the new download directory.
+  /// Returns true if the path was updated successfully, false otherwise.
   Future<bool> updateDownloadPath(String newPath) async {
     if (newPath.isEmpty) {
       zprint("⚠️ Attempted to set empty download path. Ignoring.");
       return false;
     }
+    if (newPath == _instance?.downloadPath) {
+      zprint("ℹ️ Download path is already set to '$newPath'. No change needed.");
+      return true; // No change needed
+    }
+
     zprint("📂 Attempting to update download path to: $newPath");
     try {
-      await Directory(newPath).create(recursive: true);
-      // Check if directory exists after creation attempt
-      if (await Directory(newPath).exists()) {
-        _instance!.downloadPath = newPath;
-        zprint("✅ Download path updated successfully.");
-        return true;
+      final directory = Directory(newPath);
+      // Check if it exists *before* creating to avoid unnecessary operations/potential errors
+      if (!await directory.exists()) {
+        zprint("   Directory does not exist. Creating...");
+        await directory.create(recursive: true);
+        zprint("   Directory created (or attempt finished).");
       } else {
-        zprint("❌ Failed to create or find directory after create attempt: $newPath");
+        zprint("   Directory already exists.");
+      }
+
+      // Verify existence *after* potential creation attempt
+      if (await directory.exists()) {
+        // Check write permissions (simple check: try creating and deleting a temp file)
+        // Use the imported 'path' prefix here
+        String tempFilePath = path.join(newPath, '.woxxy_write_test_${DateTime.now().millisecondsSinceEpoch}');
+        try {
+          File tempFile = File(tempFilePath);
+          await tempFile.writeAsString('test');
+          await tempFile.delete();
+          zprint("   ✅ Write permission verified for '$newPath'.");
+
+          // If all checks pass, update the path
+          _instance!.downloadPath = newPath;
+          zprint("✅ Download path updated successfully to: $newPath");
+          return true;
+        } catch (permError) {
+          zprint("❌ Write permission check failed for '$newPath': $permError");
+          return false; // Indicate failure due to permissions
+        }
+      } else {
+        zprint("❌ Failed to find or create directory after attempt: $newPath");
         return false;
       }
     } catch (e, s) {
-      zprint('❌ Error updating download path: $e\n$s');
+      zprint('❌ Error updating download path to $newPath: $e\n$s');
       return false;
     }
   }
 
-  /// Callback executed when a FileTransfer's end() method completes successfully.
+  // Internal callback passed to FileTransfer.start
+  // Triggered only when FileTransfer.end() completes successfully.
   void _handleTransferComplete(FileTransfer transfer) {
-    // Key is the source IP stored in the transfer object
-    final key = transfer.source_ip;
+    final key = transfer.source_ip; // The source IP used as the key
     zprint("🎉 Transfer complete callback triggered for key '$key'.");
 
     if (_fileHistory != null) {
-      // Check the type from metadata stored in the transfer object
+      // Check the metadata to decide if it should be added to history
       final transferType = transfer.metadata['type'] as String? ?? 'FILE';
 
       if (transferType == 'AVATAR_FILE') {
-        // Avatar processing logic moved to NetworkService after end() succeeds
         zprint('🖼️ Avatar transfer complete callback, skipping history entry.');
-        // The actual avatar processing (reading file, storing in AvatarStore, deleting file)
-        // should happen in NetworkService *after* `end(key)` returns true.
       } else {
-        // Add regular files to history
+        // Add regular file transfers to history
         zprint('📜 Adding transfer to history: ${transfer.destination_filename}');
         final entry = FileHistoryEntry(
           destinationPath: transfer.destination_filename,
           senderUsername: transfer.senderUsername,
           fileSize: transfer.size,
-          uploadSpeedMBps: transfer.getSpeedMBps(),
+          uploadSpeedMBps: transfer.getSpeedMBps(), // Calculate speed here
+          createdAt: DateTime.now(), // Use current time for history entry
         );
         _fileHistory!.addEntry(entry);
       }
     } else {
-      zprint("⚠️ FileHistory not set, cannot add entry for completed transfer.");
+      zprint("⚠️ FileHistory not set, cannot add entry for completed transfer '$key'.");
     }
 
-    // No need to notify PeerManager here, NetworkService handles avatar updates.
-    // Regular file completion doesn't require peer list UI refresh typically.
+    // Note: The transfer is already removed from the `files` map
+    // by the `end()` method before this callback is invoked.
   }
 } // End of FileTransferManager class
