@@ -67,10 +67,15 @@ class FileTransferManager {
       {String? md5Checksum}) async {
     try {
       if (files.containsKey(key)) {
-        zprint("⚠️ Transfer already active for key '$key'. Previous transfer might be overwritten or fail.");
+        final existingTransferType = files[key]?.metadata['type'] ?? 'FILE';
+        final newTransferType = metadata['type'] ?? 'FILE';
+
+        zprint(
+            "⚠️ Transfer already active for key '$key' (type: $existingTransferType). Rejecting duplicate incoming transfer '$original_filename' (type: $newTransferType).");
         // Consider how to handle this: maybe cancel the old one? Or reject the new one?
         // For now, we allow overwriting, but the old FileTransfer object will be lost.
         // await files[key]?.closeOnSocketClosure(); // Example: try closing old one first
+        return false;
       }
 
       zprint("➕ Adding transfer for '$original_filename' (size: $size) from '$key' (sender: $senderUsername)");

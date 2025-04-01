@@ -374,7 +374,7 @@ class NetworkService {
             if (!added) {
               zprint(
                   "❌ Failed to add transfer for $fileName from $fileTransferKey (FileTransferManager.add failed). Closing.");
-              socket.destroy();
+              socket.destroy(); // Close the current socket immediately as the transfer was rejected
               return;
             }
 
