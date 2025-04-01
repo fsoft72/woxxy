@@ -26,18 +26,15 @@ class _HomeContentState extends State<HomeContent> {
   @override
   void initState() {
     super.initState();
-    widget.networkService.fileReceived.listen((fileInfo) {
+    // Listen to file received events from the NetworkService facade
+    widget.networkService.onFileReceived.listen((message) {
       if (!mounted) return;
-      final parts = fileInfo.split('|');
-      if (parts.length >= 4) {
-        final sizeMiB = parts[1];
-        final transferTime = parts[2];
-        final speed = parts[3];
-        showSnackbar(
-          context,
-          'File received successfully ($sizeMiB MiB in ${transferTime}s, $speed MiB/s)',
-        );
-      }
+      // The message format is now simpler, e.g., "Received: filename.ext from SenderName"
+      // We can just display the message directly in a snackbar
+      showSnackbar(
+        context,
+        message, // Display the message directly
+      );
     });
   }
 

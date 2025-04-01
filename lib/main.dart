@@ -99,7 +99,9 @@ void main() async {
 
       try {
         // Setup tray icon and menu
-        String iconPath = Platform.isWindows ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico') : 'assets/icons/head.png'; // Use PNG for Linux/Mac
+        String iconPath = Platform.isWindows
+            ? path.join(Directory.current.path, 'assets', 'icons', 'head.ico')
+            : 'assets/icons/head.png'; // Use PNG for Linux/Mac
 
         // For Windows, ensure we fall back to .png if .ico doesn't exist
         if (Platform.isWindows) {
@@ -426,17 +428,17 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
                   ),
                   const SizedBox(height: 4), // Add space between title and info row
                   Row(children: [
-                    if (_networkService.currentIpAddress != null)
+                    if (_networkService.currentIpAddress != null) // Use the public getter
                       // Use Flexible to allow text wrapping or ellipsis for IP
                       Flexible(
                         child: Text(
-                          'IP: ${_networkService.currentIpAddress}',
+                          'IP: ${_networkService.currentIpAddress}', // Use the public getter
                           style: Theme.of(context).textTheme.bodySmall,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     // Add spacing only if IP is shown
-                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16),
+                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16), // Use the public getter
                     Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
                   ]),
                 ],
