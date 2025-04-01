@@ -478,17 +478,22 @@ class NetworkService {
   Future<void> _processReceivedAvatar(String tempFilePath, String senderIp) async {
     zprint('🖼️ Processing received avatar for $senderIp from temp path: $tempFilePath');
     final tempFile = File(tempFilePath);
+    bool success = false;
+
     try {
       if (await tempFile.exists()) {
         // Save the downloaded temp file to the persistent cache via AvatarStore
         await _avatarStore.saveAvatarToCache(senderIp, tempFilePath);
+        success = true;
         // Notify PeerManager -> UI that peer data *might* have changed (avatar now available)
         _peerManager.notifyPeersUpdated();
       } else {
         zprint('❌ Temporary avatar file not found after transfer: $tempFilePath');
+        success = false;
       }
     } catch (e, s) {
       zprint('❌ Error processing received avatar (saving to cache) for $senderIp: $e\n$s');
+      success = false;
     } finally {
       // Always attempt to delete the temporary file downloaded by FileTransferManager
       try {
@@ -499,6 +504,7 @@ class NetworkService {
       } catch (e) {
         zprint('❌ Error deleting temporary avatar file $tempFilePath: $e');
       }
+      _peerManager.removePendingAvatarRequest(senderIp);
     }
   }
 
@@ -948,13 +954,7 @@ class NetworkService {
       return;
     }
 
-    // Final check for cache right before sending UDP
-    if (await _avatarStore.hasAvatarOrCache(peer.id)) {
-      zprint('   ⚠️ Avatar found in cache just before sending request. Aborting request.');
-      return;
-    }
-
-    zprint('   -> Sending AVATAR_REQUEST UDP to ${peer.address.address}:${_discoveryPort}');
+    zprint('➡️ Sending AVATAR_REQUEST UDP to ${peer.name} (${peer.id}) at ${peer.address.address}:${_discoveryPort}');
     // Format: AVATAR_REQUEST:MyID:MyIP:MyListenPort (MyID = MyIP)
     final requestMessage = 'AVATAR_REQUEST:$currentIpAddress:$currentIpAddress:$_port';
     try {
@@ -964,7 +964,7 @@ class NetworkService {
         _discoveryPort, // Send to their discovery port
       );
       if (bytesSent > 0) {
-        zprint("   -> Avatar request sent ($bytesSent bytes).");
+        zprint("   -> Avatar request UDP sent ($bytesSent bytes).");
       } else {
         zprint("   ⚠️ Avatar request send returned 0 bytes.");
       }

@@ -29,6 +29,9 @@ class PeerManager {
   final AvatarStore _avatarStore = AvatarStore(); // Instance of the avatar store
   late RequestAvatarCallback _requestAvatarCallback; // Callback to network service
 
+  // Set to keep track of peer IDs for which an avatar request is currently in progress.
+  final Set<String> _pendingAvatarRequests = {}; // <-- NEW: Pending state tracker
+
   /// Private constructor for the singleton. Initializes the peer stream.
   PeerManager._internal() {
     // Use BehaviorSubject to immediately emit the current list to new listeners
@@ -69,6 +72,7 @@ class PeerManager {
     _cleanupTimer = Timer.periodic(_peerTimeout, (timer) {
       final now = DateTime.now();
       bool changed = false; // Flag to track if the list was modified
+      List<String> removedPeerIds = []; // Track removed peers
 
       // Remove peers where the time since last seen exceeds the timeout
       _peers.removeWhere((key, status) {
@@ -77,8 +81,11 @@ class PeerManager {
         if (shouldRemove) {
           zprint(
               '🗑️ Removing inactive peer: ${status.peer.name} (${status.peer.id}) - Last seen: ${timeSinceLastSeen.inSeconds}s ago');
+          removedPeerIds.add(status.peer.id); // Add to list for cleanup
           // Also remove the avatar associated with the timed-out peer
           _avatarStore.removeAvatar(status.peer.id);
+          // Ensure pending request is also cleared on timeout
+          _pendingAvatarRequests.remove(status.peer.id); // <-- UPDATED: Clear pending on timeout
           changed = true;
         }
         return shouldRemove;
@@ -88,8 +95,6 @@ class PeerManager {
       if (changed) {
         zprint('📊 Peer list changed due to cleanup. Emitting update. New count: ${_peers.length}');
         _peerController.add(currentPeers);
-      } else {
-        // zprint('🧹 Peer cleanup ran, no changes.'); // Optional: log when no changes occur
       }
     });
   }
@@ -102,13 +107,8 @@ class PeerManager {
   }
 
   /// Adds or updates a peer based on received announcements.
-  /// Checks for existing avatars before requesting a new one.
-  ///
-  /// [peer]: The Peer object representing the discovered peer.
-  /// [currentIpAddress]: The IP address of the local device (unused here but part of original signature).
-  /// [currentPort]: The listening port of the local device (unused here).
+  /// Checks for existing avatars *and pending requests* before requesting a new one.
   Future<void> addPeer(Peer peer, String currentIpAddress, int currentPort) async {
-    // Made async for avatar check
     // zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
 
     final bool isExistingPeer = _peers.containsKey(peer.id);
@@ -119,37 +119,53 @@ class PeerManager {
       _peers[peer.id] = _PeerStatus(peer); // Add to the map
       _peerController.add(currentPeers); // Notify listeners about the new peer list
 
-      // Check cache BEFORE requesting avatar
+      // Check cache AND pending state BEFORE requesting avatar
       bool avatarExists = await _avatarStore.hasAvatarOrCache(peer.id);
-      if (!avatarExists) {
-        zprint("❓ Avatar not found for new peer ${peer.name} (${peer.id}). Requesting via callback...");
+      bool isPending = _pendingAvatarRequests.contains(peer.id); // <-- NEW: Check pending
+
+      if (!avatarExists && !isPending) {
+        // <-- UPDATED: Check both conditions
+        zprint("❓ Avatar not found and not pending for new peer ${peer.name} (${peer.id}). Requesting...");
+        // Mark as pending *before* calling the callback
+        _pendingAvatarRequests.add(peer.id); // <-- NEW: Add to pending set
+        zprint("   -> Added ${peer.id} to pending avatar requests.");
         // Trigger the avatar request via the callback to NetworkService
         _requestAvatarCallback(peer);
-      } else {
-        zprint("✅ Avatar already present in cache/memory for ${peer.name} (${peer.id}). Skipping request.");
-        // Optional: If avatar is only on disk, trigger loading into memory here if needed immediately
-        // _avatarStore.getAvatar(peer.id);
+      } else if (avatarExists) {
+        // zprint("✅ Avatar already present in cache/memory for ${peer.name} (${peer.id}). Skipping request.");
+      } else if (isPending) {
+        // zprint("⏳ Avatar request already pending for ${peer.name} (${peer.id}). Skipping duplicate request trigger.");
       }
     } else {
       // --- Existing Peer Logic ---
-      // Peer already known, just update its last seen time
       _peers[peer.id]!.updateLastSeen();
-      // Optional: Check if peer details (like name) changed and update if necessary
       if (_peers[peer.id]!.peer.name != peer.name) {
         zprint("✏️ Updating name for existing peer ${peer.id}: '${_peers[peer.id]!.peer.name}' -> '${peer.name}'");
-        _peers[peer.id] = _PeerStatus(peer); // Update with new Peer object
-        _peerController.add(currentPeers); // Notify UI of potential name change
+        _peers[peer.id] = _PeerStatus(peer);
+        _peerController.add(currentPeers);
       }
+      // OPTIONAL: Check if an avatar request was pending but failed, and maybe retry?
+      // Could add logic here to check if pending and lastSeen is old enough to retry.
+      // For now, rely on peer timeout and re-discovery to retry naturally.
+    }
+  }
+
+  /// Removes a peer ID from the set of pending avatar requests.
+  /// Called by NetworkService when an avatar is successfully processed or fails terminally.
+  void removePendingAvatarRequest(String peerId) {
+    // <-- NEW METHOD
+    if (_pendingAvatarRequests.remove(peerId)) {
+      zprint("✅ Removed ${peerId} from pending avatar requests.");
     }
   }
 
   /// Cleans up resources when the PeerManager is no longer needed.
-  /// Stops the cleanup timer and closes the peer stream controller.
   void dispose() {
     zprint("🛑 Disposing PeerManager...");
     _cleanupTimer?.cancel();
     _peerController.close();
-    _peers.clear(); // Clear the peer map
+    _peers.clear();
+    _pendingAvatarRequests.clear(); // <-- NEW: Clear pending set
     zprint("✅ PeerManager disposed.");
   }
 }
