@@ -28,7 +28,5 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
-	<key>com.apple.security.personal-information.notifications</key>
-	<true/>
 </dict>
 </plist>
