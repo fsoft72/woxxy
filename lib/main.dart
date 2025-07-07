@@ -210,6 +210,8 @@ void main() async {
     if (WidgetsBinding.instance.isRootWidgetAttached) {
       runApp(
         MaterialApp(
+          title: 'Woxxy',
+          debugShowCheckedModeBanner: false,
           home: Scaffold(
             body: Center(
               child: Text('Failed to initialize: $e'),
@@ -232,6 +234,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Woxxy',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
