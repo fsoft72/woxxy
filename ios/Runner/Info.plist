@@ -34,6 +34,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Access library to share file</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We only use location for local network</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We only use location for local network</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
