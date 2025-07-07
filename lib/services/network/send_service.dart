@@ -86,40 +86,102 @@ class SendService {
     return transferId;
   }
 
-  // Send avatar file (uses sendFile internally with special metadata)
-  Future<void> sendAvatar(Peer receiver) async {
-    if (_profileImagePath == null || _profileImagePath!.isEmpty) {
-      zprint('🚫 Cannot send avatar: No profile image set.');
-      return;
-    }
-    if (_currentIpAddress == null) {
-      zprint("🚫 Cannot send avatar: Local IP address unknown.");
-      return;
+  /// Sends the user's profile image as an avatar to a peer
+  /// Returns true if the avatar was sent successfully, false otherwise
+  Future<bool> sendAvatar(Peer receiver) async {
+    zprint('🖼️ Avatar send request for ${receiver.name} (${receiver.id})');
+    
+    // Validate prerequisites
+    if (!_validateAvatarSendPrerequisites(receiver)) {
+      return false;
     }
 
     final avatarFile = File(_profileImagePath!);
-    if (!await avatarFile.exists()) {
-      zprint('🚫 Cannot send avatar: File not found at $_profileImagePath');
-      return;
-    }
-
-    zprint('🖼️ Sending avatar from $_profileImagePath to ${receiver.name} (${receiver.id})');
     final transferId = 'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}';
+    
+    try {
+      // Validate avatar file
+      if (!await _validateAvatarFile(avatarFile)) {
+        return false;
+      }
+
+      // Create avatar metadata
+      final avatarMetadata = await _createAvatarMetadata(avatarFile, transferId);
+      zprint("📋 [Avatar Send] Metadata prepared for ${receiver.name}");
+      
+      // Send the avatar file
+      await _sendFileWithMetadata(transferId, _profileImagePath!, receiver, avatarMetadata);
+      
+      zprint('✅ Avatar sent successfully to ${receiver.name}');
+      return true;
+      
+    } catch (e, stackTrace) {
+      zprint('❌ Failed to send avatar ($transferId) to ${receiver.name}: $e');
+      zprint('Stack trace: $stackTrace');
+      return false;
+    }
+  }
+
+  /// Validates prerequisites for sending an avatar
+  bool _validateAvatarSendPrerequisites(Peer receiver) {
+    if (_profileImagePath == null || _profileImagePath!.isEmpty) {
+      zprint('🚫 Cannot send avatar: No profile image configured');
+      return false;
+    }
+    
+    if (_currentIpAddress == null || _currentIpAddress!.isEmpty) {
+      zprint('🚫 Cannot send avatar: Local IP address unknown');
+      return false;
+    }
+    
+    if (receiver.id.isEmpty) {
+      zprint('🚫 Cannot send avatar: Receiver ID is empty');
+      return false;
+    }
+    
+    return true;
+  }
+
+  /// Validates that the avatar file exists and is readable
+  Future<bool> _validateAvatarFile(File avatarFile) async {
+    if (!await avatarFile.exists()) {
+      zprint('🚫 Cannot send avatar: File not found at ${avatarFile.path}');
+      return false;
+    }
 
     try {
-      final originalMetadata = await _createFileMetadata(avatarFile, transferId);
-      final avatarMetadata = {
-        ...originalMetadata,
-        'type': 'AVATAR_FILE',
-        'senderIp': _currentIpAddress, // Ensure correct sender IP
-      };
-      zprint("  [Avatar Send] Metadata: ${json.encode(avatarMetadata)}");
-
-      await _sendFileWithMetadata(transferId, _profileImagePath!, receiver, avatarMetadata);
-      zprint('✅ Avatar sent successfully to ${receiver.name}');
-    } catch (e, s) {
-      zprint('❌ Error sending avatar ($transferId): $e\n$s');
+      final fileSize = await avatarFile.length();
+      if (fileSize == 0) {
+        zprint('🚫 Cannot send avatar: File is empty at ${avatarFile.path}');
+        return false;
+      }
+      
+      // Check reasonable file size limits (e.g., max 10MB for avatar)
+      const maxAvatarSize = 10 * 1024 * 1024; // 10MB
+      if (fileSize > maxAvatarSize) {
+        zprint('🚫 Cannot send avatar: File too large (${fileSize ~/ 1024 ~/ 1024}MB > ${maxAvatarSize ~/ 1024 ~/ 1024}MB)');
+        return false;
+      }
+      
+      zprint('✅ Avatar file validated: ${fileSize ~/ 1024}KB');
+      return true;
+      
+    } catch (e) {
+      zprint('🚫 Cannot send avatar: Error accessing file ${avatarFile.path}: $e');
+      return false;
     }
+  }
+
+  /// Creates metadata specifically for avatar transfers
+  Future<Map<String, dynamic>> _createAvatarMetadata(File avatarFile, String transferId) async {
+    final originalMetadata = await _createFileMetadata(avatarFile, transferId);
+    
+    return {
+      ...originalMetadata,
+      'type': 'AVATAR_FILE',
+      'senderIp': _currentIpAddress,
+      'isAvatar': true, // Additional flag for clarity
+    };
   }
 
   // Helper to create metadata map

@@ -185,31 +185,86 @@ class ReceiveService {
     );
   }
 
-  // Process the received avatar file
+  /// Processes a received avatar file by loading it into memory and cleaning up
   Future<void> _processReceivedAvatar(String filePath, String senderIp) async {
-    zprint('🖼️ Processing received avatar for IP: $senderIp from path: $filePath');
+    zprint('🖼️ Processing received avatar for $senderIp from: $filePath');
+    
+    if (senderIp.isEmpty) {
+      zprint('❌ Cannot process avatar: sender IP is empty');
+      return;
+    }
+
+    File? tempFile;
     try {
-      final file = File(filePath);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        if (bytes.isNotEmpty) {
-          await avatarStore.setAvatar(senderIp, bytes); // Use IP as the key
-          zprint('✅ Avatar stored for $senderIp');
-          peerManager.notifyPeersUpdated(); // Force UI refresh
-        } else {
-          zprint('⚠️ Received avatar file is empty: $filePath');
-        }
-        try {
-          await file.delete();
-          // zprint('🗑️ Deleted temporary avatar file: $filePath');
-        } catch (e) {
-          zprint('❌ Error deleting temporary avatar file: $e');
-        }
-      } else {
-        zprint('❌ Avatar file not found after transfer: $filePath');
+      tempFile = File(filePath);
+      
+      // Verify file exists
+      if (!await tempFile.exists()) {
+        zprint('❌ Avatar file not found: $filePath');
+        return;
       }
-    } catch (e, s) {
-      zprint('❌ Error processing received avatar: $e\n$s');
+
+      // Read and validate file data
+      final bytes = await tempFile.readAsBytes();
+      if (bytes.isEmpty) {
+        zprint('⚠️ Received avatar file is empty: $filePath');
+        return;
+      }
+
+      // Validate image format (basic check)
+      if (!_isValidImageData(bytes)) {
+        zprint('⚠️ Received file does not appear to be a valid image: $filePath');
+        return;
+      }
+
+      // Store avatar in memory
+      await avatarStore.setAvatar(senderIp, bytes);
+      zprint('✅ Avatar stored for $senderIp (${bytes.length} bytes)');
+      
+      // Notify UI to refresh peer list
+      peerManager.notifyPeersUpdated();
+      zprint('🔄 UI notified of avatar update');
+      
+    } catch (e, stackTrace) {
+      zprint('❌ Error processing received avatar for $senderIp: $e');
+      zprint('Stack trace: $stackTrace');
+    } finally {
+      // Always attempt to clean up temporary file
+      await _cleanupTempFile(tempFile, filePath);
+    }
+  }
+
+  /// Basic validation to check if data looks like an image
+  bool _isValidImageData(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    
+    // Check for common image file signatures
+    // JPEG: FF D8
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8) return true;
+    // PNG: 89 50 4E 47
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return true;
+    // GIF: 47 49 46 38
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38) return true;
+    // WebP: starts with "RIFF" and contains "WEBP"
+    if (bytes.length >= 12 && 
+        bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+        bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /// Safely cleanup temporary avatar file
+  Future<void> _cleanupTempFile(File? tempFile, String filePath) async {
+    try {
+      if (tempFile != null && await tempFile.exists()) {
+        await tempFile.delete();
+        zprint('🗑️ Cleaned up temporary avatar file: $filePath');
+      }
+    } catch (e) {
+      zprint('⚠️ Error cleaning up temporary avatar file $filePath: $e');
+      // Don't rethrow - cleanup failure shouldn't break the avatar processing
     }
   }
 

@@ -59,6 +59,93 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
   String? _activeTransferId;
 
+  /// Builds a large avatar for the peer details header
+  Widget _buildLargePeerAvatar(Peer peer, String initials) {
+    const double avatarSize = 80.0;
+    final avatarStore = AvatarStore();
+    
+    return SizedBox(
+      width: avatarSize,
+      height: avatarSize,
+      child: StreamBuilder<List<Peer>>(
+        stream: widget.networkService.peerStream,
+        builder: (context, _) {
+          final peerAvatar = avatarStore.getAvatar(peer.id);
+          
+          if (peerAvatar != null) {
+            return _buildLargeAvatarImage(peerAvatar, avatarSize);
+          } else {
+            return _buildLargeDefaultAvatar(peer, initials, avatarSize);
+          }
+        },
+      ),
+    );
+  }
+
+  /// Builds the large avatar image with border
+  Widget _buildLargeAvatarImage(ui.Image image, double size) {
+    return ClipOval(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.grey.shade300,
+            width: 2.0,
+          ),
+          shape: BoxShape.circle,
+        ),
+        child: RawImage(
+          image: image,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+
+  /// Builds a large default avatar with consistent styling
+  Widget _buildLargeDefaultAvatar(Peer peer, String initials, double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: _getLargeAvatarColorForPeer(peer),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.grey.shade300,
+          width: 2.0,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initials.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.4, // Scale font size with avatar size
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Gets a consistent color for large avatar based on peer ID
+  Color _getLargeAvatarColorForPeer(Peer peer) {
+    final colors = [
+      Colors.blue.shade500,
+      Colors.green.shade500,
+      Colors.orange.shade500,
+      Colors.purple.shade500,
+      Colors.teal.shade500,
+      Colors.indigo.shade500,
+      Colors.red.shade500,
+      Colors.pink.shade500,
+    ];
+    
+    final hash = peer.id.hashCode;
+    return colors[hash.abs() % colors.length];
+  }
+
   @override
   void dispose() {
     _progressSubscription?.cancel();
@@ -389,43 +476,10 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         ? widget.peer.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join()
         : '?';
 
-    // Get the avatar using peer.id
-    final ui.Image? peerAvatar = AvatarStore().getAvatar(widget.peer.id);
-    zprint(
-        '🖼️ [Peer Details] Avatar for ${widget.peer.name} (ID: ${widget.peer.id}) ${peerAvatar != null ? 'found' : 'not found'}');
-
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Conditional display: Avatar or Initials
-        if (peerAvatar != null)
-          ClipOval(
-            child: RawImage(
-              image: peerAvatar,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-            ),
-          )
-        else
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary, // Use theme color for background
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                initials.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
+        _buildLargePeerAvatar(widget.peer, initials),
         const SizedBox(width: 16),
         Expanded(
           child: Column(

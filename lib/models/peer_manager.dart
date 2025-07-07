@@ -90,32 +90,52 @@ class PeerManager {
     _peerController.add(currentPeers);
   }
 
+  /// Adds or updates a peer in the manager and handles avatar requests
+  /// Returns true if this is a new peer, false if it's an existing peer update
   void addPeer(Peer peer, String currentIpAddress, int currentPort) {
-    // Peer ID is now the IP address
-    // No need to check against currentIpAddress here, as NetworkService listener already filters self-announcements.
-
+    // Peer ID is the IP address - NetworkService already filters self-announcements
     final bool isNewPeer = !_peers.containsKey(peer.id);
 
     if (isNewPeer) {
-      zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
-      zprint('✅ Adding NEW peer: ${peer.name} (${peer.id})');
+      zprint('🆕 Adding NEW peer: ${peer.name} (${peer.id})');
       _peers[peer.id] = _PeerStatus(peer);
-      _peerController.add(currentPeers); // Notify listeners about the new peer
-      // Request avatar using peer.id (which is the peer's IP) if not already present
-      if (!_avatarStore.hasAvatar(peer.id)) {
-        zprint("❓ Requesting avatar for new peer ${peer.name} (${peer.id}) via callback");
-        // Use the callback function instead of directly calling NetworkService
-        _requestAvatarCallback(peer);
-      } else {
-        zprint("✅ Avatar already present for ${peer.name} (${peer.id}). Skipping request.");
-      }
+      _peerController.add(currentPeers); // Notify UI about the new peer
+      
+      // Request avatar for new peer if not already cached
+      _requestAvatarForPeer(peer);
     } else {
-      // Existing peer, just update last seen time
-      // zprint('🔄 Updating last seen for existing peer: ${peer.name} (${peer.id})'); // Can be verbose
+      // Existing peer - just update last seen time
       _peers[peer.id]!.updateLastSeen();
-      // Optionally, re-request avatar if it failed before? Or rely on manual refresh?
-      // For simplicity, we only request on initial discovery.
+      zprint('🔄 Updated last seen for peer: ${peer.name} (${peer.id})');
     }
+  }
+
+  /// Requests avatar for a peer if not already present in cache
+  void _requestAvatarForPeer(Peer peer) {
+    if (_avatarStore.hasAvatar(peer.id)) {
+      zprint("✅ Avatar already cached for ${peer.name} (${peer.id}) - skipping request");
+      return;
+    }
+
+    zprint("🖼️ Requesting avatar for ${peer.name} (${peer.id})");
+    try {
+      _requestAvatarCallback(peer);
+      zprint("  ✅ Avatar request sent successfully");
+    } catch (e) {
+      zprint("  ❌ Failed to send avatar request: $e");
+    }
+  }
+
+  /// Manually request avatar for a specific peer (useful for retry scenarios)
+  void requestAvatarFor(String peerId) {
+    final peerStatus = _peers[peerId];
+    if (peerStatus == null) {
+      zprint("⚠️ Cannot request avatar: peer $peerId not found");
+      return;
+    }
+    
+    zprint("🔄 Manual avatar request for ${peerStatus.peer.name} ($peerId)");
+    _requestAvatarForPeer(peerStatus.peer);
   }
 
   void dispose() {
