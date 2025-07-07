@@ -106,15 +106,14 @@ class PeerManager {
     _peerController.add(currentPeers);
   }
 
-  /// Adds or updates a peer based on received announcements.
-  /// Checks for existing avatars *and pending requests* before requesting a new one.
-  Future<void> addPeer(Peer peer, String currentIpAddress, int currentPort) async {
-    // zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
+  void addPeer(Peer peer, String currentIpAddress, int currentPort) {
+    // Peer ID is now the IP address
+    // No need to check against currentIpAddress here, as NetworkService listener already filters self-announcements.
 
     final bool isExistingPeer = _peers.containsKey(peer.id);
 
-    if (!isExistingPeer) {
-      // --- New Peer Logic ---
+    if (isNewPeer) {
+      zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
       zprint('✅ Adding NEW peer: ${peer.name} (${peer.id})');
       _peers[peer.id] = _PeerStatus(peer); // Add to the map
       _peerController.add(currentPeers); // Notify listeners about the new peer list

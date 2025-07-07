@@ -22,11 +22,9 @@ class _FileTransferItem {
   bool isFailed; // True if sending failed
   String? errorMessage; // Error message if sending failed
 
-  _FileTransferItem(this.path, this.name, this.size)
-      : isCompleted = false,
-        isFailed = false,
-        errorMessage = null;
-}
+// ignore: depend_on_referenced_packages
+import 'package:cross_file/cross_file.dart';
+import 'package:file_picker/file_picker.dart'; // Add this import
 
 /// Screen displaying details of a specific peer and allowing file transfers to them.
 class PeerDetailPage extends StatefulWidget {
@@ -624,6 +622,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
                   ),
+                  child: const Text('Cancel All'),
                 ),
             ],
           ),

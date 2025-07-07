@@ -54,16 +54,11 @@ class FileTransferManager {
     zprint("📜 FileHistory instance set for FileTransferManager.");
   }
 
-  /// Starts tracking a new file transfer.
-  ///
-  /// [key]: Typically the source IP address of the sender.
-  /// [original_filename]: The original name of the file being sent.
-  /// [size]: The total size of the file in bytes.
-  /// [senderUsername]: The display name of the user sending the file.
-  /// [metadata]: A map containing additional information about the transfer (e.g., type, checksum).
-  /// [md5Checksum]: The expected MD5 checksum string (can be hash, "no-check", or "CHECKSUM_ERROR").
-  /// Returns true if the transfer was successfully added, false otherwise.
-  Future<bool> add(String key, String original_filename, int size, String senderUsername, Map<String, dynamic> metadata,
+  /// Creates a new file transfer instance and adds it to the manager
+  /// Returns true if the transfer was successfully created
+  /// `key` is typically the source IP address.
+  Future<bool> add(String key, String originalFilename, int size, String senderUsername,
+      Map<String, dynamic> metadata, // Accept metadata
       {String? md5Checksum}) async {
     try {
       if (files.containsKey(key)) {
@@ -78,13 +73,13 @@ class FileTransferManager {
         return false;
       }
 
-      zprint("➕ Adding transfer for '$original_filename' (size: $size) from '$key' (sender: $senderUsername)");
-      // The md5Checksum is already passed in, potentially derived from metadata by NetworkService
-      final effectiveMd5 = md5Checksum; // Use the provided checksum directly
+      zprint("➕ Adding transfer for '$originalFilename' from '$key'");
+      // md5Checksum from metadata overrides the optional parameter if present
+      final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
 
       FileTransfer? transfer = await FileTransfer.start(
         key, // Use the provided key (source IP)
-        original_filename,
+        originalFilename,
         size,
         downloadPath, // Use the manager's current download path
         senderUsername,
@@ -108,15 +103,15 @@ class FileTransferManager {
     }
   }
 
-  /// Writes a chunk of binary data to the file associated with the given key.
-  ///
-  /// [key]: The identifier (source IP) of the ongoing transfer.
-  /// [binary_data]: The list of bytes (chunk) to write.
-  /// Returns true if the write was successful, false if the key doesn't exist or an error occurred.
-  Future<bool> write(String key, List<int> binary_data) async {
-    if (!files.containsKey(key)) {
-      // This can happen if the connection closed unexpectedly before writing started
-      zprint("⚠️ Attempted to write to non-existent transfer key: $key. Data ignored.");
+  /// Writes data to an existing file transfer identified by `key`.
+  /// Returns false if the transfer doesn't exist.
+  Future<bool> write(String key, List<int> binaryData) async {
+    try {
+      if (files.containsKey(key)) {
+        await files[key]!.write(binaryData);
+        return true;
+      }
+      zprint("⚠️ Attempted to write to non-existent transfer key: $key");
       return false;
     }
     try {

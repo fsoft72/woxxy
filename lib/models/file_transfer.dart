@@ -110,9 +110,8 @@ class FileTransfer {
       zprint("   Unique destination path determined: $finalPath");
 
       File file = File(finalPath);
-      // Open in writeOnly mode. Append is usually for logging or existing files.
-      // If the file exists due to race condition, writeOnly will overwrite.
-      IOSink sink = file.openWrite(mode: FileMode.writeOnly);
+      IOSink sink = file.openWrite(
+          mode: FileMode.writeOnlyAppend); // Use Append initially? Or WriteOnly? WriteOnly seems safer for new file.
       zprint("   Opened file sink for writing.");
 
       Stopwatch watch = Stopwatch()..start();
@@ -339,7 +338,7 @@ class FileTransfer {
       // zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
       filePath = path.join(
         directory,
-        '$baseName\_$counter$extension', // Append counter before extension
+        '${baseName}_$counter$extension', // Append counter before extension
       );
       counter++;
     }

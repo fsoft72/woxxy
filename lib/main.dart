@@ -16,7 +16,6 @@ import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'models/avatars.dart'; // Keep AvatarStore import
 
 void main() async {
   try {
@@ -441,17 +440,17 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
                   ),
                   const SizedBox(height: 4), // Add space between title and info row
                   Row(children: [
-                    if (_networkService.currentIpAddress != null)
+                    if (_networkService.currentIpAddress != null) // Use the public getter
                       // Use Flexible to allow text wrapping or ellipsis for IP
                       Flexible(
                         child: Text(
-                          'IP: ${_networkService.currentIpAddress}',
+                          'IP: ${_networkService.currentIpAddress}', // Use the public getter
                           style: Theme.of(context).textTheme.bodySmall,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     // Add spacing only if IP is shown
-                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16),
+                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16), // Use the public getter
                     Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
                   ]),
                 ],

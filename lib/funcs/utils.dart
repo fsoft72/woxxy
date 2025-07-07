@@ -18,7 +18,7 @@ String generateTransferId(String filename) {
   int date = DateTime.now().millisecondsSinceEpoch;
 
   // calc md5 hash
-  String s = '${filename}_${date}';
+  String s = '${filename}_$date';
 
   return md5.convert(utf8.encode(s)).toString();
 }
@@ -27,8 +27,6 @@ String generateTransferId(String filename) {
 /// Platform-specific implementation that works on Android, iOS, Windows, macOS and Linux.
 Future<void> openFileLocation(String filePath) async {
   if (filePath.isEmpty) return;
-
-  final File file = File(filePath);
 
   final String dirPath = path.dirname(filePath);
 
