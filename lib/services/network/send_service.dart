@@ -184,6 +184,64 @@ class SendService {
     };
   }
 
+  /// Waits for a ready signal from the receiver before starting file transfer
+  /// This helps prevent Windows timing issues with socket closure
+  Future<void> _waitForReadySignal(Socket socket, String transferId) async {
+    try {
+      zprint("📡 Waiting for ready signal from receiver...");
+      
+      final completer = Completer<void>();
+      late StreamSubscription subscription;
+      bool signalReceived = false;
+      
+      // Set up timeout
+      final timeout = Timer(const Duration(seconds: 5), () {
+        if (!completer.isCompleted) {
+          subscription.cancel();
+          completer.complete(); // Continue even without signal
+          zprint("⏰ Ready signal timeout - proceeding anyway");
+        }
+      });
+
+      // Listen for ready signal
+      subscription = socket.listen(
+        (data) {
+          if (!signalReceived && data.length >= 3) {
+            // Check for "RDY" signal (0x52, 0x44, 0x59)
+            if (data[0] == 0x52 && data[1] == 0x44 && data[2] == 0x59) {
+              signalReceived = true;
+              timeout.cancel();
+              subscription.cancel();
+              if (!completer.isCompleted) {
+                completer.complete();
+                zprint("✅ Ready signal received from receiver");
+              }
+            }
+          }
+        },
+        onError: (error) {
+          timeout.cancel();
+          subscription.cancel();
+          if (!completer.isCompleted) {
+            completer.complete(); // Continue even on error
+            zprint("⚠️ Error waiting for ready signal: $error - proceeding anyway");
+          }
+        },
+        onDone: () {
+          timeout.cancel();
+          if (!completer.isCompleted) {
+            completer.complete(); // Continue if connection closes
+            zprint("⚠️ Connection closed while waiting for ready signal - proceeding anyway");
+          }
+        },
+      );
+
+      await completer.future;
+    } catch (e) {
+      zprint("⚠️ Exception while waiting for ready signal: $e - proceeding anyway");
+    }
+  }
+
   // Helper to create metadata map
   Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId) async {
     final fileSize = await file.length();
@@ -230,6 +288,10 @@ class SendService {
     try {
       zprint("  [Send Meta] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
       socket = await Socket.connect(receiver.address, receiver.port).timeout(const Duration(seconds: 10));
+      
+      // Configure socket for better Windows compatibility
+      socket.setOption(SocketOption.tcpNoDelay, true);
+      
       zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
       _activeTransfers[transferId] = socket; // Add BEFORE sending data
 
@@ -242,7 +304,8 @@ class SendService {
       await socket.flush();
       zprint("  [Send Meta] Metadata sent and flushed.");
 
-      await Future.delayed(const Duration(milliseconds: 50));
+      // Wait for ready signal from receiver (Windows compatibility)
+      await _waitForReadySignal(socket, transferId);
 
       zprint("  [Send Data] Starting file stream for $filePath...");
       int bytesSent = 0;

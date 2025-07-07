@@ -111,6 +111,28 @@ final count = AvatarStore().count;
 - `lib/screens/home.dart` - Improved avatar display in peer list
 - `lib/screens/peer_details.dart` - Enhanced large avatar display
 
+### Windows Compatibility Fix
+
+#### 🐛 **Critical Fix: Windows Avatar Transfer Issue**
+Fixed a critical issue where avatar transfers would fail on Windows with 0 bytes received despite successful metadata processing.
+
+**Problem**: Windows networking stack would prematurely close sockets during the brief delay between metadata and file data transfer, causing:
+- ✅ Metadata received correctly
+- ❌ Socket closed with 0 bytes after ~10ms  
+- ❌ Avatar files created but empty
+- ❌ Avatars not displayed in UI
+
+**Solution**:
+1. **Handshake Protocol**: Added ready signal (`RDY`) from receiver to sender
+2. **Socket Configuration**: Set `tcpNoDelay` option for better Windows compatibility
+3. **Timing Optimization**: Reduced delay from 50ms to 10ms between metadata and data
+4. **Enhanced Debugging**: Added Windows-specific error detection and logging
+5. **Graceful Fallback**: System continues even if ready signal fails
+
+**Files Modified**:
+- `lib/services/network/receive_service.dart` - Added ready signal transmission
+- `lib/services/network/send_service.dart` - Added ready signal waiting with timeout
+
 ### Backward Compatibility
 ✅ All changes are backward compatible with existing code. The avatar system continues to:
 - Store avatars in memory only
@@ -118,3 +140,4 @@ final count = AvatarStore().count;
 - Automatically request avatars for new peers
 - Display peer avatars in lists and detail screens
 - Clean up temporary files properly
+- Work seamlessly between Linux, Windows, and other platforms

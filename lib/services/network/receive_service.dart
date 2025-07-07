@@ -29,10 +29,15 @@ class ReceiveService {
     zprint('📥 New connection from $sourceIp:${socket.remotePort}');
     final stopwatch = Stopwatch()..start();
 
+    // Configure socket for better Windows compatibility
+    socket.setOption(SocketOption.tcpNoDelay, true);
+    
     var buffer = <int>[];
     var metadataReceived = false;
     Map<String, dynamic>? receivedInfo;
     var receivedBytes = 0;
+    var dataExpected = 0;
+    bool isProcessingComplete = false;
 
     String? transferType; // To track if it's a regular file or avatar
     final String fileTransferKey = sourceIp; // Use source IP as the key
@@ -80,6 +85,9 @@ class ReceiveService {
             final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
             final md5Checksum = receivedInfo!['md5Checksum'] as String?;
 
+            // Store expected data size for tracking
+            dataExpected = fileSize;
+
             zprint(
                 '📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername ($senderIp)');
 
@@ -101,6 +109,15 @@ class ReceiveService {
             metadataReceived = true;
             zprint("✅ Metadata processed. Ready for file data.");
 
+            // Send ready signal to sender for better Windows compatibility
+            try {
+              socket.add([0x52, 0x44, 0x59]); // "RDY" in ASCII
+              await socket.flush();
+              zprint("📡 Ready signal sent to sender");
+            } catch (e) {
+              zprint("⚠️ Failed to send ready signal: $e");
+            }
+
             if (buffer.length > 4 + metadataLength) {
               final remainingData = buffer.sublist(4 + metadataLength);
               // zprint("  [Data] Processing ${remainingData.length} bytes remaining in initial buffer.");
@@ -121,13 +138,26 @@ class ReceiveService {
       },
       onDone: () async {
         stopwatch.stop();
-        zprint(
-            '✅ Socket closed (onDone) from $fileTransferKey after ${stopwatch.elapsedMilliseconds}ms. Received $receivedBytes bytes.');
+        final duration = stopwatch.elapsedMilliseconds;
+        zprint('📊 Socket closed (onDone) from $fileTransferKey after ${duration}ms. Received $receivedBytes/$dataExpected bytes.');
+        
+        // Mark processing as complete to prevent race conditions
+        isProcessingComplete = true;
+        
         try {
           if (metadataReceived && receivedInfo != null) {
             final fileTransfer = fileTransferManager.files[fileTransferKey];
             if (fileTransfer != null) {
               final totalSize = receivedInfo!['size'] as int? ?? 0;
+              
+              // Special handling for zero-byte transfers (Windows timing issue)
+              if (receivedBytes == 0 && totalSize > 0 && duration < 100) {
+                zprint('🐛 WINDOWS BUG: Zero bytes received in ${duration}ms for $totalSize byte file. This suggests premature socket closure.');
+                zprint('   This is likely a Windows networking timing issue. Cleaning up...');
+                await fileTransferManager.handleSocketClosure(fileTransferKey);
+                return;
+              }
+              
               if (receivedBytes < totalSize) {
                 zprint('⚠️ Transfer incomplete ($receivedBytes/$totalSize). Cleaning up...');
                 await fileTransferManager.handleSocketClosure(fileTransferKey);
@@ -155,7 +185,7 @@ class ReceiveService {
               zprint("ℹ️ Socket closed (onDone), but transfer not found for key $fileTransferKey.");
             }
           } else {
-            zprint("ℹ️ Socket closed (onDone) before metadata was received or info was null for key $fileTransferKey.");
+            zprint("ℹ️ Socket closed (onDone) - metadataReceived: $metadataReceived, receivedInfo: ${receivedInfo != null}");
           }
         } catch (e, s) {
           zprint('❌ Error completing transfer (onDone) for key $fileTransferKey: $e\n$s');
