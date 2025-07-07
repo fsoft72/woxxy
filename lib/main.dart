@@ -55,18 +55,6 @@ void main() async {
     FileTransferManager(downloadPath: downloadPath);
     zprint('✅ Download directory setup complete');
 
-    zprint('🖼️ Setting up avatars cache directory...');
-    try {
-      final supportDir = await getApplicationSupportDirectory();
-      final avatarsPath = path.join(supportDir.path, 'avatars');
-      await Directory(avatarsPath).create(recursive: true);
-      await AvatarStore().init(avatarsPath); // Initialize AvatarStore with the path
-      zprint('✅ Avatars cache directory ensured: avatarsPath');
-    } catch (e) {
-      zprint('❌ Error creating avatars cache directory: e');
-      // Application can likely continue without avatar caching, but log the error.
-    }
-
     // Only initialize window_manager and tray on desktop platforms
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       await windowManager.ensureInitialized();
@@ -210,8 +198,6 @@ void main() async {
     if (WidgetsBinding.instance.isRootWidgetAttached) {
       runApp(
         MaterialApp(
-          title: 'Woxxy',
-          debugShowCheckedModeBanner: false,
           home: Scaffold(
             body: Center(
               child: Text('Failed to initialize: $e'),
@@ -234,7 +220,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Woxxy',
-      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -387,7 +372,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     _networkService.setUsername(updatedUser.username);
     // Update profile image path in network service if it changed
     _networkService.setProfileImagePath(updatedUser.profileImage);
-    _networkService.setEnableMd5Checksum(updatedUser.enableMd5Checksum);
     _settingsService.saveSettings(updatedUser);
   }
 

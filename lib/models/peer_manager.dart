@@ -106,13 +106,13 @@ class PeerManager {
     _peerController.add(currentPeers);
   }
 
-  void addPeer(Peer peer, String currentIpAddress, int currentPort) {
+  void addPeer(Peer peer, String currentIpAddress, int currentPort) async {
     // Peer ID is now the IP address
     // No need to check against currentIpAddress here, as NetworkService listener already filters self-announcements.
 
     final bool isExistingPeer = _peers.containsKey(peer.id);
 
-    if (isNewPeer) {
+    if (!isExistingPeer) {
       zprint('🔄 Handling announced peer: ${peer.name} (${peer.id})');
       zprint('✅ Adding NEW peer: ${peer.name} (${peer.id})');
       _peers[peer.id] = _PeerStatus(peer); // Add to the map
@@ -154,7 +154,7 @@ class PeerManager {
   void removePendingAvatarRequest(String peerId) {
     // <-- NEW METHOD
     if (_pendingAvatarRequests.remove(peerId)) {
-      zprint("✅ Removed ${peerId} from pending avatar requests.");
+      zprint("✅ Removed $peerId from pending avatar requests.");
     }
   }
 

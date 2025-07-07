@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // For kDebugMode
+import 'dart:ui' as ui; // For ui.Image
 import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';

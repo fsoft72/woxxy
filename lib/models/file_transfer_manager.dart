@@ -66,7 +66,7 @@ class FileTransferManager {
         final newTransferType = metadata['type'] ?? 'FILE';
 
         zprint(
-            "⚠️ Transfer already active for key '$key' (type: $existingTransferType). Rejecting duplicate incoming transfer '$original_filename' (type: $newTransferType).");
+            "⚠️ Transfer already active for key '$key' (type: $existingTransferType). Rejecting duplicate incoming transfer '$originalFilename' (type: $newTransferType).");
         // Consider how to handle this: maybe cancel the old one? Or reject the new one?
         // For now, we allow overwriting, but the old FileTransfer object will be lost.
         // await files[key]?.closeOnSocketClosure(); // Example: try closing old one first
@@ -113,10 +113,6 @@ class FileTransferManager {
       }
       zprint("⚠️ Attempted to write to non-existent transfer key: $key");
       return false;
-    }
-    try {
-      await files[key]!.write(binary_data);
-      return true; // Assume success if no exception
     } catch (e, s) {
       zprint('❌ Error writing chunk to transfer key $key: $e\n$s');
       // Don't remove the transfer here, let the error propagate or be handled by socket closure

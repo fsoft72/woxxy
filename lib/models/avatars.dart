@@ -193,12 +193,24 @@ class AvatarStore {
   // --- Old methods (to be removed or adapted) ---
 
   // setAvatar is no longer the primary way to add avatars. Use saveAvatarToCache instead.
-  /*
   Future<void> setAvatar(String peerId, Uint8List imageData) async {
-    zprint("🖼️ [AvatarStore] Setting avatar for Peer ID: $peerId (${imageData.length} bytes) - MEMORY ONLY (DEPRECATED)");
-    // ... (old decoding logic, now primarily handled by getAvatar loading from cache)
+    zprint("🖼️ [AvatarStore] Setting avatar for Peer ID: $peerId (${imageData.length} bytes)");
+    try {
+      if (_avatars.containsKey(peerId)) {
+        _avatars[peerId]?.dispose();
+      }
+
+      final image = await compute(_decodeImageBytes, imageData);
+      if (image != null) {
+        _avatars[peerId] = image;
+        zprint("✅ Avatar for $peerId set successfully");
+      } else {
+        zprint("❌ Failed to decode image for $peerId");
+      }
+    } catch (e) {
+      zprint("❌ Error setting avatar for $peerId: $e");
+    }
   }
-  */
 
   // getKeys might be less relevant if primary storage is disk, but can show memory keys.
   List<String> getMemoryKeys() {
@@ -207,7 +219,7 @@ class AvatarStore {
   }
 
   // hasAvatar now only checks memory. Use hasAvatarOrCache for combined check.
-  bool hasAvatarInMemory(String peerId) {
+  bool hasAvatar(String peerId) {
     final has = _avatars.containsKey(peerId);
     // zprint("❓ [AvatarStore] Has avatar in MEMORY for Peer ID $peerId: $has");
     return has;

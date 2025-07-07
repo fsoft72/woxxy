@@ -1,32 +1,19 @@
-import 'dart:async';
-import 'dart:collection'; // Import for Queue
 import 'dart:io';
-import 'dart:ui' as ui; // Import ui for RawImage
-
-import 'package:cross_file/cross_file.dart'; // For file abstraction
-import 'package:desktop_drop/desktop_drop.dart'; // For desktop drag-and-drop
-import 'package:file_picker/file_picker.dart'; // For file browsing
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:woxxy/funcs/debug.dart';
-import 'package:woxxy/funcs/utils.dart'; // For showSnackbar, generateTransferId, _formatFileSize
-import 'package:woxxy/models/avatars.dart'; // Import AvatarStore
-import 'package:woxxy/models/peer.dart';
-import 'package:woxxy/services/network_service.dart';
-
-/// Represents an item in the file transfer queue or completed list.
-class _FileTransferItem {
-  String path; // Full path of the file to send
-  String name; // Base name of the file
-  int size; // Size in bytes
-  bool isCompleted; // True if sent successfully
-  bool isFailed; // True if sending failed
-  String? errorMessage; // Error message if sending failed
+import '../models/peer.dart';
+import '../models/avatars.dart'; // Import AvatarStore
+import 'dart:ui' as ui; // Import ui for RawImage
+import '../services/network_service.dart';
+import '../funcs/utils.dart';
+import 'dart:collection'; // Import for Queue
 
 // ignore: depend_on_referenced_packages
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart'; // Add this import
 
-/// Screen displaying details of a specific peer and allowing file transfers to them.
 class PeerDetailPage extends StatefulWidget {
   final Peer peer;
   final NetworkService networkService;
@@ -41,336 +28,353 @@ class PeerDetailPage extends StatefulWidget {
   State<PeerDetailPage> createState() => _PeerDetailPageState();
 }
 
+class _FileTransferItem {
+  String path;
+  String name;
+  int size;
+  bool isCompleted;
+  bool isFailed;
+  String? errorMessage;
+
+  _FileTransferItem(this.path, this.name, this.size)
+      : isCompleted = false,
+        isFailed = false,
+        errorMessage = null;
+}
+
 class _PeerDetailPageState extends State<PeerDetailPage> {
-  // --- State Variables ---
-  bool _isDragging = false; // True if a file is being dragged over the drop zone
-  bool _isTransferring = false; // True if any file transfer is active or queued
-  bool _processingQueue = false; // True if the file queue is currently being processed
-  bool _transferCancelled = false; // Flag to stop queue processing if user cancels
-
-  // Current transfer state (for the file being actively sent)
+  bool _isDragging = false;
+  bool _isTransferring = false;
   String _currentFileName = '';
-  double _transferProgress = 0; // 0.0 to 100.0
-  String _transferSpeed = '0'; // MB/s as a string
-  bool _transferComplete = false; // True if the *current* file finished successfully
-  String? _activeTransferId; // ID for the currently active send operation
+  double _transferProgress = 0;
+  String _transferSpeed = '0';
+  bool _transferComplete = false;
+  bool _transferCancelled = false;
+  StreamSubscription<dynamic>? _progressSubscription;
 
-  // Queue and History
-  final Queue<_FileTransferItem> _fileQueue = Queue<_FileTransferItem>(); // Files waiting to be sent
-  final List<_FileTransferItem> _completedFiles = []; // Files that have finished (success or fail)
-  int _totalFilesCompletedInSession = 0; // Counter for successfully completed files in this session
+  final Queue<_FileTransferItem> _fileQueue = Queue<_FileTransferItem>();
+  List<_FileTransferItem> _completedFiles = [];
+  bool _processingQueue = false;
+  int _totalFilesCompleted = 0;
 
-  // Subscriptions
-  StreamSubscription<dynamic>?
-      _progressSubscription; // To listen to network service progress (unused currently, handled in sendFile callback)
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialization logic if needed
-  }
+  String? _activeTransferId;
 
   @override
   void dispose() {
-    zprint("🧹 Disposing PeerDetailPage");
-    // Cancel any active subscriptions
     _progressSubscription?.cancel();
-
-    // Ensure any ongoing transfer initiated from this page is cancelled
     if (_activeTransferId != null) {
-      zprint("   -> Cancelling active transfer $_activeTransferId on dispose");
       widget.networkService.cancelTransfer(_activeTransferId!);
       _activeTransferId = null;
     }
-    _transferCancelled = true; // Prevent queue processing from continuing after dispose
     super.dispose();
   }
 
-  // --- File Queue Processing ---
-
-  /// Processes the file queue, sending files one by one.
   Future<void> _processFileQueue() async {
-    if (_processingQueue || _fileQueue.isEmpty || _transferCancelled) return;
+    if (_processingQueue || _fileQueue.isEmpty) return;
 
     _processingQueue = true;
-    zprint('⏳ Processing file queue (${_fileQueue.length} files remaining)');
+    zprint('📁 Processing file queue (${_fileQueue.length} files remaining)');
 
-    while (_fileQueue.isNotEmpty && !_transferCancelled && mounted) {
-      // Check mounted in loop
-      final fileItem = _fileQueue.first; // Get the next file without removing yet
+    while (_fileQueue.isNotEmpty && !_transferCancelled) {
+      final fileItem = _fileQueue.first;
 
-      // Update UI for the new file transfer
-      setStateIfMounted(() {
+      setState(() {
         _isTransferring = true;
         _transferProgress = 0;
         _transferSpeed = '0';
         _currentFileName = fileItem.name;
         _transferComplete = false;
-        _activeTransferId = generateTransferId(fileItem.name); // Generate unique ID for this attempt
       });
 
-      zprint('📤 Starting transfer for: ${fileItem.name} (ID: $_activeTransferId)');
-      zprint('   -> Path: ${fileItem.path}');
-      zprint('   -> To: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
+      zprint('📤 Starting file transfer process');
+      zprint('📁 File to send: ${fileItem.path}');
+      zprint('👤 Sending to peer: ${widget.peer.name} (${widget.peer.address.address}:${widget.peer.port})');
 
-      final stopwatch = Stopwatch()..start();
       try {
-        // Initiate the file sending via NetworkService
+        zprint('🔄 Initiating file transfer...');
+        final stopwatch = Stopwatch()..start();
+        final fileSize = fileItem.size;
+
+        _progressSubscription?.cancel();
+        _progressSubscription = null;
+
+        if (_activeTransferId != null) {
+          widget.networkService.cancelTransfer(_activeTransferId!);
+          _activeTransferId = null;
+        }
+
+        _activeTransferId = generateTransferId(fileItem.name);
+
         await widget.networkService.sendFile(
           _activeTransferId!,
           fileItem.path,
           widget.peer,
           onProgress: (totalSize, bytesSent) {
-            // Check if still mounted and not cancelled before updating UI
-            if (!mounted || _transferCancelled || _activeTransferId == null) return;
+            if (!mounted || _transferCancelled) return;
 
-            final progress = (bytesSent / totalSize.toDouble()).clamp(0.0, 1.0) * 100.0;
-            final elapsedSeconds = stopwatch.elapsed.inMilliseconds / 1000.0;
-            String speed = '0';
-            if (elapsedSeconds > 0.1) {
-              // Avoid division by zero or tiny intervals
-              speed = (bytesSent / elapsedSeconds / (1024 * 1024)).toStringAsFixed(2);
+            final progress = (bytesSent / totalSize) * 100;
+            final elapsedSeconds = stopwatch.elapsed.inMilliseconds / 1000;
+
+            if (elapsedSeconds > 0) {
+              final speed = (bytesSent / elapsedSeconds / (1024 * 1024)).toStringAsFixed(2);
+
+              setState(() {
+                _transferProgress = progress;
+                _transferSpeed = speed;
+              });
             }
-
-            // Update progress UI (ensure it happens on the main thread)
-            setStateIfMounted(() {
-              _transferProgress = progress;
-              _transferSpeed = speed;
-            });
           },
         );
-        stopwatch.stop(); // Stop timer on successful completion
 
-        // --- Transfer Succeeded ---
+        stopwatch.stop();
+
         if (mounted && !_transferCancelled) {
-          final fileSize = fileItem.size;
-          final transferTimeSec = stopwatch.elapsed.inMilliseconds / 1000.0;
-          final finalSpeed = (transferTimeSec > 0)
-              ? (fileSize / transferTimeSec / (1024 * 1024)).toStringAsFixed(2)
-              : 'inf'; // Handle potential zero time
-
-          zprint(
-              '✅ File sent successfully: ${fileItem.name} (${_formatFileSize(fileSize)} in ${transferTimeSec.toStringAsFixed(1)}s @ $finalSpeed MB/s)');
-
-          // Update item state and move from queue to completed list
-          fileItem.isCompleted = true;
-          final completedItem = _fileQueue.removeFirst(); // Remove from queue
-          _completedFiles.add(completedItem);
-          _totalFilesCompletedInSession++;
-
-          // Update UI to show completion briefly
-          setStateIfMounted(() {
+          setState(() {
             _transferProgress = 100;
             _transferComplete = true;
-            _transferSpeed = finalSpeed; // Show final calculated speed
+            _transferSpeed = (fileSize / stopwatch.elapsed.inMilliseconds * 1000 / (1024 * 1024)).toStringAsFixed(2);
+
+            fileItem.isCompleted = true;
+            _totalFilesCompleted++;
+
+            _fileQueue.removeFirst();
+            _completedFiles.add(fileItem);
           });
 
-          // Show success snackbar
+          final sizeMiB = (fileSize / 1024 / 1024).toStringAsFixed(2);
+          final transferTime = stopwatch.elapsed.inMilliseconds / 1000;
+          final speed = (fileSize / transferTime / 1024 / 1024).toStringAsFixed(2);
+
           showSnackbar(
             context,
-            'Sent ${fileItem.name} (${_formatFileSize(fileSize)}) successfully',
+            'File sent successfully ($sizeMiB MiB in ${transferTime.toStringAsFixed(1)}s, $speed MiB/s)',
           );
 
-          // Wait briefly before processing next file
-          await Future.delayed(const Duration(milliseconds: 800));
+          await Future.delayed(const Duration(milliseconds: 500));
         }
       } catch (e, stackTrace) {
-        // --- Transfer Failed ---
-        stopwatch.stop(); // Stop timer on failure
-        zprint('❌ Error sending file ${fileItem.name} (ID: $_activeTransferId): $e');
-        zprint('   -> Stack: $stackTrace');
+        zprint('❌ Error during file transfer: $e');
+        zprint('📑 Stack trace: $stackTrace');
+        _progressSubscription?.cancel();
+
+        _activeTransferId = null;
 
         if (mounted && !_transferCancelled) {
-          // Update item state and move from queue to completed list
-          fileItem.isFailed = true;
-          fileItem.errorMessage = e.toString();
-          final failedItem = _fileQueue.removeFirst(); // Remove from queue
-          _completedFiles.add(failedItem);
+          setState(() {
+            fileItem.isFailed = true;
+            fileItem.errorMessage = e.toString();
 
-          // Update UI to reflect failure
-          setStateIfMounted(() {
-            // Keep progress where it was, don't reset speed immediately
-            _transferComplete = false; // Explicitly mark as not complete
-            // Optionally clear _currentFileName or show error state
+            _fileQueue.removeFirst();
+            _completedFiles.add(fileItem);
           });
 
-          // Show error snackbar
           showSnackbar(
             context,
             'Error sending ${fileItem.name}: $e',
           );
-          // Wait slightly longer after an error before trying next
-          await Future.delayed(const Duration(seconds: 2));
-        }
-        // If not mounted or cancelled, the error is caught but UI/state isn't updated
-      } finally {
-        // Clear the active transfer ID for the file that just finished/failed
-        if (mounted && !_transferCancelled) {
-          _activeTransferId = null;
+
+          await Future.delayed(const Duration(seconds: 1));
         }
       }
-    } // End of while loop
+    }
 
-    // --- Queue Finished or Cancelled ---
-    _processingQueue = false;
-    if (mounted && !_transferCancelled) {
-      zprint('🏁 File queue processing finished.');
-      setStateIfMounted(() {
+    if (mounted) {
+      setState(() {
+        _processingQueue = false;
+        _activeTransferId = null; // Clear the transfer ID
         if (_fileQueue.isEmpty) {
-          _isTransferring = false; // Hide progress indicator if queue is empty
+          _isTransferring = false;
         }
-        // _activeTransferId should be null here already
       });
-    } else {
-      zprint('🛑 File queue processing stopped (unmounted or cancelled).');
     }
   }
 
-  /// Adds files (from picker or drag-drop) to the transfer queue.
   Future<void> _addFilesToQueue(List<XFile> files) async {
     if (files.isEmpty) return;
 
-    zprint('➕ Adding ${files.length} files to the queue...');
-    List<_FileTransferItem> newItems = []; // To update UI once
+    zprint('📁 Adding ${files.length} files to queue');
 
-    for (final file in files) {
-      try {
-        final fileSize = await file.length();
-        // Use XFile's name property, which should be the base name
-        final fileName = file.name;
-        final filePath = file.path;
-
-        // Basic check for directories (FilePicker might allow them sometimes)
-        if (await FileSystemEntity.isDirectory(filePath)) {
-          zprint("⚠️ Skipping directory: $filePath");
-          if (mounted) showSnackbar(context, "Cannot send directories: ${fileName}");
-          continue;
-        }
-
-        final fileItem = _FileTransferItem(filePath, fileName, fileSize);
-        newItems.add(fileItem);
-      } catch (e) {
-        zprint("❌ Error processing file ${file.path} for queue: $e");
-        if (mounted) showSnackbar(context, "Error adding ${file.name}: $e");
-      }
-    }
-
-    if (newItems.isEmpty) return; // No valid files added
-
-    // Update state: add to queue, reset cancellation flag, ensure transfer indicator is shown
-    setStateIfMounted(() {
-      _fileQueue.addAll(newItems);
+    setState(() {
       _transferCancelled = false;
-      if (!_isTransferring) {
-        // Only set if not already transferring
+      if (_isTransferring == false) {
         _isTransferring = true;
         _transferProgress = 0;
         _transferSpeed = '0';
-        _transferComplete = false; // Reset completion state for new batch
+        _transferComplete = false;
       }
     });
 
-    zprint('   -> Queue now contains ${_fileQueue.length} files.');
+    bool queueWasEmpty = _fileQueue.isEmpty && !_processingQueue;
+    List<_FileTransferItem> newFiles = [];
 
-    // Start processing the queue if it's not already running
-    if (!_processingQueue) {
+    for (final file in files) {
+      final fileSize = await File(file.path).length();
+      final fileName = file.path.split(Platform.pathSeparator).last;
+
+      final fileItem = _FileTransferItem(file.path, fileName, fileSize);
+
+      setState(() {
+        _fileQueue.add(fileItem);
+      });
+
+      newFiles.add(fileItem);
+    }
+
+    zprint('📁 Queue now contains ${_fileQueue.length} files');
+
+    if (queueWasEmpty) {
       _processFileQueue();
     }
   }
 
-  /// Cancels all ongoing and queued file transfers.
   void _cancelAllTransfers() {
-    if (!_isTransferring && _fileQueue.isEmpty) return; // Nothing to cancel
+    _progressSubscription?.cancel();
 
-    zprint("🛑 Cancelling all transfers...");
-    _transferCancelled = true; // Set flag to stop queue processing loop
+    zprint("=== CANCEL: $_activeTransferId");
 
-    // Cancel the currently active network transfer, if any
     if (_activeTransferId != null) {
-      zprint("   -> Cancelling network transfer ID: $_activeTransferId");
       widget.networkService.cancelTransfer(_activeTransferId!);
       _activeTransferId = null;
     }
 
-    // Move all items currently in the queue to the completed list as 'failed'/'cancelled'
-    while (_fileQueue.isNotEmpty) {
-      final item = _fileQueue.removeFirst();
-      item.isFailed = true;
-      item.errorMessage = "Cancelled by user";
-      _completedFiles.add(item);
-    }
-
-    // Update UI state
-    setStateIfMounted(() {
-      _isTransferring = false; // Hide progress indicator
-      _processingQueue = false; // Ensure processing stops flag is reset
-      _currentFileName = ''; // Clear current file name
-      _transferProgress = 0;
-      _transferSpeed = '0';
-      // Keep _completedFiles as they are
+    setState(() {
+      _transferCancelled = true;
+      _isTransferring = false;
+      _fileQueue.clear();
+      _totalFilesCompleted = 0;
+      _completedFiles = [];
     });
-
     showSnackbar(context, 'All transfers cancelled');
-    zprint("   -> Cancellation complete. Queue cleared.");
   }
 
-  /// Opens the platform's file picker to select files.
   Future<void> _pickFiles() async {
     try {
-      // Allow selecting multiple files
       final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null || result.files.isEmpty) return; // User cancelled picker
+      if (result == null) return;
 
-      // Convert PlatformFile to XFile and add to queue
-      final files = result.files
-          .where((file) => file.path != null) // Ensure path is not null
-          .map((file) => XFile(file.path!, name: file.name)) // Use path and name
-          .toList();
+      final files = result.files.map((file) => XFile(file.path!)).toList();
       await _addFilesToQueue(files);
     } catch (e) {
-      zprint("❌ Error picking files: $e");
       if (mounted) {
         showSnackbar(context, 'Error picking files: $e');
       }
     }
   }
 
-  /// Helper to safely call setState only if the widget is still mounted.
-  void setStateIfMounted(VoidCallback fn) {
-    if (mounted) {
-      setState(fn);
+  Widget _buildFileSelectionArea() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _pickFiles,
+              icon: const Icon(Icons.file_upload),
+              label: const Text('Select Files to Send'),
+            ),
+            if (_fileQueue.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  '${_fileQueue.length} files in queue',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
     }
-  }
 
-  // --- UI Building Methods ---
+    return DropTarget(
+      onDragDone: (details) async {
+        setState(() => _isDragging = false);
+        if (details.files.isEmpty) return;
+
+        await _addFilesToQueue(details.files);
+      },
+      onDragEntered: (details) {
+        zprint('🎯 File drag entered');
+        setState(() => _isDragging = true);
+      },
+      onDragExited: (details) {
+        zprint('🎯 File drag exited');
+        setState(() => _isDragging = false);
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+            width: _isDragging ? 3 : 2,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          color: _isDragging ? Theme.of(context).colorScheme.primary.withOpacity(0.1) : null,
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.file_upload,
+                size: 48,
+                color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Drag and drop files here to send',
+                style: TextStyle(
+                  color: _isDragging ? Theme.of(context).colorScheme.primary : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _pickFiles,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('Browse Files'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+              if (_fileQueue.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    '${_fileQueue.length} files in queue',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          // Use close icon if presented modally, back if pushed
-          icon: Icon(Navigator.of(context).canPop() ? Icons.arrow_back : Icons.close),
+          icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.peer.name), // Display peer's name
+        title: Text(widget.peer.name),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch children horizontally
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildProfileHeader(), // Peer avatar and name/IP
-            const Divider(height: 32, thickness: 1),
-            // Show progress indicator only when transferring and not cancelled
+            _buildProfileHeader(),
+            const Divider(height: 32),
             if (_isTransferring && !_transferCancelled) _buildTransferProgressIndicator(),
-            // Show queue info if there are files waiting or completed
-            if (_fileQueue.isNotEmpty || _completedFiles.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildQueueInfo(),
-            ],
+            if (_fileQueue.isNotEmpty || _completedFiles.isNotEmpty) _buildQueueInfo(),
             const SizedBox(height: 16),
-            // File selection area (adapts for platform)
             Expanded(
               child: _buildFileSelectionArea(),
             ),
@@ -380,11 +384,9 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     );
   }
 
-  /// Builds the header section with peer avatar, name, and address.
   Widget _buildProfileHeader() {
-    // Generate initials for placeholder avatar
     final initials = widget.peer.name.isNotEmpty
-        ? widget.peer.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
+        ? widget.peer.name.split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join()
         : '?';
 
     return Row(
@@ -441,7 +443,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           },
         ),
         const SizedBox(width: 16),
-        // Peer details (name, address, port)
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,35 +450,31 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
               Text(
                 widget.peer.name,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w500, // Slightly less bold than header
+                      fontWeight: FontWeight.bold,
                     ),
-                overflow: TextOverflow.ellipsis, // Prevent long names from overflowing
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
-              // IP Address Row
               Row(
                 children: [
-                  Icon(Icons.computer_outlined, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.computer, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
                   Expanded(
-                    // Allow IP to take available space
                     child: Text(
                       widget.peer.address.address,
-                      style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                      style: const TextStyle(color: Colors.grey),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 2),
-              // Port Row
               Row(
                 children: [
-                  Icon(Icons.settings_ethernet_outlined, size: 16, color: Colors.grey.shade600),
-                  const SizedBox(width: 6),
+                  const Icon(Icons.settings_ethernet, size: 16, color: Colors.grey),
+                  const SizedBox(width: 4),
                   Text(
                     'Port: ${widget.peer.port}',
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
@@ -488,11 +485,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     );
   }
 
-  /// Builds the progress indicator section shown during active transfer.
   Widget _buildTransferProgressIndicator() {
-    // Determine color based on completion status
-    final progressColor = _transferComplete ? Colors.green : Theme.of(context).colorScheme.primary;
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -512,71 +505,63 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // File name and Cancel button row
           Row(
             children: [
-              Icon(Icons.upload_file_outlined, size: 20, color: Colors.grey.shade700),
+              const Icon(Icons.upload_file, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _currentFileName, // Name of the file currently being sent
+                      _currentFileName,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    // Show queue position (e.g., "File 2 of 5")
-                    if (_fileQueue.isNotEmpty || _completedFiles.isNotEmpty)
+                    if (_fileQueue.isNotEmpty)
                       Text(
                         'File ${_completedFiles.length + 1} of ${_completedFiles.length + _fileQueue.length}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                   ],
                 ),
               ),
-              // Show Cancel button only if not already completed
               if (!_transferComplete)
                 IconButton(
-                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                  onPressed: _cancelAllTransfers, // Cancel button action
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: _cancelAllTransfers,
                   tooltip: 'Cancel all transfers',
-                  visualDensity: VisualDensity.compact, // Make button smaller
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                  padding: const EdgeInsets.all(0),
                 ),
             ],
           ),
           const SizedBox(height: 12),
-          // Linear progress bar
           LinearProgressIndicator(
-            value: _transferProgress / 100.0, // Value between 0.0 and 1.0
+            value: _transferProgress / 100,
             backgroundColor: Colors.grey.shade300,
-            color: progressColor, // Dynamic color
-            minHeight: 6, // Slightly thicker bar
-            borderRadius: BorderRadius.circular(3),
+            color: _transferComplete ? Colors.green : Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(height: 8),
-          // Progress percentage and speed row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _transferComplete
-                    ? 'Completed'
-                    : '${_transferProgress.toStringAsFixed(1)}%', // Show percentage or "Completed"
+                _transferComplete ? 'Completed' : '${_transferProgress.toStringAsFixed(1)}%',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: progressColor, // Match progress bar color
+                  color: _transferComplete ? Colors.green : null,
                   fontWeight: _transferComplete ? FontWeight.bold : null,
                 ),
               ),
-              Text(
-                '${_transferSpeed} MB/s', // Show current transfer speed
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
+              Text('$_transferSpeed MB/s'),
             ],
           ),
         ],
@@ -584,240 +569,116 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     );
   }
 
-  /// Builds the section displaying queue status and recently completed files.
   Widget _buildQueueInfo() {
-    final totalFilesInSession = _completedFiles.length + _fileQueue.length;
+    final totalFiles = _completedFiles.length + _fileQueue.length;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blueGrey.shade100),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row: Queue status and Cancel All button
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                // Show "X/Y completed" or "Queue:" if nothing completed yet
-                _totalFilesCompletedInSession > 0
-                    ? '$_totalFilesCompletedInSession / $totalFilesInSession completed'
-                    : 'Queue:',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                'File Queue: $_totalFilesCompleted/$totalFiles completed',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              // Show Cancel All button only if items are in queue
               if (_fileQueue.isNotEmpty)
-                TextButton.icon(
-                  icon: const Icon(Icons.cancel_schedule_send_outlined, size: 16, color: Colors.redAccent),
-                  label: const Text('Cancel All', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                TextButton(
                   onPressed: _cancelAllTransfers,
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
                   ),
                   child: const Text('Cancel All'),
                 ),
             ],
           ),
-          // --- Files Next in Queue ---
-          if (_fileQueue.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Next:', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-            const SizedBox(height: 4),
-            // Show first few items in the queue
-            ..._fileQueue
-                .take(3)
-                .map((item) => Padding(
+          if (_fileQueue.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Next in queue:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  for (int i = 0; i < _fileQueue.length.clamp(0, 3); i++)
+                    Padding(
                       padding: const EdgeInsets.only(left: 8.0, top: 2.0),
                       child: Text(
-                        '• ${item.name} (${_formatFileSize(item.size)})',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        '${i + 1}. ${_fileQueue.elementAt(i).name} (${_formatFileSize(_fileQueue.elementAt(i).size)})',
+                        style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ))
-                .toList(),
-            // Indicate if more files are waiting
-            if (_fileQueue.length > 3)
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0, top: 4.0),
-                child: Text(
-                  '...and ${_fileQueue.length - 3} more',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
+                    ),
+                  if (_fileQueue.length > 3)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0, top: 2.0),
+                      child: Text(
+                        '...and ${_fileQueue.length - 3} more',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
-          // --- Recently Completed Files ---
-          if (_completedFiles.isNotEmpty) ...[
-            const SizedBox(height: 10), // Add spacing if both sections shown
-            Text('Completed:', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-            const SizedBox(height: 4),
-            // Show last few completed items (most recent first)
-            ..._completedFiles.reversed
-                .take(5)
-                .map((item) => Padding(
-                      padding: const EdgeInsets.only(left: 8.0, top: 3.0),
+            ),
+          if (_completedFiles.isNotEmpty && _completedFiles.length <= 5)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Recently completed:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 4),
+                  for (int i = _completedFiles.length - 1; i >= 0; i--)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0, top: 2.0),
                       child: Row(
                         children: [
-                          // Icon indicating success or failure
                           Icon(
-                            item.isCompleted ? Icons.check_circle_outline : Icons.error_outline,
-                            size: 14,
-                            color: item.isCompleted ? Colors.green.shade700 : Colors.red.shade700,
+                            _completedFiles[i].isCompleted ? Icons.check_circle : Icons.error,
+                            size: 12,
+                            color: _completedFiles[i].isCompleted ? Colors.green : Colors.red,
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
-                              item.name,
+                              _completedFiles[i].name,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: item.isCompleted ? Colors.black87 : Colors.red.shade800,
-                                // Strike through failed items
-                                decoration: item.isFailed ? TextDecoration.lineThrough : null,
-                                decorationColor: Colors.red.shade800,
+                                color: _completedFiles[i].isCompleted ? Colors.black87 : Colors.red,
+                                decoration: _completedFiles[i].isFailed ? TextDecoration.lineThrough : null,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          // Optionally show file size for completed items
-                          Text(
-                            ' (${_formatFileSize(item.size)})',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                          )
                         ],
                       ),
-                    ))
-                .toList(),
-          ],
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  /// Builds the file selection area (drag-drop for desktop, button for mobile).
-  Widget _buildFileSelectionArea() {
-    // --- Mobile View ---
-    if (Platform.isAndroid || Platform.isIOS) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton.icon(
-              onPressed: _pickFiles,
-              icon: const Icon(Icons.file_upload_outlined),
-              label: const Text('Select Files to Send'),
-              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
-            ),
-            // Show queue count below button if files are waiting
-            if (_fileQueue.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 12.0),
-                child: Text(
-                  '${_fileQueue.length} files in queue',
-                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    // --- Desktop View (Drag and Drop) ---
-    return DropTarget(
-      // Called when files are successfully dropped
-      onDragDone: (details) async {
-        setStateIfMounted(() => _isDragging = false); // Turn off highlight
-        if (details.files.isEmpty) return;
-        await _addFilesToQueue(details.files); // Add dropped files to queue
-      },
-      // Called when files first enter the drop zone
-      onDragEntered: (details) {
-        zprint('🎯 File drag entered drop zone');
-        setStateIfMounted(() => _isDragging = true); // Turn on highlight
-      },
-      // Called when files leave the drop zone
-      onDragExited: (details) {
-        zprint('🎯 File drag exited drop zone');
-        setStateIfMounted(() => _isDragging = false); // Turn off highlight
-      },
-      // The visual representation of the drop zone
-      child: Container(
-        // Add visual feedback for dragging state
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey.shade400,
-            width: _isDragging ? 2.5 : 1.5, // Thicker border when dragging
-            style: BorderStyle.solid,
-          ),
-          borderRadius: BorderRadius.circular(12),
-          // Light background highlight when dragging
-          color: _isDragging ? Theme.of(context).colorScheme.primary.withOpacity(0.05) : Colors.transparent,
-        ),
-        // Center the content within the drop zone
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // Content takes minimum vertical space
-            children: [
-              // Upload icon
-              Icon(
-                Icons.cloud_upload_outlined,
-                size: 52,
-                color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey.shade600,
-              ),
-              const SizedBox(height: 16),
-              // Instructional text
-              Text(
-                'Drag and drop files here',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: _isDragging ? Theme.of(context).colorScheme.primary : Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text('or', style: TextStyle(color: Colors.grey.shade600)),
-              const SizedBox(height: 12),
-              // Browse button as an alternative to drag-drop
-              ElevatedButton.icon(
-                onPressed: _pickFiles,
-                icon: const Icon(Icons.folder_open_outlined, size: 18),
-                label: const Text('Browse Files'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  textStyle: const TextStyle(fontSize: 14),
-                ),
-              ),
-              // Show queue count below button if files are waiting
-              if (_fileQueue.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12.0),
-                  child: Text(
-                    '${_fileQueue.length} files in queue',
-                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Formats file size in bytes to a human-readable string (KB, MB).
-  /// Moved from funcs/utils.dart to be self-contained here as it's only used here.
   String _formatFileSize(int bytes) {
-    if (bytes < 0) return 'N/A';
     if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024.0).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024.0 * 1024.0)).toStringAsFixed(1)} MB';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
-} // End of _PeerDetailPageState
+}

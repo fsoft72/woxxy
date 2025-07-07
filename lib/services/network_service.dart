@@ -81,7 +81,6 @@ class NetworkService {
     _peerManager.setRequestAvatarCallback(_discoveryService.requestAvatar);
   }
 
-  // --- Initialization and Disposal ---
   Future<void> start() async {
     zprint('🚀 Starting NetworkService Facade...');
     try {
@@ -128,7 +127,7 @@ class NetworkService {
 
   void setUsername(String username) {
     if (username.isEmpty) {
-      zprint("⚠️ Attempted to set empty username. Using default 'WoxxyUser'.");
+      zprint("⚠️ Attempted to set empty username. Using default.");
       _currentUsername = "WoxxyUser";
     } else {
       _currentUsername = username;
@@ -178,15 +177,6 @@ class NetworkService {
     zprint('👤 Facade User Details Loaded: Name=$_currentUsername, Avatar=$_profileImagePath');
   }
 
-  void _setInternalUserDetails(User user) {
-    _currentUsername = user.username.isNotEmpty ? user.username : "WoxxyUser";
-    _profileImagePath = user.profileImage;
-    _enableMd5Checksum = user.enableMd5Checksum;
-    zprint(
-        '🔒 User details loaded: IP=$currentIpAddress, Name=$_currentUsername, Avatar=$_profileImagePath, MD5=$_enableMd5Checksum');
-  }
-
-  // --- IP Address Discovery (omitted for brevity, assumed correct) ---
   Future<String?> _getIpAddress() async {
     // (Keep the IP address fetching logic here in the facade, as it's a core setup step)
     try {
