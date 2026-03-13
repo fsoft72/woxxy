@@ -61,11 +61,13 @@ void main() async {
 
       // Configure window properties with explicit non-null values
       const windowSize = Size(540, 960);
-      const minSize = Size(540, 960);
+      const minSize = Size(540, 600);
+      const maxSize = Size(540, 4096);
 
-      // Set up window first
+      // Set up window first — width is locked, only height is resizable
       await windowManager.setSize(windowSize);
       await windowManager.setMinimumSize(minSize);
+      await windowManager.setMaximumSize(maxSize);
       await windowManager.center();
       await windowManager.setTitle('Woxxy');
       await windowManager.setPreventClose(true); // Ensure window hides on close

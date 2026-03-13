@@ -1,5 +1,14 @@
 # Changes Log
 
+## Vertical-Only Window Resizing on Desktop
+
+Made the main window resizable vertically only (width locked at 540px). Height can now be resized between 600px and 4096px. The initial size remains 540x960.
+
+### Files Modified
+- `lib/main.dart` - Added `maxSize` constraint and lowered `minSize` height from 960 to 600
+
+---
+
 ## Code Simplification & Deduplication
 
 ### Overview
