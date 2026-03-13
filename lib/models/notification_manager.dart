@@ -26,6 +26,38 @@ class NotificationManager {
 
   bool get isInitialized => _isInitialized;
 
+  /// Opens a directory in the platform's file manager.
+  /// Used as the notification click handler on desktop.
+  Future<void> _openDirectory(String dirPath) async {
+    try {
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) {
+        zprint('⚠️ Directory does not exist, cannot open: $dirPath');
+        return;
+      }
+
+      zprint('📂 Opening directory: $dirPath');
+      if (Platform.isLinux) {
+        await Process.run('xdg-open', [dirPath]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [dirPath]);
+      } else if (Platform.isWindows) {
+        await Process.run('explorer.exe', [dirPath]);
+      }
+    } catch (e) {
+      zprint('❌ Error opening directory: $e');
+    }
+  }
+
+  /// Callback for flutter_local_notifications click on desktop.
+  void _onNotificationResponse(NotificationResponse details) {
+    zprint('🔔 Notification clicked, payload: ${details.payload}');
+    final payload = details.payload;
+    if (payload != null && payload.isNotEmpty) {
+      _openDirectory(payload);
+    }
+  }
+
   Future<String?> _getAbsoluteIconPath() async {
     try {
       final iconPath = path.join(Directory.current.path, 'build', 'flutter_assets', 'assets', 'icons', 'head.png');
@@ -67,9 +99,7 @@ class NotificationManager {
         // Initialize the plugin with permission requests
         final initSuccess = await _notifications.initialize(
           initializationSettings,
-          onDidReceiveNotificationResponse: (details) {
-            zprint('🔔 Notification response received: ${details.actionId}');
-          },
+          onDidReceiveNotificationResponse: _onNotificationResponse,
         );
         if (initSuccess ?? false) {
           _isInitialized = true;
@@ -120,9 +150,7 @@ class NotificationManager {
       // Initialize notifications
       final success = await _notifications.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: (details) {
-          zprint('🔔 Notification response received: ${details.actionId}');
-        },
+        onDidReceiveNotificationResponse: _onNotificationResponse,
       );
 
       if (success ?? false) {
@@ -185,9 +213,7 @@ class NotificationManager {
     // Initialize notifications for Linux
     final success = await _notifications.initialize(
       initializationSettings,
-      onDidReceiveNotificationResponse: (details) {
-        zprint('🔔 Notification response received: ${details.actionId}');
-      },
+      onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
     if (success ?? false) {
@@ -234,8 +260,9 @@ class NotificationManager {
 
   Future<void> showNotification(
     String title,
-    String body,
-  ) async {
+    String body, {
+    String? payload,
+  }) async {
     zprint("\n\n\n=== NOTIF: $title - $body\n\n\n");
 
     if (!_isInitialized) {
@@ -262,6 +289,7 @@ class NotificationManager {
           title,
           body,
           const NotificationDetails(android: androidDetails),
+          payload: payload,
         );
       }
 
@@ -270,6 +298,9 @@ class NotificationManager {
           title: title,
           body: body,
         );
+        if (payload != null && payload.isNotEmpty) {
+          notification.onClick = () => _openDirectory(payload);
+        }
         await notification.show();
       }
 
@@ -297,6 +328,7 @@ class NotificationManager {
           title,
           body,
           NotificationDetails(linux: linuxDetails),
+          payload: payload,
         );
       }
 
@@ -314,6 +346,7 @@ class NotificationManager {
           title,
           body,
           const NotificationDetails(macOS: darwinDetails),
+          payload: payload,
         );
       }
     } catch (e) {
@@ -336,9 +369,10 @@ class NotificationManager {
 			*/
 
     final fileName = path.basename(filePath);
+    final dirPath = path.dirname(filePath);
     final String body =
         'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\nSpeed: ${speedMBps.toStringAsFixed(2)} MB/s';
 
-    await showNotification('File Received', body);
+    await showNotification('File Received', body, payload: dirPath);
   }
 }

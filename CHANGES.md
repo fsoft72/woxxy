@@ -1,5 +1,14 @@
 # Changes Log
 
+## Open Destination Folder on Notification Click (Desktop)
+
+Clicking a "File Received" notification now opens the containing directory in the platform's file manager (`xdg-open` on Linux, `open` on macOS, `explorer.exe` on Windows). The file's parent directory is passed as the notification payload and handled in the click callback.
+
+### Files Modified
+- `lib/models/notification_manager.dart` - Added `_openDirectory()`, `_onNotificationResponse()`, payload support in `showNotification()` and `showFileReceivedNotification()`
+
+---
+
 ## Vertical-Only Window Resizing on Desktop
 
 Made the main window resizable vertically only (width locked at 540px). Height can now be resized between 600px and 4096px. The initial size remains 540x960.
