@@ -190,7 +190,7 @@ class DiscoveryService {
         );
         // Add/update the peer in the manager
         // Pass our own IP and port for potential future use (like direct replies if needed)
-        peerManager.addPeer(peer, _currentIpAddress ?? 'UNKNOWN_IP', mainServerPort);
+        peerManager.addPeer(peer);
       } else {
         zprint('❌ Invalid announcement format (expected 5 parts): $message');
       }

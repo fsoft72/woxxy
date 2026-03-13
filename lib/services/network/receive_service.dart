@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:woxxy/funcs/debug.dart';
+import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_transfer_manager.dart';
 import '../../models/peer_manager.dart'; // Needed for notifyPeersUpdated
@@ -37,7 +38,6 @@ class ReceiveService {
     Map<String, dynamic>? receivedInfo;
     var receivedBytes = 0;
     var dataExpected = 0;
-    bool isProcessingComplete = false;
 
     String? transferType; // To track if it's a regular file or avatar
     final String fileTransferKey = sourceIp; // Use source IP as the key
@@ -78,7 +78,7 @@ class ReceiveService {
               return;
             }
 
-            transferType = receivedInfo!['type'] as String? ?? 'FILE';
+            transferType = receivedInfo!['type'] as String? ?? TRANSFER_TYPE_FILE;
             final senderIp = receivedInfo!['senderIp'] as String?; // Sender's IP (ID)
             final fileName = receivedInfo!['name'] as String? ?? 'unknown_file';
             final fileSize = receivedInfo!['size'] as int? ?? 0;
@@ -111,7 +111,7 @@ class ReceiveService {
 
             // Send ready signal to sender for better Windows compatibility
             try {
-              socket.add([0x52, 0x44, 0x59]); // "RDY" in ASCII
+              socket.add(READY_SIGNAL);
               await socket.flush();
               zprint("📡 Ready signal sent to sender");
             } catch (e) {
@@ -141,9 +141,6 @@ class ReceiveService {
         final duration = stopwatch.elapsedMilliseconds;
         zprint('📊 Socket closed (onDone) from $fileTransferKey after ${duration}ms. Received $receivedBytes/$dataExpected bytes.');
         
-        // Mark processing as complete to prevent race conditions
-        isProcessingComplete = true;
-        
         try {
           if (metadataReceived && receivedInfo != null) {
             final fileTransfer = fileTransferManager.files[fileTransferKey];
@@ -165,7 +162,7 @@ class ReceiveService {
                 zprint('✅ Transfer complete ($receivedBytes/$totalSize). Finalizing...');
                 final success = await fileTransferManager.end(fileTransferKey);
                 if (success) {
-                  if (transferType == 'AVATAR_FILE') {
+                  if (transferType == TRANSFER_TYPE_AVATAR) {
                     final senderIp = receivedInfo!['senderIp'] as String?;
                     if (senderIp != null) {
                       await _processReceivedAvatar(fileTransfer.destination_filename, senderIp);
@@ -287,14 +284,14 @@ class ReceiveService {
 
   /// Safely cleanup temporary avatar file
   Future<void> _cleanupTempFile(File? tempFile, String filePath) async {
+    if (tempFile == null) return;
     try {
-      if (tempFile != null && await tempFile.exists()) {
-        await tempFile.delete();
-        zprint('🗑️ Cleaned up temporary avatar file: $filePath');
-      }
+      await tempFile.delete();
+      zprint('🗑️ Cleaned up temporary avatar file: $filePath');
+    } on FileSystemException {
+      // File already deleted or doesn't exist - that's fine
     } catch (e) {
       zprint('⚠️ Error cleaning up temporary avatar file $filePath: $e');
-      // Don't rethrow - cleanup failure shouldn't break the avatar processing
     }
   }
 

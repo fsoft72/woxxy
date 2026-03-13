@@ -92,7 +92,7 @@ class PeerManager {
 
   /// Adds or updates a peer in the manager and handles avatar requests
   /// Returns true if this is a new peer, false if it's an existing peer update
-  void addPeer(Peer peer, String currentIpAddress, int currentPort) {
+  void addPeer(Peer peer) {
     // Peer ID is the IP address - NetworkService already filters self-announcements
     final bool isNewPeer = !_peers.containsKey(peer.id);
 
@@ -124,18 +124,6 @@ class PeerManager {
     } catch (e) {
       zprint("  ❌ Failed to send avatar request: $e");
     }
-  }
-
-  /// Manually request avatar for a specific peer (useful for retry scenarios)
-  void requestAvatarFor(String peerId) {
-    final peerStatus = _peers[peerId];
-    if (peerStatus == null) {
-      zprint("⚠️ Cannot request avatar: peer $peerId not found");
-      return;
-    }
-    
-    zprint("🔄 Manual avatar request for ${peerStatus.peer.name} ($peerId)");
-    _requestAvatarForPeer(peerStatus.peer);
   }
 
   void dispose() {

@@ -1,5 +1,46 @@
 # Changes Log
 
+## Code Simplification & Deduplication
+
+### Overview
+Cleaned up duplicated avatar code, removed dead code, and introduced shared constants for better maintainability.
+
+### Changes Made
+
+#### 1. **Shared Avatar Widget** (NEW: `lib/widgets/peer_avatar.dart`)
+- Extracted duplicated avatar building logic from `home.dart` and `peer_details.dart` into a reusable `PeerAvatarWidget`
+- Unified color selection, initials extraction, and image/fallback rendering
+- Configurable `size`, `borderWidth`, and `refreshStream` parameters
+
+#### 2. **Transfer Constants** (NEW: `lib/config/transfer_constants.dart`)
+- Extracted magic bytes (`RDY` signal) and type strings (`AVATAR_FILE`, `FILE`) into named constants
+- Used by both `send_service.dart` and `receive_service.dart`
+
+#### 3. **Dead Code Removed**
+- `AvatarStore.getDebugInfo()` and `AvatarStore.count` - unused
+- `PeerManager.requestAvatarFor()` - unused public method
+- `isProcessingComplete` variable in `receive_service.dart` - set but never read
+- Redundant `isAvatar` flag in avatar metadata (already has `type: AVATAR_FILE`)
+
+#### 4. **API Simplification**
+- `PeerManager.addPeer()` - removed unused `currentIpAddress` and `currentPort` parameters
+
+#### 5. **TOCTOU Fix**
+- `_cleanupTempFile()` - removed existence check before delete; catches `FileSystemException` instead
+
+### Files Modified
+- `lib/widgets/peer_avatar.dart` - NEW shared avatar widget
+- `lib/config/transfer_constants.dart` - NEW transfer protocol constants
+- `lib/models/avatars.dart` - removed unused `count` and `getDebugInfo()`
+- `lib/models/peer_manager.dart` - removed `requestAvatarFor()`, simplified `addPeer()` signature
+- `lib/screens/home.dart` - replaced ~100 lines of avatar code with `PeerAvatarWidget`
+- `lib/screens/peer_details.dart` - replaced ~90 lines of avatar code with `PeerAvatarWidget`
+- `lib/services/network/receive_service.dart` - use constants, remove dead variable, fix TOCTOU
+- `lib/services/network/send_service.dart` - use constants, remove redundant metadata flag
+- `lib/services/network/discovery_service.dart` - updated `addPeer()` call
+
+---
+
 ## Avatar Handling Improvements
 
 ### Overview
@@ -9,7 +50,7 @@ Enhanced the avatar handling system to make it more debug-friendly, robust, and 
 
 #### 1. **PeerManager Enhancements** (`lib/models/peer_manager.dart`)
 - ✅ **Simplified avatar request flow**: Broke down `addPeer()` into smaller, more readable functions
-- ✅ **Added manual avatar request capability**: `requestAvatarFor()` method for retry scenarios
+- ~~`requestAvatarFor()` method~~ (removed in simplification pass - was unused)
 - ✅ **Improved error handling**: Better try-catch blocks and logging for avatar requests
 - ✅ **Enhanced debugging**: More detailed logging with clear status messages
 
@@ -17,7 +58,7 @@ Enhanced the avatar handling system to make it more debug-friendly, robust, and 
 - ✅ **Better input validation**: Empty peer ID and image data checks
 - ✅ **Enhanced error handling**: Detailed error logging with stack traces
 - ✅ **Improved memory management**: Safe disposal of existing avatars before replacement
-- ✅ **Debug utilities**: Added `getDebugInfo()`, `count` getter for monitoring
+- ~~`getDebugInfo()`, `count` getter~~ (removed in simplification pass - were unused)
 - ✅ **Reduced logging verbosity**: Only log when avatars are not found to reduce noise
 
 #### 3. **ReceiveService Enhancements** (`lib/services/network/receive_service.dart`)
@@ -84,22 +125,8 @@ Enhanced the avatar handling system to make it more debug-friendly, robust, and 
 4. **UI Display**: UI components automatically update when avatars are received
 5. **Cleanup**: Temporary files are automatically deleted after processing
 
-#### Debug Features
-```dart
-// Get debug information about cached avatars
-final debugInfo = AvatarStore().getDebugInfo();
-print(debugInfo);
-
-// Manual avatar request for a peer
-PeerManager().requestAvatarFor('192.168.1.100');
-
-// Check avatar cache count
-final count = AvatarStore().count;
-```
-
 #### Error Recovery
 - Failed avatar transfers don't block peer discovery
-- Manual retry available via `PeerManager.requestAvatarFor()`
 - UI gracefully falls back to initials/default icons
 - Network errors are logged but don't crash the app
 

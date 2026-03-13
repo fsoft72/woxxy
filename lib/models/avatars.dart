@@ -117,23 +117,4 @@ class AvatarStore {
     zprint("✅ [AvatarStore] All avatars cleared");
   }
 
-  /// Returns the number of cached avatars
-  int get count => _avatars.length;
-
-  /// Returns debug information about cached avatars
-  String getDebugInfo() {
-    final buffer = StringBuffer();
-    buffer.writeln("AvatarStore Debug Info:");
-    buffer.writeln("  Total avatars: ${_avatars.length}");
-    
-    if (_avatars.isNotEmpty) {
-      buffer.writeln("  Cached peers:");
-      for (final entry in _avatars.entries) {
-        final image = entry.value;
-        buffer.writeln("    ${entry.key}: ${image.width}x${image.height}");
-      }
-    }
-    
-    return buffer.toString();
-  }
 }

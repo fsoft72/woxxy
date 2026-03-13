@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
+import '../../config/transfer_constants.dart';
 import '../../models/peer.dart';
 
 /// Callback function type for file transfer progress updates
@@ -178,9 +179,8 @@ class SendService {
     
     return {
       ...originalMetadata,
-      'type': 'AVATAR_FILE',
+      'type': TRANSFER_TYPE_AVATAR,
       'senderIp': _currentIpAddress,
-      'isAvatar': true, // Additional flag for clarity
     };
   }
 
@@ -206,9 +206,8 @@ class SendService {
       // Listen for ready signal
       subscription = socket.listen(
         (data) {
-          if (!signalReceived && data.length >= 3) {
-            // Check for "RDY" signal (0x52, 0x44, 0x59)
-            if (data[0] == 0x52 && data[1] == 0x44 && data[2] == 0x59) {
+          if (!signalReceived && data.length >= READY_SIGNAL_LENGTH) {
+            if (data[0] == READY_SIGNAL[0] && data[1] == READY_SIGNAL[1] && data[2] == READY_SIGNAL[2]) {
               signalReceived = true;
               timeout.cancel();
               subscription.cancel();
@@ -274,7 +273,7 @@ class SendService {
       'senderIp': _currentIpAddress,
       'md5Checksum': checksum,
       'transferId': transferId,
-      'type': 'FILE', // Default type
+      'type': TRANSFER_TYPE_FILE,
     };
   }
 
