@@ -33,7 +33,7 @@ void main() {
   setUp(() {
     backend = _FakeBackend();
     opened = [];
-    manager = NotificationManager.forTesting(backend: backend, directoryOpener: (dir) async => opened.add(dir));
+    manager = NotificationManager(backend: backend, directoryOpener: (dir) async => opened.add(dir));
   });
 
   test('init runs once and showing a notification initializes lazily', () async {

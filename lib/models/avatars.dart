@@ -12,13 +12,8 @@ const Duration DEFAULT_AVATAR_DISPOSE_DELAY = Duration(seconds: 2);
 
 /// In-memory cache of peer avatars, keyed by peer id.
 class AvatarStore {
-  static final AvatarStore _instance = AvatarStore._internal(DEFAULT_AVATAR_DISPOSE_DELAY);
-  factory AvatarStore() => _instance;
-  AvatarStore._internal(this._disposeDelay);
-
-  /// Creates an isolated store (used by tests).
-  @visibleForTesting
-  AvatarStore.forTesting({Duration disposeDelay = DEFAULT_AVATAR_DISPOSE_DELAY}) : _disposeDelay = disposeDelay;
+  /// Creates a store; [disposeDelay] is how long replaced images stay alive before being disposed.
+  AvatarStore({Duration disposeDelay = DEFAULT_AVATAR_DISPOSE_DELAY}) : _disposeDelay = disposeDelay;
 
   final Duration _disposeDelay;
   final Map<String, ui.Image> _avatars = {};

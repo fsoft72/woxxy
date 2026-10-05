@@ -16,12 +16,14 @@ const Duration USERNAME_SAVE_DELAY = Duration(milliseconds: 600);
 class SettingsScreen extends StatefulWidget {
   final User user;
   final Function(User) onUserUpdated;
+  final FileTransferManager fileTransferManager;
   final ProfileImageStore? profileImageStore;
 
   const SettingsScreen({
     super.key,
     required this.user,
     required this.onUserUpdated,
+    required this.fileTransferManager,
     this.profileImageStore,
   });
 
@@ -79,7 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (selectedDirectory != null) {
       // Update FileTransferManager download path
-      await FileTransferManager.instance.updateDownloadPath(selectedDirectory);
+      await widget.fileTransferManager.updateDownloadPath(selectedDirectory);
 
       setState(() {
         _selectedDirectory = selectedDirectory;

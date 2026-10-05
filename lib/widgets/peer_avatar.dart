@@ -38,12 +38,14 @@ String getInitials(String name) {
 /// Rebuilds only when the avatar of this peer changes.
 class PeerAvatarWidget extends StatelessWidget {
   final Peer peer;
+  final AvatarStore avatarStore;
   final double size;
   final double borderWidth;
 
   const PeerAvatarWidget({
     super.key,
     required this.peer,
+    required this.avatarStore,
     this.size = 40.0,
     this.borderWidth = 1.0,
   });
@@ -54,7 +56,7 @@ class PeerAvatarWidget extends StatelessWidget {
       width: size,
       height: size,
       child: ValueListenableBuilder<ui.Image?>(
-        valueListenable: AvatarStore().listenableFor(peer.id),
+        valueListenable: avatarStore.listenableFor(peer.id),
         builder: (context, image, _) => image != null ? _buildAvatarImage(image) : _buildDefaultAvatar(),
       ),
     );

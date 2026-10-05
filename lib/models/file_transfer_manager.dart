@@ -4,38 +4,14 @@ import 'package:woxxy/funcs/debug.dart'; // Import zprint
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
-  /// Singleton instance
-  static FileTransferManager? _instance;
-
   /// Map of active file transfers, keyed by transfer id
   final Map<String, FileTransfer> files = {};
 
   /// Path where downloaded files will be stored
   String downloadPath;
 
-  /// Private constructor
-  FileTransferManager._({required this.downloadPath});
-
-  /// Factory constructor to get or create the singleton instance
-  factory FileTransferManager({required String downloadPath}) {
-    // Ensure downloadPath is set or updated if instance exists
-    if (_instance != null) {
-      _instance!.downloadPath = downloadPath;
-    } else {
-      _instance = FileTransferManager._(downloadPath: downloadPath);
-    }
-    return _instance!;
-  }
-
-  /// Get the singleton instance
-  static FileTransferManager get instance {
-    if (_instance == null) {
-      // This state should ideally not be reached if initialized correctly in main.dart
-      zprint("❌ FATAL: FileTransferManager accessed before initialization!");
-      throw StateError('FileTransferManager not initialized. Call FileTransferManager() with downloadPath first.');
-    }
-    return _instance!;
-  }
+  /// Creates a manager that saves received files into [downloadPath].
+  FileTransferManager({required this.downloadPath});
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
@@ -180,7 +156,7 @@ class FileTransferManager {
       await Directory(newPath).create(recursive: true);
       // Check if directory exists after creation attempt
       if (await Directory(newPath).exists()) {
-        _instance!.downloadPath = newPath;
+        downloadPath = newPath;
         zprint("✅ Download path updated successfully.");
         return true;
       } else {

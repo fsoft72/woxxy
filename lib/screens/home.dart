@@ -14,9 +14,11 @@ import 'peer_details.dart';
 
 class HomeContent extends StatefulWidget {
   final NetworkService networkService;
+  final NotificationManager notificationManager;
   const HomeContent({
     super.key,
     required this.networkService,
+    required this.notificationManager,
   });
 
   @override
@@ -51,7 +53,7 @@ class _HomeContentState extends State<HomeContent> {
             padding: const EdgeInsets.all(8.0),
             child: ElevatedButton.icon(
               onPressed: () {
-                NotificationManager.instance.showFileReceivedNotification(
+                widget.notificationManager.showFileReceivedNotification(
                   filePath: '/tmp/test.txt',
                   senderUsername: 'Test User',
                   fileSizeMB: 10.5,
@@ -88,6 +90,7 @@ class _HomeContentState extends State<HomeContent> {
                   return ListTile(
                     leading: PeerAvatarWidget(
                       peer: peer,
+                      avatarStore: widget.networkService.avatarStore,
                       size: 40,
                     ),
                     title: Text(peer.name),

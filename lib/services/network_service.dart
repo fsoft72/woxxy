@@ -41,9 +41,10 @@ class NetworkService {
   static const int _discoveryPort = 8091;
 
   // --- Dependencies & State ---
-  final PeerManager _peerManager = PeerManager();
-  final AvatarStore _avatarStore = AvatarStore();
-  final FileTransferManager _fileTransferManager = FileTransferManager.instance; // Use singleton
+  final PeerManager _peerManager;
+  final AvatarStore _avatarStore;
+  final FileTransferManager _fileTransferManager;
+  final SettingsService _settingsService;
 
   // Internal Services
   late final DiscoveryService _discoveryService;
@@ -65,6 +66,8 @@ class NetworkService {
   final _fileReceivedController = StreamController<FileReceivedEvent>.broadcast();
 
   // --- Public Streams & Getters ---
+  /// Avatar cache shared with the widgets that draw peer avatars
+  AvatarStore get avatarStore => _avatarStore;
   Stream<List<Peer>> get peerStream => _peerManager.peerStream;
   List<Peer> get currentPeers => _peerManager.currentPeers;
   /// Emits one typed event for every file that was received and verified
@@ -76,8 +79,17 @@ class NetworkService {
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
 
   // --- Initialization & Lifecycle ---
-  /// Creates the facade. [ipResolver] is injectable so tests can simulate network conditions.
-  NetworkService({IpResolver? ipResolver}) : _ipResolver = ipResolver {
+  /// Creates the facade over its collaborators. [ipResolver] is injectable so tests can simulate network conditions.
+  NetworkService({
+    required FileTransferManager fileTransferManager,
+    required AvatarStore avatarStore,
+    required SettingsService settingsService,
+    IpResolver? ipResolver,
+  })  : _fileTransferManager = fileTransferManager,
+        _avatarStore = avatarStore,
+        _settingsService = settingsService,
+        _peerManager = PeerManager(avatarStore: avatarStore),
+        _ipResolver = ipResolver {
     // Instantiate internal services, passing dependencies and callbacks
     _sendService = SendService(); // SendService needs user details updated later
 
@@ -237,8 +249,7 @@ class NetworkService {
   }
 
   Future<void> _loadCurrentUserDetails() async {
-    final settings = SettingsService();
-    final user = await settings.loadSettings();
+    final user = await _settingsService.loadSettings();
     _currentUsername = user.username.isNotEmpty ? user.username : "WoxxyUser";
     _profileImagePath = user.profileImage;
     zprint('👤 Facade User Details Loaded: Name=$_currentUsername, Avatar=$_profileImagePath');

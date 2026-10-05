@@ -54,7 +54,7 @@
   - File(s): `lib/screens/peer_details.dart`, `lib/funcs/utils.dart`
 - [x] **Refactor `NotificationManager` per platform** - One class holds Android, Windows, macOS and Linux init and show logic in long `if (Platform.isX)` chains, with stray `print("DEBUG LINUX...")`, `\n\n\n=== NOTIF` logging and a commented-out block. Introduce a small `NotificationBackend` interface with one implementation per platform, and route all logging through `zprint`.
   - File(s): `lib/models/notification_manager.dart`
-- [ ] **Inject dependencies instead of singletons** - `FileTransferManager`, `PeerManager`, `AvatarStore`, `NotificationManager` are global singletons, `NetworkService` reads `FileTransferManager.instance` in a field initializer (crashes if created first) and `SettingsService()` is instantiated in three places. Pass instances through constructors from `main()` so services can be faked in tests.
+- [x] **Inject dependencies instead of singletons** - `FileTransferManager`, `PeerManager`, `AvatarStore`, `NotificationManager` are global singletons, `NetworkService` reads `FileTransferManager.instance` in a field initializer (crashes if created first) and `SettingsService()` is instantiated in three places. Pass instances through constructors from `main()` so services can be faked in tests.
   - File(s): `lib/services/network_service.dart`, `lib/models/file_transfer_manager.dart`, `lib/models/peer_manager.dart`, `lib/models/avatars.dart`, `lib/main.dart`
 
 ## Low / Nice to have

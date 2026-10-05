@@ -126,6 +126,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       children: [
         PeerAvatarWidget(
           peer: widget.peer,
+          avatarStore: widget.networkService.avatarStore,
           size: 80,
           borderWidth: 2.0,
         ),

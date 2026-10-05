@@ -36,10 +36,11 @@ void main() {
     manager.files.clear();
     received = [];
     events = [];
+    final avatars = AvatarStore();
     receive = ReceiveService(
       fileTransferManager: manager,
-      avatarStore: AvatarStore(),
-      peerManager: PeerManager(),
+      avatarStore: avatars,
+      peerManager: PeerManager(avatarStore: avatars),
       onFileReceivedCallback: (event) {
         events.add(event);
         received.add(event.filePath);

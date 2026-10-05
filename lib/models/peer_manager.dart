@@ -30,8 +30,8 @@ class PeerManager {
   final Duration _peerTimeout;
 
   /// Creates a manager. [clock] and [peerTimeout] are injectable for tests.
-  PeerManager({AvatarStore? avatarStore, DateTime Function()? clock, Duration peerTimeout = DEFAULT_PEER_TIMEOUT})
-      : _avatarStore = avatarStore ?? AvatarStore(),
+  PeerManager({required AvatarStore avatarStore, DateTime Function()? clock, Duration peerTimeout = DEFAULT_PEER_TIMEOUT})
+      : _avatarStore = avatarStore,
         _now = clock ?? DateTime.now,
         _peerTimeout = peerTimeout {
     // Ensure stream starts with an empty list

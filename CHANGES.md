@@ -1,5 +1,34 @@
 # Changes Log
 
+## Inject dependencies instead of singletons
+
+FileTransferManager, AvatarStore and NotificationManager are plain classes now (no static instances), NetworkService receives its collaborators and a single SettingsService, and widgets get the AvatarStore/NotificationManager/FileTransferManager they need through constructors. main() builds everything once in AppServices.create and passes it to MyApp/HomePage. Tests build isolated instances (test/support/test_services.dart) and a guard test checks no singleton came back.
+
+### Files
+- `lib/app_services.dart`
+- `lib/app.dart`
+- `lib/main.dart`
+- `lib/models/file_transfer_manager.dart`
+- `lib/models/avatars.dart`
+- `lib/models/notification_manager.dart`
+- `lib/models/peer_manager.dart`
+- `lib/services/network_service.dart`
+- `lib/widgets/peer_avatar.dart`
+- `lib/screens/home.dart`
+- `lib/screens/home_page.dart`
+- `lib/screens/peer_details.dart`
+- `lib/screens/settings.dart`
+- `test/support/test_services.dart`
+- `test/dependency_injection_test.dart`
+- `test/avatar_store_test.dart`
+- `test/home_content_test.dart`
+- `test/network_start_test.dart`
+- `test/notification_manager_test.dart`
+- `test/settings_test.dart`
+- `test/transfer_loopback_test.dart`
+
+---
+
 ## Refactor `NotificationManager` per platform
 
 NotificationManager (387 lines of Platform.isX chains) is now a ~120 line coordinator over a NotificationBackend interface with one implementation per platform (Android, Windows, macOS, Linux) under models/notifications/. The Linux payload workaround lives in the Linux backend, the stray print/DEBUG output and commented-out code are gone, and all logging goes through zprint. Tests use a fake backend.

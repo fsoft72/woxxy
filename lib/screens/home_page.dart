@@ -8,9 +8,9 @@ import 'package:window_manager/window_manager.dart';
 import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
+import '../app_services.dart';
 import '../models/file_received_event.dart';
 import '../models/history.dart';
-import '../models/notification_manager.dart';
 import '../models/user.dart';
 import '../services/network_service.dart';
 import '../services/settings_service.dart';
@@ -22,17 +22,17 @@ import 'settings.dart';
 
 class HomePage extends StatefulWidget {
   final User initialUser; // Receive initial user data
-  final FileHistory history;
-  const HomePage({super.key, required this.initialUser, required this.history});
+  final AppServices services;
+  const HomePage({super.key, required this.initialUser, required this.services});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
-  final NetworkService _networkService = NetworkService();
-  final SettingsService _settingsService = SettingsService();
-  late final FileHistory _fileHistory = widget.history;
+  late final NetworkService _networkService = widget.services.networkService;
+  late final SettingsService _settingsService = widget.services.settingsService;
+  late final FileHistory _fileHistory = widget.services.history;
   StreamSubscription<FileReceivedEvent>? _fileReceivedSubscription;
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
@@ -109,7 +109,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
         uploadSpeedMBps: event.speedMBps,
       ));
 
-      await NotificationManager.instance.showFileReceivedNotification(
+      await widget.services.notificationManager.showFileReceivedNotification(
         filePath: event.filePath,
         senderUsername: event.senderUsername,
         fileSizeMB: event.fileSizeMB,
@@ -186,10 +186,11 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     }
     return [
       HistoryScreen(history: _fileHistory),
-      HomeContent(networkService: _networkService),
+      HomeContent(networkService: _networkService, notificationManager: widget.services.notificationManager),
       SettingsScreen(
         user: _currentUser!,
         onUserUpdated: _updateUser,
+        fileTransferManager: widget.services.fileTransferManager,
       )
     ];
   }

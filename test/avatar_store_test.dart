@@ -19,7 +19,7 @@ Peer _peer(String id, {String? hash}) =>
 void main() {
   group('AvatarStore', () {
     testWidgets('stores an avatar with its hash and notifies only that peer', (tester) async {
-      final store = AvatarStore.forTesting();
+      final store = AvatarStore();
       var aNotified = 0;
       var bNotified = 0;
       store.listenableFor('a').addListener(() => aNotified++);
@@ -36,7 +36,7 @@ void main() {
     });
 
     testWidgets('a replaced image stays valid for a grace period and is disposed afterwards', (tester) async {
-      final store = AvatarStore.forTesting(disposeDelay: const Duration(milliseconds: 200));
+      final store = AvatarStore(disposeDelay: const Duration(milliseconds: 200));
       await tester.runAsync(() => store.setAvatar('a', _png, hash: 'h1'));
       final old = store.getAvatar('a')!;
 
@@ -51,7 +51,7 @@ void main() {
     });
 
     testWidgets('removeAvatar clears the cache entry and notifies listeners', (tester) async {
-      final store = AvatarStore.forTesting(disposeDelay: Duration.zero);
+      final store = AvatarStore(disposeDelay: Duration.zero);
       await tester.runAsync(() => store.setAvatar('a', _png));
       final notifier = store.listenableFor('a');
       expect(notifier.value, isNotNull);
@@ -71,7 +71,7 @@ void main() {
 
     setUp(() {
       now = DateTime(2026, 1, 1, 12);
-      store = AvatarStore.forTesting(disposeDelay: Duration.zero);
+      store = AvatarStore(disposeDelay: Duration.zero);
       manager = PeerManager(avatarStore: store, clock: () => now);
       requests = [];
       manager.setRequestAvatarCallback((p) => requests.add('${p.id}:${p.avatarHash}'));
@@ -131,7 +131,7 @@ void main() {
       final b = _peer('widget-b-${DateTime.now().microsecondsSinceEpoch}');
 
       await tester.pumpWidget(MaterialApp(
-        home: Row(children: [PeerAvatarWidget(peer: a), PeerAvatarWidget(peer: b)]),
+        home: Row(children: [PeerAvatarWidget(peer: a, avatarStore: store), PeerAvatarWidget(peer: b, avatarStore: store)]),
       ));
       expect(find.byType(RawImage), findsNothing);
 

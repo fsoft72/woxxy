@@ -11,18 +11,11 @@ import 'notifications/platform_notification_backend.dart';
 /// Shows system notifications through the backend of the current platform and opens the
 /// download folder when a "file received" notification is clicked.
 class NotificationManager {
-  static final NotificationManager _instance = NotificationManager._internal();
-  static NotificationManager get instance => _instance;
-
-  factory NotificationManager() => _instance;
-
-  NotificationManager._internal() : _backendOverride = null, _directoryOpener = null;
-
-  /// Creates an isolated manager with a fake backend and directory opener (used by tests).
-  @visibleForTesting
-  NotificationManager.forTesting({
-    required NotificationBackend backend,
-    required Future<void> Function(String dirPath) directoryOpener,
+  /// Creates a manager. [backend] and [directoryOpener] default to the platform implementations
+  /// and are injectable for tests.
+  NotificationManager({
+    NotificationBackend? backend,
+    Future<void> Function(String dirPath)? directoryOpener,
   })  : _backendOverride = backend,
         _directoryOpener = directoryOpener;
 

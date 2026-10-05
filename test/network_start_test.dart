@@ -1,23 +1,20 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/services/network_service.dart';
 import 'package:woxxy/widgets/startup_error_view.dart';
 
-void main() {
-  setUp(() => FileTransferManager(downloadPath: Directory.systemTemp.path));
+import 'support/test_services.dart';
 
+void main() {
   test('start() throws NetworkStartException when no IP address is available', () async {
-    final service = NetworkService(ipResolver: () async => null);
+    final service = testNetworkService(ipResolver: () async => null);
 
     await expectLater(service.start(), throwsA(isA<NetworkStartException>()));
     expect(service.currentIpAddress, isNull);
   });
 
   test('a failed start leaves the service usable (streams are not closed)', () async {
-    final service = NetworkService(ipResolver: () async => null);
+    final service = testNetworkService(ipResolver: () async => null);
     await expectLater(service.start(), throwsA(isA<NetworkStartException>()));
 
     // dispose() would have closed the controller; a retry needs it open

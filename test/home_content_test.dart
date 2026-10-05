@@ -1,18 +1,17 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/models/file_received_event.dart';
-import 'package:woxxy/models/file_transfer_manager.dart';
+import 'package:woxxy/models/notification_manager.dart';
 import 'package:woxxy/screens/home.dart';
 import 'package:woxxy/services/network_service.dart';
+
+import 'support/test_services.dart';
 
 void main() {
   late NetworkService network;
 
   setUp(() {
-    FileTransferManager(downloadPath: Directory.systemTemp.path);
-    network = NetworkService();
+    network = testNetworkService();
   });
 
   Widget host(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -20,7 +19,7 @@ void main() {
   const event = FileReceivedEvent(filePath: '/tmp/a/report.pdf', senderUsername: 'alice', fileSize: 10, speedMBps: 1);
 
   testWidgets('shows a snackbar for a received file', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network)));
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
 
     network.handleFileReceived(event);
     await tester.pump();
@@ -29,7 +28,7 @@ void main() {
   });
 
   testWidgets('does not leak the subscription after the widget is disposed', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network)));
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
     expect(network.hasFileReceivedListeners, isTrue);
 
     await tester.pumpWidget(host(const SizedBox()));
@@ -37,9 +36,9 @@ void main() {
   });
 
   testWidgets('remounting does not duplicate snackbars', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network)));
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
     await tester.pumpWidget(host(const SizedBox()));
-    await tester.pumpWidget(host(HomeContent(networkService: network)));
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
 
     network.handleFileReceived(event);
     await tester.pump();

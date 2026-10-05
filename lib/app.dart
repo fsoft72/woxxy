@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'models/history.dart';
+import 'app_services.dart';
 import 'models/user.dart';
 import 'screens/home_page.dart';
 
 class MyApp extends StatelessWidget {
   final User initialUser; // Receive initial user data
-  final FileHistory history;
-  const MyApp({super.key, required this.initialUser, required this.history});
+  final AppServices services;
+  const MyApp({super.key, required this.initialUser, required this.services});
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
       ),
       // Pass initial user data to HomePage
-      home: HomePage(initialUser: initialUser, history: history),
+      home: HomePage(initialUser: initialUser, services: services),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/models/user.dart';
 import 'package:woxxy/screens/settings.dart';
 import 'package:woxxy/services/profile_image_store.dart';
@@ -13,6 +14,7 @@ void main() {
         home: SettingsScreen(
           user: User(username: 'alice', defaultDownloadDirectory: ''),
           onUserUpdated: saved.add,
+          fileTransferManager: FileTransferManager(downloadPath: Directory.systemTemp.path),
         ),
       );
 
