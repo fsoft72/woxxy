@@ -59,6 +59,62 @@ void main() {
     expect(find.text('Username cannot be empty'), findsNothing);
   });
 
+  group('download directory', () {
+    late Directory tmp;
+
+    setUp(() async => tmp = await Directory.systemTemp.createTemp('woxxy_settings_'));
+    tearDown(() => tmp.delete(recursive: true));
+
+    /// Each await of real disk I/O needs a real delay followed by a pump to continue.
+    Future<void> settleDiskIo(WidgetTester tester) async {
+      for (var i = 0; i < 6; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+        await tester.pump();
+      }
+    }
+
+    Widget hostWith(String? picked) => MaterialApp(
+          home: SettingsScreen(
+            user: User(username: 'alice', defaultDownloadDirectory: ''),
+            onUserUpdated: saved.add,
+            fileTransferManager: FileTransferManager(downloadPath: tmp.path),
+            directoryPicker: () async => picked,
+          ),
+        );
+
+    testWidgets('a valid folder is shown and saved', (tester) async {
+      final folder = '${tmp.path}/inbox';
+      await tester.pumpWidget(hostWith(folder));
+
+      await tester.tap(find.text('Select Directory'));
+      await settleDiskIo(tester);
+
+      expect(saved.single.defaultDownloadDirectory, folder);
+      expect(find.textContaining(folder), findsOneWidget);
+    });
+
+    testWidgets('a folder that cannot be created is reported and not saved', (tester) async {
+      final blocker = File('${tmp.path}/file')..writeAsStringSync('x');
+      await tester.pumpWidget(hostWith('${blocker.path}/sub')); // A directory cannot live inside a file
+
+      await tester.tap(find.text('Select Directory'));
+      await settleDiskIo(tester);
+
+      expect(saved, isEmpty);
+      expect(find.textContaining('Cannot use this folder'), findsOneWidget);
+      expect(find.textContaining('${blocker.path}/sub').evaluate().length, 1, reason: 'only the snackbar mentions it');
+    });
+
+    testWidgets('cancelling the dialog changes nothing', (tester) async {
+      await tester.pumpWidget(hostWith(null));
+
+      await tester.tap(find.text('Select Directory'));
+      await settleDiskIo(tester);
+
+      expect(saved, isEmpty);
+    });
+  });
+
   group('ProfileImageStore', () {
     late Directory tmp;
     late ProfileImageStore store;

@@ -42,7 +42,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/history_repository.dart`
 - [x] **`PeerManager` is created inside `NetworkService` and wired by setter** - The constructor builds `PeerManager` itself and `setRequestAvatarCallback` closes the circular dependency afterwards, which makes the order of construction important and hard to test. Inject `PeerManager` (like the other collaborators) and pass the avatar request function at construction. Also align `SendAvatarCallback` (`Future<void>`) with `SendService.sendAvatar` (`Future<bool>`).
   - File(s): `lib/services/network_service.dart`, `lib/models/peer_manager.dart`, `lib/services/network/discovery_service.dart`
-- [ ] **Settings screen updates state after an `await` without `mounted`** - `_pickDirectory` calls `setState` after `updateDownloadPath` without checking `mounted`, and ignores the `false` result (invalid folder is still saved in the user). Check both.
+- [x] **Settings screen updates state after an `await` without `mounted`** - `_pickDirectory` calls `setState` after `updateDownloadPath` without checking `mounted`, and ignores the `false` result (invalid folder is still saved in the user). Check both.
   - File(s): `lib/screens/settings.dart`
 - [ ] **Settings are saved fire-and-forget** - `_updateUser` in `HomePage` calls `saveSettings` without `await` and without error handling, and `SettingsService.saveSettings` writes three keys one after another. Await the call, report failures and write only what changed.
   - File(s): `lib/screens/home_page.dart`, `lib/services/settings_service.dart`

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
+import '../funcs/utils.dart';
 import '../models/user.dart';
 import '../models/file_transfer_manager.dart';
 import '../services/profile_image_store.dart';
@@ -19,12 +20,16 @@ class SettingsScreen extends StatefulWidget {
   final FileTransferManager fileTransferManager;
   final ProfileImageStore? profileImageStore;
 
+  /// Lets the user choose a folder; defaults to the system dialog and is injectable for tests.
+  final Future<String?> Function()? directoryPicker;
+
   const SettingsScreen({
     super.key,
     required this.user,
     required this.onUserUpdated,
     required this.fileTransferManager,
     this.profileImageStore,
+    this.directoryPicker,
   });
 
   @override
@@ -77,17 +82,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _pickDirectory() async {
-    String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+    final selectedDirectory = await (widget.directoryPicker ?? FilePicker.platform.getDirectoryPath)();
+    if (selectedDirectory == null) return;
 
-    if (selectedDirectory != null) {
-      // Update FileTransferManager download path
-      await widget.fileTransferManager.updateDownloadPath(selectedDirectory);
-
-      setState(() {
-        _selectedDirectory = selectedDirectory;
-      });
-      _updateUser();
+    // Update FileTransferManager download path
+    final updated = await widget.fileTransferManager.updateDownloadPath(selectedDirectory);
+    if (!mounted) return;
+    if (!updated) {
+      showSnackbar(context, 'Cannot use this folder for downloads: $selectedDirectory');
+      return;
     }
+
+    setState(() {
+      _selectedDirectory = selectedDirectory;
+    });
+    _updateUser();
   }
 
   /// Called on every keystroke: validates immediately but saves only after a short pause.

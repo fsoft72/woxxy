@@ -1,5 +1,15 @@
 # Changes Log
 
+## Check the download folder result and mounted in Settings
+
+Choosing a download folder now checks mounted after the await and reports a folder that cannot be created (snackbar) instead of saving it. The picker is injectable (directoryPicker). Added widget tests.
+
+### Files
+- `lib/screens/settings.dart`
+- `test/settings_test.dart`
+
+---
+
 ## Pass the avatar request function to PeerManager at construction
 
 PeerManager takes requestAvatar in its constructor, so the setRequestAvatarCallback setter and the construction order dependency are gone (NetworkService passes a late bound lambda). SendAvatarCallback now matches SendService.sendAvatar (Future<bool>). Existing tests moved to the constructor argument.
