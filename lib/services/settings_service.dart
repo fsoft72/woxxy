@@ -18,15 +18,20 @@ class SettingsService {
     );
   }
 
+  /// Saves [user]; only the values that differ from the stored ones are written.
   Future<void> saveSettings(User user) async {
     final prefs = await SharedPreferences.getInstance();
-    // Removed userId saving logic
-    await prefs.setString(_usernameKey, user.username);
-    if (user.profileImage != null && user.profileImage!.isNotEmpty) {
-      await prefs.setString(_profileImageKey, user.profileImage!);
-    } else {
-      await prefs.remove(_profileImageKey); // Remove key if image is null or empty
+    if (prefs.getString(_usernameKey) != user.username) await prefs.setString(_usernameKey, user.username);
+
+    final image = user.profileImage;
+    if (image == null || image.isEmpty) {
+      if (prefs.containsKey(_profileImageKey)) await prefs.remove(_profileImageKey);
+    } else if (prefs.getString(_profileImageKey) != image) {
+      await prefs.setString(_profileImageKey, image);
     }
-    await prefs.setString(_downloadDirKey, user.defaultDownloadDirectory);
+
+    if (prefs.getString(_downloadDirKey) != user.defaultDownloadDirectory) {
+      await prefs.setString(_downloadDirKey, user.defaultDownloadDirectory);
+    }
   }
 }

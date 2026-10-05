@@ -9,6 +9,7 @@ import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 import '../app_services.dart';
+import '../funcs/utils.dart';
 import '../models/user.dart';
 import '../services/network_service.dart';
 import '../services/settings_service.dart';
@@ -133,16 +134,21 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     trayManager.popUpContextMenu();
   }
 
-  void _updateUser(User updatedUser) {
-    // SettingsService now handles saving only the relevant fields
+  /// Applies the new settings at once and saves them; a failed save is reported to the user.
+  Future<void> _updateUser(User updatedUser) async {
     if (!mounted) return;
     setState(() {
       _currentUser = updatedUser;
     });
     _networkService.setUsername(updatedUser.username);
-    // Update profile image path in network service if it changed
     _networkService.setProfileImagePath(updatedUser.profileImage);
-    _settingsService.saveSettings(updatedUser);
+
+    try {
+      await _settingsService.saveSettings(updatedUser);
+    } catch (e, s) {
+      zprint('❌ Could not save the settings: $e\n$s');
+      if (mounted) showSnackbar(context, 'Could not save the settings: $e');
+    }
   }
 
   List<Widget> _getScreens() {

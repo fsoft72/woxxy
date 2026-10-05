@@ -44,7 +44,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/network_service.dart`, `lib/models/peer_manager.dart`, `lib/services/network/discovery_service.dart`
 - [x] **Settings screen updates state after an `await` without `mounted`** - `_pickDirectory` calls `setState` after `updateDownloadPath` without checking `mounted`, and ignores the `false` result (invalid folder is still saved in the user). Check both.
   - File(s): `lib/screens/settings.dart`
-- [ ] **Settings are saved fire-and-forget** - `_updateUser` in `HomePage` calls `saveSettings` without `await` and without error handling, and `SettingsService.saveSettings` writes three keys one after another. Await the call, report failures and write only what changed.
+- [x] **Settings are saved fire-and-forget** - `_updateUser` in `HomePage` calls `saveSettings` without `await` and without error handling, and `SettingsService.saveSettings` writes three keys one after another. Await the call, report failures and write only what changed.
   - File(s): `lib/screens/home_page.dart`, `lib/services/settings_service.dart`
 
 ## Low / Nice to have

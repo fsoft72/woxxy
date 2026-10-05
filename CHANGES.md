@@ -1,5 +1,16 @@
 # Changes Log
 
+## Await settings saves, report failures and write only changes
+
+HomePage._updateUser awaits saveSettings and shows a snackbar when it fails. SettingsService.saveSettings writes only the values that differ from the stored ones. Added settings_service_test.
+
+### Files
+- `lib/screens/home_page.dart`
+- `lib/services/settings_service.dart`
+- `test/settings_service_test.dart`
+
+---
+
 ## Check the download folder result and mounted in Settings
 
 Choosing a download folder now checks mounted after the await and reports a folder that cannot be created (snackbar) instead of saving it. The picker is injectable (directoryPicker). Added widget tests.
