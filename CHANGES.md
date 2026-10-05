@@ -1,5 +1,21 @@
 # Changes Log
 
+## Refactor `NotificationManager` per platform
+
+NotificationManager (387 lines of Platform.isX chains) is now a ~120 line coordinator over a NotificationBackend interface with one implementation per platform (Android, Windows, macOS, Linux) under models/notifications/. The Linux payload workaround lives in the Linux backend, the stray print/DEBUG output and commented-out code are gone, and all logging goes through zprint. Tests use a fake backend.
+
+### Files
+- `lib/models/notification_manager.dart`
+- `lib/models/notifications/notification_backend.dart`
+- `lib/models/notifications/android_notification_backend.dart`
+- `lib/models/notifications/macos_notification_backend.dart`
+- `lib/models/notifications/linux_notification_backend.dart`
+- `lib/models/notifications/windows_notification_backend.dart`
+- `lib/models/notifications/platform_notification_backend.dart`
+- `test/notification_manager_test.dart`
+
+---
+
 ## Break up `peer_details.dart`
 
 The 635 line page is now 174 lines. Queue and transfer state moved to SendQueueController (a ChangeNotifier with injectable send/cancel functions, throttled progress, cancel and failure handling), the UI to TransferProgressCard, QueueSummary and SendDropZone widgets, and size formatting to a shared formatBytes (now with GB). The unused _progressSubscription and newFiles are gone. Added controller and widget tests.
