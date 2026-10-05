@@ -1,5 +1,9 @@
 # Changes Log
 
+## Use one notification channel on Android and normal urgency on Linux
+
+Android creates and uses the same `woxxy_channel` (the extra `file_transfer_channel` is gone), and Linux notifications are no longer critical and resident, so they expire and close on click. Tests: `test/notification_details_test.dart`.
+
 ## Remove unused dependencies and the dead vendored plugin
 
 Dropped `filesize` and `cupertino_icons` (no import anywhere), the `packages/flutter_local_notifications` copy (v15.1.1, while the hosted 18.0.1 is the one in use, and nothing referenced it), and raised the SDK lower bound to 3.6 for `Color.withValues`. Tests: `test/pubspec_test.dart`.

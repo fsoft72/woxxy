@@ -9,6 +9,16 @@ import 'notification_backend.dart';
 /// Asset used as the notification icon.
 const String NOTIFICATION_ICON_ASSET = 'assets/icons/head.png';
 
+/// Details of a "file received" notification. Normal urgency, because critical ones are not
+/// expired by the notification daemon and would pile up, and not resident, so a click on the
+/// notification closes it.
+LinuxNotificationDetails linuxNotificationDetails(String? iconPath) => LinuxNotificationDetails(
+      category: LinuxNotificationCategory.presence,
+      urgency: LinuxNotificationUrgency.normal,
+      defaultActionName: 'Open',
+      icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
+    );
+
 /// Linux (D-Bus notifications).
 ///
 /// Passing a payload to `show()` adds a D-Bus action that some notification daemons do not
@@ -42,17 +52,7 @@ class LinuxNotificationBackend implements NotificationBackend {
       id,
       title,
       body,
-      NotificationDetails(
-        linux: LinuxNotificationDetails(
-          category: LinuxNotificationCategory.presence,
-          urgency: LinuxNotificationUrgency.critical,
-          sound: null,
-          suppressSound: false,
-          resident: true,
-          defaultActionName: 'Open',
-          icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
-        ),
-      ),
+      NotificationDetails(linux: linuxNotificationDetails(iconPath)),
     );
   }
 
