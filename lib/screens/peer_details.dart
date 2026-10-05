@@ -52,7 +52,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
       final result = await FilePicker.platform.pickFiles(allowMultiple: true);
       if (result == null) return;
 
-      await _queue.addFiles(result.files.map((file) => file.path!).toList());
+      await _queue.addFiles(result.files.map((file) => file.path).whereType<String>().toList());
     } catch (e) {
       if (mounted) showSnackbar(context, 'Error picking files: $e');
     }

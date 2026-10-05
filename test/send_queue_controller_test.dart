@@ -48,6 +48,32 @@ void main() {
     }
   }
 
+  test('a folder or a missing file is skipped and reported, and the controller stays idle', () async {
+    final c = controller((id, path, onProgress) async => fail('nothing may be sent'));
+    final folder = Directory('${tmp.path}/folder')..createSync();
+
+    await c.addFiles([folder.path, '${tmp.path}/gone.txt']);
+
+    expect(c.isTransferring, isFalse);
+    expect(c.hasWork, isFalse);
+    expect(messages.single, allOf(contains('folder'), contains('gone.txt')));
+  });
+
+  test('valid files are still sent when the list contains a folder', () async {
+    final c = controller((id, path, onProgress) async {
+      sent.add(path.split('/').last);
+      onProgress(10, 10);
+      return id;
+    });
+    final folder = Directory('${tmp.path}/folder')..createSync();
+
+    await c.addFiles([folder.path, await makeFile('ok.txt')]);
+    await idle(c);
+
+    expect(sent, ['ok.txt']);
+    expect(messages.first, contains('folder'));
+  });
+
   test('files are sent in order and the queue ends idle', () async {
     final c = controller((id, path, onProgress) async {
       sent.add(path.split('/').last);

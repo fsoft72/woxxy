@@ -1,5 +1,9 @@
 # Changes Log
 
+## Skip invalid paths when files are queued
+
+`SendQueueController.addFiles` now checks every path first, skips folders and vanished files with a message, and only then touches the queue state, so the UI cannot get stuck. `_pickFiles` ignores null paths. Tests in `test/send_queue_controller_test.dart`.
+
 ## Receiver confirms each transfer with a result byte
 
 After finalizing, the receiver sends one byte (`RESULT_OK` or `RESULT_FAILED`). The sender half-closes, waits up to 30 s for it and fails the send when the receiver reports a failure; a missing byte (older receiver) still counts as success. Tests: `test/transfer_result_test.dart` and the `result byte` group of `test/transfer_loopback_test.dart`.

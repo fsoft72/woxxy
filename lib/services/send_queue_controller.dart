@@ -95,9 +95,30 @@ class SendQueueController extends ChangeNotifier {
   bool get hasWork => _queue.isNotEmpty || _processing;
 
   /// Adds files to the queue and starts sending if idle.
+  ///
+  /// Paths that are not readable files (a dropped folder, a file deleted meanwhile) are skipped
+  /// and reported through [onMessage]; they never leave the controller in a busy state.
   Future<void> addFiles(List<String> filePaths) async {
     if (filePaths.isEmpty) return;
     zprint('📁 Adding ${filePaths.length} files to queue');
+
+    final accepted = <QueuedFile>[];
+    final skipped = <String>[];
+    for (final filePath in filePaths) {
+      try {
+        if (await FileSystemEntity.type(filePath) != FileSystemEntityType.file) {
+          skipped.add(path.basename(filePath));
+          continue;
+        }
+        accepted.add(QueuedFile(filePath, path.basename(filePath), await File(filePath).length()));
+      } on FileSystemException catch (e) {
+        zprint('⚠️ Cannot queue $filePath: $e');
+        skipped.add(path.basename(filePath));
+      }
+    }
+    if (_disposed) return;
+    if (skipped.isNotEmpty) onMessage?.call('Skipped (not a readable file): ${skipped.join(', ')}');
+    if (accepted.isEmpty) return;
 
     _cancelled = false;
     if (!_isTransferring) {
@@ -108,11 +129,8 @@ class SendQueueController extends ChangeNotifier {
     }
 
     final startProcessing = _queue.isEmpty && !_processing;
-    for (final filePath in filePaths) {
-      final size = await File(filePath).length();
-      _queue.add(QueuedFile(filePath, path.basename(filePath), size));
-      _notify();
-    }
+    _queue.addAll(accepted);
+    _notify();
 
     if (startProcessing) unawaited(_processQueue());
   }
