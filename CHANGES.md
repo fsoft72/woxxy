@@ -1,5 +1,16 @@
 # Changes Log
 
+## Keep tab state with `IndexedStack`
+
+The three tabs are shown through a PersistentTabs (IndexedStack) widget, so switching tabs no longer destroys and re-creates HomeContent, HistoryScreen and SettingsScreen state. Added a widget test.
+
+### Files
+- `lib/widgets/persistent_tabs.dart`
+- `lib/main.dart`
+- `test/persistent_tabs_test.dart`
+
+---
+
 ## Recover from discovery socket loss and IP changes
 
 DiscoveryService re-binds automatically (with retries) when its socket closes or errors, can be restarted explicitly, announces immediately on start and broadcasts to both 255.255.255.255 and the local /24 address. A new IpMonitor re-resolves the local IP every 15 s; on change NetworkService updates the send/discovery services and restarts discovery. Added fake_async and loopback tests.

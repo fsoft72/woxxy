@@ -42,7 +42,7 @@
   - File(s): `lib/models/avatars.dart`, `lib/widgets/peer_avatar.dart`, `lib/models/peer_manager.dart`
 - [x] **Recover from discovery socket loss and IP changes** - When the UDP socket closes or errors, the timer is cancelled and nothing restarts it; the local IP is read once at startup, so switching Wi-Fi leaves the app announcing a stale address; broadcast goes only to `255.255.255.255`. Re-detect the IP periodically and rebind/restart discovery, and use per-interface broadcast addresses.
   - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network_service.dart`
-- [ ] **Keep tab state with `IndexedStack`** - `_getScreens()` builds new screen widgets on every `build` and only `screens[_selectedIndex]` is mounted, so switching tabs destroys `HomeContent`/`SettingsScreen` state and re-runs `initState`. Build the screens once and show them with `IndexedStack`.
+- [x] **Keep tab state with `IndexedStack`** - `_getScreens()` builds new screen widgets on every `build` and only `screens[_selectedIndex]` is mounted, so switching tabs destroys `HomeContent`/`SettingsScreen` state and re-runs `initState`. Build the screens once and show them with `IndexedStack`.
   - File(s): `lib/main.dart`
 - [ ] **Fix `FileHistory` sorting, persistence and notifications** - The `entries` getter sorts the underlying list on every access and is called inside `itemBuilder` for each row (O(n log n) per item); history is lost on restart although `toJson`/`fromJson` exist; the UI needs manual `setState` instead of a `ChangeNotifier`. Insert at index 0 (or sort once), make it a `ChangeNotifier`, persist it, and use `ListenableBuilder` in `HistoryScreen`.
   - File(s): `lib/models/history.dart`, `lib/screens/history.dart`, `lib/main.dart`

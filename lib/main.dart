@@ -9,6 +9,7 @@ import 'package:woxxy/funcs/debug.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
+import 'widgets/persistent_tabs.dart';
 import 'widgets/startup_error_view.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
@@ -466,7 +467,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
           ],
         ),
       ),
-      body: screens[_selectedIndex],
+      body: PersistentTabs(index: _selectedIndex, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
