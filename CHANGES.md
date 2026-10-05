@@ -1,5 +1,18 @@
 # Changes Log
 
+## Add automated tests
+
+The project now has a test suite (flutter test): filename sanitization, metadata framing, incremental MD5, transfer manager, loopback send/receive, backpressure, discovery protocol, notifications, history and peer manager basics. PeerManager timeout tests land with the PeerManager rework, and fake_async was added as a dev dependency for them.
+
+### Files
+- `pubspec.yaml`
+- `pubspec.lock`
+- `test/transfer_protocol_test.dart`
+- `test/file_history_test.dart`
+- `test/peer_manager_test.dart`
+
+---
+
 ## Make the discovery protocol robust
 
 Discovery datagrams are now versioned UTF-8 JSON (discovery_protocol.dart) decoded into typed messages, so usernames with ':' or non-ASCII characters work and malformed or foreign datagrams are ignored. Note: this changes the wire format, so all peers on the LAN must run this version. Added protocol and DiscoveryService tests.
