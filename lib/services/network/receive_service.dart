@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
+import '../../config/network_constants.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_received_event.dart';
@@ -21,11 +22,15 @@ class ReceiveService {
   // Optional callback to notify the facade/UI about successfully received files
   final void Function(FileReceivedEvent event)? onFileReceivedCallback;
 
+  /// A connection that sends nothing for this long is aborted and its partial file removed.
+  final Duration idleTimeout;
+
   ReceiveService({
     required this.fileTransferManager,
     required this.avatarStore,
     required this.peerManager,
     this.onFileReceivedCallback,
+    this.idleTimeout = RECEIVE_IDLE_TIMEOUT,
   });
 
   /// Connection handler passed to ServerService.
@@ -41,7 +46,8 @@ class ReceiveService {
     socket.setOption(SocketOption.tcpNoDelay, true);
 
     final decoder = MetadataFrameDecoder();
-    final iterator = StreamIterator<Uint8List>(socket);
+    // A stalled sender raises a TimeoutException, handled like any other transfer error
+    final iterator = StreamIterator<Uint8List>(socket.timeout(idleTimeout));
     Map<String, dynamic>? receivedInfo;
     String? fileTransferKey; // Set once metadata is accepted
     var receivedBytes = 0;

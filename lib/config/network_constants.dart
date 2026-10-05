@@ -14,3 +14,9 @@ const Duration READY_SIGNAL_TIMEOUT = Duration(seconds: 5);
 
 /// Maximum time to open the TCP connection to a peer
 const Duration CONNECT_TIMEOUT = Duration(seconds: 10);
+
+/// Maximum number of incoming transfer connections handled at the same time
+const int MAX_CONCURRENT_CONNECTIONS = 16;
+
+/// An incoming transfer that sends nothing for this long is aborted
+const Duration RECEIVE_IDLE_TIMEOUT = Duration(seconds: 30);

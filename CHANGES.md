@@ -1,5 +1,17 @@
 # Changes Log
 
+## Limit connections and abort stalled receives
+
+ServerService refuses connections above MAX_CONCURRENT_CONNECTIONS and ReceiveService aborts a transfer that sends nothing for RECEIVE_IDLE_TIMEOUT, cleaning the partial file. Added tests.
+
+### Files
+- `lib/config/network_constants.dart`
+- `lib/services/network/server_service.dart`
+- `lib/services/network/receive_service.dart`
+- `test/server_limits_test.dart`
+
+---
+
 ## Document the two Critical analysis items as not issues
 
 The "receiver accepts files without consent" and "avatar owner from metadata" findings were reviewed and declared not problems (trusted LAN, automatic receive by design). They are kept in OPTIMIZE.md under "Not issues (by design)" and are not fixed.
