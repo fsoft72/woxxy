@@ -1,5 +1,16 @@
 # Changes Log
 
+## Throttle progress updates to the UI
+
+Per-chunk progress callbacks are now filtered by a ProgressThrottle (100 ms, final update always forced) before reaching setState in PeerDetailPage. Added unit tests with an injected clock.
+
+### Files
+- `lib/funcs/throttle.dart`
+- `lib/screens/peer_details.dart`
+- `test/throttle_test.dart`
+
+---
+
 ## Respect backpressure when sending
 
 SendService streams the file with socket.addStream, so the file reader pauses while the socket buffer is full instead of queueing the whole file. A cancel that ends addStream silently is now detected and reported as an error. Added a stalled-receiver test.

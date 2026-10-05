@@ -17,7 +17,7 @@
 
 - [x] **Respect backpressure when sending** - `SendService._sendFileWithMetadata` calls `socket.add(chunk)` in a `listen` callback without pausing, so a fast disk and a slow network queue the whole file in the socket buffer. Replace the manual subscription with `socket.addStream(file.openRead().map(...))` (count bytes in `map`) and then `flush()`.
   - File(s): `lib/services/network/send_service.dart`
-- [ ] **Throttle progress updates to the UI** - `onProgress` runs once per 64 KB chunk and each call does `setState` in `PeerDetailPage`, which rebuilds the whole page thousands of times per second. Emit progress at most every ~100 ms or on a 1% change, or expose it through a `ValueNotifier` consumed only by the progress widget.
+- [x] **Throttle progress updates to the UI** - `onProgress` runs once per 64 KB chunk and each call does `setState` in `PeerDetailPage`, which rebuilds the whole page thousands of times per second. Emit progress at most every ~100 ms or on a 1% change, or expose it through a `ValueNotifier` consumed only by the progress widget.
   - File(s): `lib/screens/peer_details.dart`, `lib/services/network/send_service.dart`
 - [ ] **Fix notification click on Linux and the fixed notification id** - `_linuxInitialize` registers an inline callback that only logs, so `_onNotificationResponse` (and the "open folder" feature) never runs on Linux; the `_lastNotificationDirPath` workaround is therefore dead. Also every notification uses id `0`, so a new one replaces the previous one. Pass `_onNotificationResponse` and use an incrementing id.
   - File(s): `lib/models/notification_manager.dart`

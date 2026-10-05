@@ -5,6 +5,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../models/peer.dart';
 import '../services/network_service.dart';
+import '../funcs/throttle.dart';
 import '../funcs/utils.dart';
 import '../widgets/peer_avatar.dart';
 import 'dart:collection'; // Import for Queue
@@ -57,6 +58,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
   int _totalFilesCompleted = 0;
 
   String? _activeTransferId;
+  final ProgressThrottle _progressThrottle = ProgressThrottle();
 
   @override
   void dispose() {
@@ -93,6 +95,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
         zprint('🔄 Initiating file transfer...');
         final stopwatch = Stopwatch()..start();
         final fileSize = fileItem.size;
+        _progressThrottle.reset();
 
         _progressSubscription?.cancel();
         _progressSubscription = null;
@@ -110,6 +113,8 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           widget.peer,
           onProgress: (totalSize, bytesSent) {
             if (!mounted || _transferCancelled) return;
+            // Chunks arrive far faster than the UI needs; always let the final update through
+            if (!_progressThrottle.shouldEmit(force: bytesSent >= totalSize)) return;
 
             final progress = (bytesSent / totalSize) * 100;
             final elapsedSeconds = stopwatch.elapsed.inMilliseconds / 1000;
