@@ -11,13 +11,11 @@ import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_received_event.dart';
 import '../../models/file_transfer_manager.dart';
-import '../../models/peer_manager.dart';
 import 'transfer_protocol.dart';
 
 class ReceiveService {
   final FileTransferManager fileTransferManager;
   final AvatarStore avatarStore;
-  final PeerManager peerManager; // To notify UI after avatar update
 
   // Optional callback to notify the facade/UI about successfully received files
   final void Function(FileReceivedEvent event)? onFileReceivedCallback;
@@ -31,7 +29,6 @@ class ReceiveService {
   ReceiveService({
     required this.fileTransferManager,
     required this.avatarStore,
-    required this.peerManager,
     this.onFileReceivedCallback,
     this.idleTimeout = RECEIVE_IDLE_TIMEOUT,
   });
@@ -272,11 +269,6 @@ class ReceiveService {
       // Store avatar in memory
       await avatarStore.setAvatar(senderIp, bytes, hash: md5.convert(bytes).toString());
       zprint('✅ Avatar stored for $senderIp (${bytes.length} bytes)');
-      
-      // Notify UI to refresh peer list
-      peerManager.notifyPeersUpdated();
-      zprint('🔄 UI notified of avatar update');
-      
     } catch (e, stackTrace) {
       zprint('❌ Error processing received avatar for $senderIp: $e');
       zprint('Stack trace: $stackTrace');

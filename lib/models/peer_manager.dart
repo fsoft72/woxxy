@@ -89,12 +89,6 @@ class PeerManager {
     _emit();
   }
 
-  // Method to manually trigger UI update if needed (e.g., after avatar load)
-  void notifyPeersUpdated() {
-    zprint("🔔 PeerManager notified to update peer list.");
-    _emit();
-  }
-
   void _emit() {
     if (_disposed) return;
     _peerController.add(currentPeers);

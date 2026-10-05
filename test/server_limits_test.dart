@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
-import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/services/network/receive_service.dart';
 import 'package:woxxy/services/network/server_service.dart';
 import 'package:woxxy/services/network/transfer_protocol.dart';
@@ -56,7 +55,6 @@ void main() {
     final receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: avatars,
-      peerManager: PeerManager(avatarStore: avatars),
       idleTimeout: const Duration(milliseconds: 200),
     );
     final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
@@ -83,7 +81,6 @@ void main() {
     final receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: avatars,
-      peerManager: PeerManager(avatarStore: avatars),
       onFileReceivedCallback: (_) => events++,
     );
     final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
@@ -107,7 +104,6 @@ void main() {
     final receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: avatars,
-      peerManager: PeerManager(avatarStore: avatars),
     );
     final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
     await server.start();
@@ -135,7 +131,6 @@ void main() {
     final receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: avatars,
-      peerManager: PeerManager(avatarStore: avatars),
     );
     final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
     await server.start();

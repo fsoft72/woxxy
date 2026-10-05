@@ -99,7 +99,6 @@ class NetworkService {
     _receiveService = ReceiveService(
       fileTransferManager: _fileTransferManager,
       avatarStore: _avatarStore,
-      peerManager: _peerManager, // Pass PeerManager for UI updates on avatar receive
       onFileReceivedCallback: handleFileReceived,
     );
 

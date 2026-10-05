@@ -11,7 +11,6 @@ import 'package:woxxy/models/file_received_event.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer.dart';
-import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/services/network/receive_service.dart';
 import 'package:woxxy/services/network/send_service.dart';
 import 'package:woxxy/services/network/transfer_protocol.dart';
@@ -30,6 +29,7 @@ void main() {
   late List<String> received;
   late List<FileReceivedEvent> events;
   late Peer peer;
+  late AvatarStore avatars;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('woxxy_loopback_');
@@ -37,11 +37,10 @@ void main() {
     manager.files.clear();
     received = [];
     events = [];
-    final avatars = AvatarStore();
+    avatars = AvatarStore();
     receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: avatars,
-      peerManager: PeerManager(avatarStore: avatars),
       onFileReceivedCallback: (event) {
         events.add(event);
         received.add(event.filePath);
@@ -102,6 +101,18 @@ void main() {
     expect(File(received.single).readAsBytesSync(), bytes);
     // The avatar never lands in the downloads folder
     expect(Directory(path.join(tmp.path, 'downloads')).listSync().map((e) => path.basename(e.path)), ['big.bin']);
+  });
+
+  test('a received avatar reaches the per-peer notifier, with no peer list involved', () async {
+    final avatarFile = await makeFile('me.png', _png);
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice', profileImagePath: avatarFile.path));
+    final notifier = avatars.listenableFor('127.0.0.1');
+    expect(notifier.value, isNull);
+
+    expect(await sender.sendAvatar(peer), isTrue);
+    await waitFor(() => notifier.value != null);
+
+    expect(avatars.hasAvatar('127.0.0.1'), isTrue);
   });
 
   test('metadata and data arriving back to back are processed once and in order', () async {

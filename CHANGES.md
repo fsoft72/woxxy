@@ -1,5 +1,9 @@
 # Changes Log
 
+## Stop rebuilding the peer list when an avatar arrives
+
+`ReceiveService` no longer depends on `PeerManager`: a received avatar updates only the per-peer `AvatarStore` notifier, and `notifyPeersUpdated` was removed. Test in `test/transfer_loopback_test.dart`.
+
 ## Keep the peer detail page in sync with the peer list
 
 `PeerDetailPage` follows `peerStream`: sends use the latest address data of the peer, and a peer that left shows an offline warning and disables the drop zone and Browse button (`SendDropZone.enabled`). `NetworkService` accepts an injected `PeerManager`. Tests: `test/peer_details_test.dart`.

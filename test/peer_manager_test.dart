@@ -90,7 +90,6 @@ void main() {
   test('using the manager after dispose does not throw', () {
     manager.dispose();
     expect(() => manager.addPeer(_peer('late')), returnsNormally);
-    expect(() => manager.notifyPeersUpdated(), returnsNormally);
   });
 
   test('two managers do not share state', () {
