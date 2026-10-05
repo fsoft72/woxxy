@@ -1,5 +1,16 @@
 # Changes Log
 
+## Make the discovery protocol robust
+
+Discovery datagrams are now versioned UTF-8 JSON (discovery_protocol.dart) decoded into typed messages, so usernames with ':' or non-ASCII characters work and malformed or foreign datagrams are ignored. Note: this changes the wire format, so all peers on the LAN must run this version. Added protocol and DiscoveryService tests.
+
+### Files
+- `lib/services/network/discovery_protocol.dart`
+- `lib/services/network/discovery_service.dart`
+- `test/discovery_protocol_test.dart`
+
+---
+
 ## Handle network start failure
 
 NetworkService.start() now throws a NetworkStartException when no IP is found (instead of returning silently) and only stops discovery/server on failure so it can be retried. HomePage catches it and shows StartupErrorView with a Retry button instead of an endless spinner. IP resolution is injectable for tests.

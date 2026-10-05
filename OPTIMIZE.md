@@ -27,7 +27,7 @@
   - File(s): `lib/services/network_service.dart`, `lib/main.dart`, `lib/screens/home.dart`
 - [x] **Handle network start failure** - `NetworkService.start()` returns silently when no IP is found and rethrows otherwise, but `_initializeApp()` is called un-awaited from `initState`, so the user sees an endless spinner (`_isLoading` never becomes false) with no message. Surface a state (`starting`, `ready`, `error`) and show an error screen with a retry button.
   - File(s): `lib/main.dart`, `lib/services/network_service.dart`
-- [ ] **Make the discovery protocol robust** - Announcements use a `:`-delimited string, so a username containing `:` breaks parsing, and the receive side uses `String.fromCharCodes` while the sender uses `utf8.encode`, which garbles non-ASCII names (accents, emoji). Send a small JSON payload and decode with `utf8.decode`; include a protocol version.
+- [x] **Make the discovery protocol robust** - Announcements use a `:`-delimited string, so a username containing `:` breaks parsing, and the receive side uses `String.fromCharCodes` while the sender uses `utf8.encode`, which garbles non-ASCII names (accents, emoji). Send a small JSON payload and decode with `utf8.decode`; include a protocol version.
   - File(s): `lib/services/network/discovery_service.dart`
 - [ ] **Add automated tests** - There is no `test/` directory, so the transfer protocol, checksum logic and peer lifecycle have no safety net. Start with unit tests for metadata framing, filename sanitization, `FileHistory`, `PeerManager` timeouts and the MD5 check, then a loopback send/receive integration test.
   - File(s): `test/` (new), `lib/services/network/*.dart`, `lib/models/*.dart`

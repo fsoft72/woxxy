@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:woxxy/funcs/debug.dart';
 import '../../models/peer.dart';
 import '../../models/peer_manager.dart'; // Import PeerManager
 import '../../models/avatars.dart'; // Import AvatarStore
+import 'discovery_protocol.dart';
 
 // Define a type for the sendAvatar callback
 typedef SendAvatarCallback = Future<void> Function(Peer receiver);
@@ -88,10 +89,8 @@ class DiscoveryService {
       }
 
       try {
-        final message = _buildDiscoveryMessage();
-        // zprint('📤 Broadcasting discovery message: $message'); // Can be verbose
         _discoverySocket?.send(
-          utf8.encode(message),
+          _buildDiscoveryMessage(),
           InternetAddress('255.255.255.255'), // Standard broadcast address
           discoveryPort,
         );
@@ -107,13 +106,8 @@ class DiscoveryService {
     zprint('✅ Discovery broadcast timer started.');
   }
 
-  String _buildDiscoveryMessage() {
-    // Use current IP Address as the last part (the ID)
-    final ipId = _currentIpAddress ?? 'NO_IP';
-    // Format: WOXXY_ANNOUNCE:<Username>:<AnnouncerIP>:<AnnouncerPort>:<AnnouncerIP>
-    final message = 'WOXXY_ANNOUNCE:$_currentUsername:$ipId:$mainServerPort:$ipId';
-    return message;
-  }
+  Uint8List _buildDiscoveryMessage() =>
+      encodeAnnounce(name: _currentUsername, ip: _currentIpAddress ?? 'NO_IP', port: mainServerPort);
 
   void _startDiscoveryListener() {
     zprint('👂 Starting discovery listener on port $discoveryPort...');
@@ -122,16 +116,16 @@ class DiscoveryService {
         final datagram = _discoverySocket?.receive();
         if (datagram != null) {
           try {
-            final message = String.fromCharCodes(datagram.data);
-            // zprint('📬 Received UDP message: "$message" from ${datagram.address.address}:${datagram.port}');
-            if (message.startsWith('WOXXY_ANNOUNCE:')) {
-              if (datagram.address.address != _currentIpAddress) {
-                _handlePeerAnnouncement(message, datagram.address);
-              }
-            } else if (message.startsWith('AVATAR_REQUEST:')) {
-              _handleAvatarRequest(message, datagram.address);
-            } else {
-              zprint('❓ Unknown UDP message type received: $message');
+            final message = decodeDiscoveryMessage(datagram.data);
+            switch (message) {
+              case AnnounceMessage():
+                if (datagram.address.address != _currentIpAddress) {
+                  _handlePeerAnnouncement(message, datagram.address);
+                }
+              case AvatarRequestMessage():
+                _handleAvatarRequest(message, datagram.address);
+              case null:
+                zprint('❓ Ignoring invalid or unsupported UDP message from ${datagram.address.address}');
             }
           } catch (e, s) {
             zprint("❌ Error processing received datagram from ${datagram.address.address}: $e\n$s");
@@ -154,86 +148,36 @@ class DiscoveryService {
     zprint("✅ Discovery listener started.");
   }
 
-  void _handlePeerAnnouncement(String message, InternetAddress sourceAddress) {
-    try {
-      // Format: WOXXY_ANNOUNCE:<Username>:<AnnouncerIP>:<AnnouncerPort>:<AnnouncerIP>
-      final parts = message.split(':');
-      if (parts.length == 5) {
-        final name = parts[1];
-        final peerIp = parts[2];
-        final peerPortStr = parts[3];
-        final announcedId = parts[4];
-
-        if (peerIp != announcedId) {
-          zprint("⚠️ Peer announcement mismatch: Announced IP ($peerIp) != Announced ID ($announcedId). Ignoring.");
-          return;
-        }
-        if (peerIp != sourceAddress.address) {
-          zprint(
-              "⚠️ Peer announcement mismatch: Announced IP ($peerIp) != Packet Source IP (${sourceAddress.address}). Ignoring.");
-          return;
-        }
-
-        final peerPort = int.tryParse(peerPortStr);
-        if (peerPort == null) {
-          zprint("⚠️ Invalid port in peer announcement: '$peerPortStr'. Ignoring.");
-          return;
-        }
-
-        final peerId = peerIp; // Use IP as ID
-
-        final peer = Peer(
-          name: name,
-          id: peerId,
-          address: InternetAddress(peerIp),
-          port: peerPort,
-        );
-        // Add/update the peer in the manager
-        // Pass our own IP and port for potential future use (like direct replies if needed)
-        peerManager.addPeer(peer);
-      } else {
-        zprint('❌ Invalid announcement format (expected 5 parts): $message');
-      }
-    } catch (e, s) {
-      zprint('❌ Error handling peer announcement: $e\n$s');
+  void _handlePeerAnnouncement(AnnounceMessage message, InternetAddress sourceAddress) {
+    if (message.ip != sourceAddress.address) {
+      zprint(
+          "⚠️ Peer announcement mismatch: Announced IP (${message.ip}) != Packet Source IP (${sourceAddress.address}). Ignoring.");
+      return;
     }
+
+    peerManager.addPeer(Peer(
+      name: message.name,
+      id: message.ip, // IP is the peer id
+      address: InternetAddress(message.ip),
+      port: message.port,
+    ));
   }
 
-  void _handleAvatarRequest(String message, InternetAddress sourceAddress) {
-    try {
-      // Format: AVATAR_REQUEST:<requesterIp>:<requesterIp>:<requesterListenPort>
-      final parts = message.split(':');
-      if (parts.length == 4) {
-        final requesterId = parts[1]; // Requester's IP
-        final requesterIp = parts[2]; // Should match requesterId
-        final requesterListenPort = int.tryParse(parts[3]); // Port they listen on for TCP
-
-        if (requesterId != requesterIp) {
-          zprint("⚠️ AVATAR_REQUEST format mismatch: ID ($requesterId) != IP ($requesterIp). Ignoring.");
-          return;
-        }
-
-        if (requesterListenPort != null) {
-          zprint('🖼️ Received avatar request from $requesterId at $requesterIp:$requesterListenPort');
-          // Create a temporary Peer object for the requester to send the avatar back
-          final requesterPeer = Peer(
-            name: 'Requester', // Name doesn't matter much here
-            id: requesterId, // Use their IP as ID
-            address: InternetAddress(requesterIp),
-            port: requesterListenPort, // Send back to their main listening port
-          );
-          // Trigger sending the avatar file via the callback
-          zprint("  -> Triggering avatar send to ${requesterPeer.id}");
-          sendAvatarCallback(requesterPeer); // Use the provided callback
-        } else {
-          zprint('❌ Invalid avatar request format (port not integer): $message');
-        }
-      } else {
-        zprint('❌ Invalid avatar request format (expected 4 parts): $message');
-      }
-    } catch (e, s) {
-      zprint('❌ Error handling avatar request: $e\n$s');
+  void _handleAvatarRequest(AvatarRequestMessage message, InternetAddress sourceAddress) {
+    if (message.ip != sourceAddress.address) {
+      zprint("⚠️ AVATAR_REQUEST mismatch: declared IP (${message.ip}) != source (${sourceAddress.address}). Ignoring.");
+      return;
     }
+
+    zprint('🖼️ Received avatar request from ${message.ip}:${message.port}');
+    // Temporary peer used only to send the avatar back to the requester's listening port
+    final requesterPeer = Peer(
+      name: 'Requester',
+      id: message.ip,
+      address: InternetAddress(message.ip),
+      port: message.port,
+    );
+    sendAvatarCallback(requesterPeer);
   }
 
   // Method called by PeerManager (via NetworkService facade) to initiate an avatar request
@@ -249,11 +193,10 @@ class DiscoveryService {
     }
 
     zprint('❓ Requesting avatar from ${peer.name} (${peer.id}) at ${peer.address.address}:$discoveryPort');
-    // Format: AVATAR_REQUEST:<myIp>:<myIp>:<myListenPort>
-    final requestMessage = 'AVATAR_REQUEST:$_currentIpAddress:$_currentIpAddress:$mainServerPort';
+    final requestMessage = encodeAvatarRequest(ip: _currentIpAddress!, port: mainServerPort);
     try {
       _discoverySocket?.send(
-        utf8.encode(requestMessage),
+        requestMessage,
         peer.address, // Send directly to the peer's IP
         discoveryPort, // Send to their discovery port
       );

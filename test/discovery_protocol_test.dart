@@ -1,0 +1,70 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/models/avatars.dart';
+import 'package:woxxy/models/peer_manager.dart';
+import 'package:woxxy/services/network/discovery_protocol.dart';
+import 'package:woxxy/services/network/discovery_service.dart';
+
+void main() {
+  group('discovery protocol', () {
+    test('announce round trips names with colons, accents and emoji', () {
+      for (final name in ['alice', 'Zoë', 'a:b:c', '山田 太郎', 'dev 🚀: box']) {
+        final decoded = decodeDiscoveryMessage(encodeAnnounce(name: name, ip: '192.168.1.5', port: 8090));
+        expect(decoded, isA<AnnounceMessage>());
+        decoded as AnnounceMessage;
+        expect(decoded.name, name);
+        expect(decoded.ip, '192.168.1.5');
+        expect(decoded.port, 8090);
+      }
+    });
+
+    test('avatar request round trips', () {
+      final decoded = decodeDiscoveryMessage(encodeAvatarRequest(ip: '10.0.0.2', port: 8090));
+      expect(decoded, isA<AvatarRequestMessage>());
+      expect(decoded!.ip, '10.0.0.2');
+      expect(decoded.port, 8090);
+    });
+
+    test('invalid datagrams are ignored', () {
+      expect(decodeDiscoveryMessage(utf8.encode('WOXXY_ANNOUNCE:bob:1.1.1.1:8090:1.1.1.1')), isNull);
+      expect(decodeDiscoveryMessage(utf8.encode('[1,2,3]')), isNull);
+      expect(decodeDiscoveryMessage(utf8.encode('{"v":99,"type":"announce","name":"x","ip":"1.1.1.1","port":1}')), isNull);
+      expect(decodeDiscoveryMessage(utf8.encode('{"v":1,"type":"announce","name":"x","ip":"1.1.1.1"}')), isNull);
+      expect(decodeDiscoveryMessage(utf8.encode('{"v":1,"type":"nope","ip":"1.1.1.1","port":1}')), isNull);
+      expect(decodeDiscoveryMessage([0xFF, 0xFE, 0x00]), isNull);
+    });
+  });
+
+  test('DiscoveryService registers a peer whose name contains a colon and non-ASCII characters', () async {
+    final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    probe.close();
+
+    final peers = PeerManager();
+    peers.setRequestAvatarCallback((_) {});
+    final service = DiscoveryService(
+      discoveryPort: port,
+      mainServerPort: 8090,
+      peerManager: peers,
+      avatarStore: AvatarStore(),
+      sendAvatarCallback: (_) async {},
+    );
+    await service.start('10.255.255.1', 'me');
+
+    final sender = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    sender.send(encodeAnnounce(name: 'Zoë: 🚀', ip: '127.0.0.1', port: 9999), InternetAddress.loopbackIPv4, port);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!peers.currentPeers.any((p) => p.id == '127.0.0.1') && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    sender.close();
+    await service.dispose();
+
+    final peer = peers.currentPeers.firstWhere((p) => p.id == '127.0.0.1');
+    expect(peer.name, 'Zoë: 🚀');
+    expect(peer.port, 9999);
+  });
+}
