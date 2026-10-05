@@ -1,6 +1,6 @@
 import 'file_transfer.dart';
 import 'dart:io';
-import 'package:woxxy/funcs/debug.dart'; // Import zprint
+import 'package:woxxy/funcs/debug.dart';
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
@@ -18,11 +18,10 @@ class FileTransferManager {
   /// `key` uniquely identifies the transfer (the sender's transferId); `sourceIp` is the sender address.
   /// `directory` overrides the download path (used for temporary avatar files).
   Future<bool> add(String key, String originalFilename, int size, String senderUsername,
-      Map<String, dynamic> metadata, // Accept metadata
+      Map<String, dynamic> metadata,
       {String? md5Checksum,
       String? sourceIp,
       String? directory}) async {
-    // md5Checksum can be derived from metadata
     try {
       // Check if a transfer with the same key is already active
       if (files.containsKey(key)) {
@@ -69,8 +68,6 @@ class FileTransferManager {
       return false;
     } catch (e, s) {
       zprint('❌ Error writing to transfer key $key: $e\n$s');
-      // Consider removing the problematic transfer?
-      // await handleSocketClosure(key);
       return false;
     }
   }
@@ -167,4 +164,4 @@ class FileTransferManager {
       return false;
     }
   }
-} // End of FileTransferManager class
+}

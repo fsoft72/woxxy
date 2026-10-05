@@ -58,16 +58,12 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     if (_isDesktop) {
       trayManager.addListener(this);
       windowManager.addListener(this);
-      // Ensure preventClose is set correctly if not done in main() for some reason
-      // await windowManager.setPreventClose(true);
     }
     await _startNetwork();
   }
 
   Future<void> _startNetwork() async {
-    // No need to load settings again here, use widget.initialUser
     _networkService.setUsername(_currentUser!.username);
-    // _networkService.setUserId(_currentUser!.userId); // Removed setUserId
 
     // Start network service *after* setting username (and potentially IP)
     try {
@@ -89,8 +85,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       });
     }
   }
-
-  // Removed _loadSettings method as initial user is passed via constructor
 
   @override
   void dispose() {
@@ -126,7 +120,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     }
   }
 
-  // Added method to handle right-click on tray icon (crucial for Windows/Linux)
+  // Right-click must open the menu explicitly (needed on Windows and Linux)
   @override
   void onTrayIconRightMouseDown() {
     zprint("🖱️ Tray icon clicked (right).");

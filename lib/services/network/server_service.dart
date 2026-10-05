@@ -52,7 +52,6 @@ class ServerService {
         },
         onError: (e, s) {
           zprint('❌ Server socket error: $e\n$s');
-          // Consider recovery or logging strategy
         },
         onDone: () {
           zprint('ℹ️ Server socket closed.');

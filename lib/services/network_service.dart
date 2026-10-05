@@ -14,7 +14,6 @@ import '../models/file_transfer_manager.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
 
-// Import the new service modules
 import 'network/discovery_service.dart';
 import 'network/ip_monitor.dart';
 import 'network/receive_service.dart';
@@ -22,7 +21,7 @@ import 'network/send_service.dart';
 import 'network/server_service.dart';
 import '../config/network_constants.dart';
 
-// Re-export the progress callback type if needed by consumers
+// Consumers of sendFile need the progress callback type
 export 'network/send_service.dart' show FileTransferProgressCallback;
 
 /// Thrown when the network layer cannot start (for example no usable local IP address).
@@ -38,8 +37,6 @@ class NetworkStartException implements Exception {
 typedef IpResolver = Future<String?> Function();
 
 class NetworkService {
-  // --- Constants ---
-
   // --- Dependencies & State ---
   late final PeerManager _peerManager;
   final AvatarStore _avatarStore;
@@ -58,8 +55,7 @@ class NetworkService {
   // Who this device is; shared with the send and discovery services
   final LocalIdentity _identity = LocalIdentity();
 
-  // Stream Controllers (if needed publicly)
-  // Note: Peer stream is now accessed via PeerManager
+  // Peers are exposed through PeerManager
   final _fileReceivedController = StreamController<FileReceivedEvent>.broadcast();
 
   // --- Public Streams & Getters ---
@@ -96,7 +92,7 @@ class NetworkService {
       fileTransferManager: _fileTransferManager,
       avatarStore: _avatarStore,
       peerManager: _peerManager, // Pass PeerManager for UI updates on avatar receive
-      onFileReceivedCallback: handleFileReceived, // Optional: Callback for facade logic
+      onFileReceivedCallback: handleFileReceived,
     );
 
     _serverService = ServerService(

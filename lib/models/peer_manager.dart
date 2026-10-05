@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'peer.dart';
-import '../models/avatars.dart'; // Import AvatarStore
+import '../models/avatars.dart';
 
 class _PeerStatus {
   Peer peer;

@@ -57,7 +57,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/screens/history.dart`, `lib/services/send_queue_controller.dart`, `lib/services/network/send_service.dart`
 - [x] **`FileTransfer.start` has eight positional parameters** - `key` and `sourceIp` overlap and the order is easy to get wrong. Switch to named parameters and drop the redundant `key`.
   - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
-- [ ] **Outdated and noisy comments** - Leftovers such as "Removed userId", "Removed _loadSettings method", "FIX: Add '!'", "// End of FileTransferManager class" and the "Consider how to handle..." notes describe history, not the code. Delete them or turn them into real decisions.
+- [x] **Outdated and noisy comments** - Leftovers such as "Removed userId", "Removed _loadSettings method", "FIX: Add '!'", "// End of FileTransferManager class" and the "Consider how to handle..." notes describe history, not the code. Delete them or turn them into real decisions.
   - File(s): `lib/services/settings_service.dart`, `lib/screens/home_page.dart`, `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
 - [ ] **Dead defensive code in `HomePage`** - `_currentUser` is always set from `initialUser`, so the null branches in `_getScreens` and `build` can never run, and `_getScreens()` rebuilds the screen list on every build. Make `_currentUser` non-nullable and build the list once.
   - File(s): `lib/screens/home_page.dart`

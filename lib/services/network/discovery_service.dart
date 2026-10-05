@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../../models/local_identity.dart';
 import '../../models/peer.dart';
-import '../../models/peer_manager.dart'; // Import PeerManager
-import '../../models/avatars.dart'; // Import AvatarStore
+import '../../models/peer_manager.dart';
+import '../../models/avatars.dart';
 import 'discovery_protocol.dart';
 import '../../config/network_constants.dart';
 

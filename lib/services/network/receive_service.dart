@@ -11,7 +11,7 @@ import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_received_event.dart';
 import '../../models/file_transfer_manager.dart';
-import '../../models/peer_manager.dart'; // Needed for notifyPeersUpdated
+import '../../models/peer_manager.dart';
 import 'transfer_protocol.dart';
 
 class ReceiveService {

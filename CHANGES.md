@@ -1,5 +1,21 @@
 # Changes Log
 
+## Remove outdated and noisy comments
+
+Deleted comments that described history instead of the code (Removed userId, Removed _loadSettings, FIX notes, class end markers, 'Consider...' notes, import labels, commented out code). Comment-only change: analyzer clean and the full suite still passes.
+
+### Files
+- `lib/models/file_transfer.dart`
+- `lib/models/file_transfer_manager.dart`
+- `lib/models/peer_manager.dart`
+- `lib/services/network/discovery_service.dart`
+- `lib/services/network/server_service.dart`
+- `lib/services/network/receive_service.dart`
+- `lib/screens/home_page.dart`
+- `lib/services/network_service.dart`
+
+---
+
 ## Use named parameters in FileTransfer.start
 
 FileTransfer.start takes named parameters and no longer has the redundant key (sourceIp is required). FileTransferManager.add and the tests were updated; behavior is unchanged, the existing md5, filename and manager tests cover it.

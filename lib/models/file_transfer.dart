@@ -41,7 +41,7 @@ class FileTransfer {
   final String? expectedMd5;
 
   /// Full metadata map received from sender at the beginning of the transfer
-  final Map<String, dynamic> metadata; // Add metadata here
+  final Map<String, dynamic> metadata;
 
   /// Incremental MD5 state, fed chunk by chunk so the file is never held in memory
   final _DigestSink _md5Sink = _DigestSink();
