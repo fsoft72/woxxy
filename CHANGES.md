@@ -1,5 +1,17 @@
 # Changes Log
 
+## Stop keying transfers by source IP only
+
+Transfers are now keyed by the sender's transferId (ip#transferId); duplicate keys are rejected instead of overwritten, avatar files are written to a temp directory instead of the download folder, and unique destination paths are reserved atomically with an exclusive create to remove the exists/open race.
+
+### Files
+- `lib/models/file_transfer.dart`
+- `lib/models/file_transfer_manager.dart`
+- `lib/services/network/receive_service.dart`
+- `test/file_transfer_manager_test.dart`
+
+---
+
 ## Sanitize the remote filename
 
 Remote filenames are reduced to a safe last path segment (both separators, control chars, length cap, fallback name) before the destination path is built, so a hostile sender cannot write outside the download folder. Added unit and FileTransfer tests.

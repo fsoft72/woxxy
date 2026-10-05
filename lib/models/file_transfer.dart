@@ -72,7 +72,8 @@ class FileTransfer {
       String senderUsername,
       Map<String, dynamic> metadata, // Accept metadata map
       String? expectedMd5, // Accept expected checksum
-      {OnTransferComplete? onTransferComplete}) async {
+      {OnTransferComplete? onTransferComplete,
+      String? sourceIp}) async {
     try {
       zprint("🏁 Starting new file transfer preparation for '$original_filename' from '$key'");
       zprint("   Download Path: $downloadPath");
@@ -101,10 +102,9 @@ class FileTransfer {
       );
       zprint("   Unique destination path determined: $finalPath");
 
-      // Create file and get sink
+      // The unique path was reserved atomically, so this sink owns a fresh empty file
       File file = File(finalPath);
-      IOSink sink = file.openWrite(
-          mode: FileMode.writeOnlyAppend); // Use Append initially? Or WriteOnly? WriteOnly seems safer for new file.
+      IOSink sink = file.openWrite(mode: FileMode.writeOnly);
       zprint("   Opened file sink for writing.");
 
       // Create and start stopwatch
@@ -112,7 +112,7 @@ class FileTransfer {
       zprint("   Stopwatch started.");
 
       return FileTransfer._internal(
-        source_ip: key, // Store the key (source IP)
+        source_ip: sourceIp ?? key,
         destination_filename: finalPath,
         size: size,
         file_sink: sink,
@@ -264,8 +264,9 @@ class FileTransfer {
     return (size / elapsedSeconds) / (1024 * 1024);
   }
 
-  /// Helper method to generate a unique filename if the target file already exists.
-  /// Appends _1, _2, etc., before the extension.
+  /// Reserves a unique file path inside [directory] and returns it.
+  /// Appends _1, _2, etc., before the extension. The file is created with
+  /// `exclusive: true`, so concurrent transfers with the same name never share a path.
   static Future<String> _generateUniqueFilePath(
     String directory,
     String originalFilename,
@@ -275,14 +276,15 @@ class FileTransfer {
     String filePath = path.join(directory, originalFilename);
     int counter = 1;
 
-    // Use async exists check
-    while (await File(filePath).exists()) {
-      zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
-      filePath = path.join(
-        directory,
-        '${baseName}_$counter$extension', // Append counter before extension
-      );
-      counter++;
+    while (true) {
+      try {
+        await File(filePath).create(exclusive: true);
+        break;
+      } on PathExistsException {
+        zprint("   ⚠️ File '$filePath' already exists. Generating new name...");
+        filePath = path.join(directory, '${baseName}_$counter$extension');
+        counter++;
+      }
     }
     if (counter > 1) {
       zprint("   Generated unique name: $filePath");

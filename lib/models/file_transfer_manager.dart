@@ -8,7 +8,7 @@ class FileTransferManager {
   /// Singleton instance
   static FileTransferManager? _instance;
 
-  /// Map of active file transfers, keyed by source IP
+  /// Map of active file transfers, keyed by transfer id
   final Map<String, FileTransfer> files = {};
 
   /// Path where downloaded files will be stored
@@ -52,18 +52,19 @@ class FileTransferManager {
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
-  /// `key` is typically the source IP address.
+  /// `key` uniquely identifies the transfer (the sender's transferId); `sourceIp` is the sender address.
+  /// `directory` overrides the download path (used for temporary avatar files).
   Future<bool> add(String key, String originalFilename, int size, String senderUsername,
       Map<String, dynamic> metadata, // Accept metadata
-      {String? md5Checksum}) async {
+      {String? md5Checksum,
+      String? sourceIp,
+      String? directory}) async {
     // md5Checksum can be derived from metadata
     try {
       // Check if a transfer with the same key is already active
       if (files.containsKey(key)) {
-        zprint("⚠️ Transfer already active for key '$key'. Overwriting?");
-        // Optionally handle this differently, e.g., reject the new transfer
-        // For now, let's allow overwriting the old (potentially stalled) one
-        // await handleSocketClosure(key); // Clean up the old one first?
+        zprint("❌ Transfer already active for key '$key'. Rejecting the new one.");
+        return false;
       }
 
       zprint("➕ Adding transfer for '$originalFilename' from '$key'");
@@ -71,14 +72,15 @@ class FileTransferManager {
       final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
 
       FileTransfer? transfer = await FileTransfer.start(
-        key, // Use the provided key (source IP)
+        key,
         originalFilename,
         size,
-        downloadPath,
+        directory ?? downloadPath,
         senderUsername, // Corrected parameter name if it was mismatched
         metadata, // Pass metadata to FileTransfer.start
         effectiveMd5, // Pass the derived/provided checksum
         onTransferComplete: _handleTransferComplete, // Callback on successful end()
+        sourceIp: sourceIp,
       );
 
       if (transfer != null) {

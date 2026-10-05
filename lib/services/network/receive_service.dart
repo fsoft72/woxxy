@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as path;
+
 import 'package:woxxy/funcs/debug.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
@@ -40,7 +42,7 @@ class ReceiveService {
     var dataExpected = 0;
 
     String? transferType; // To track if it's a regular file or avatar
-    final String fileTransferKey = sourceIp; // Use source IP as the key
+    var fileTransferKey = sourceIp; // Replaced by the transfer id once metadata is parsed
 
     socket.listen(
       (data) async {
@@ -85,6 +87,12 @@ class ReceiveService {
             final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
             final md5Checksum = receivedInfo!['md5Checksum'] as String?;
 
+            // Key by transfer id so avatars and parallel files from one IP never collide
+            final remoteTransferId = receivedInfo!['transferId'] as String?;
+            fileTransferKey = (remoteTransferId != null && remoteTransferId.isNotEmpty)
+                ? '$sourceIp#$remoteTransferId'
+                : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
+
             // Store expected data size for tracking
             dataExpected = fileSize;
 
@@ -98,6 +106,8 @@ class ReceiveService {
               senderUsername,
               receivedInfo!,
               md5Checksum: md5Checksum,
+              sourceIp: sourceIp,
+              directory: transferType == TRANSFER_TYPE_AVATAR ? _avatarTempDirectory() : null,
             );
 
             if (!added) {
@@ -211,6 +221,9 @@ class ReceiveService {
       cancelOnError: true,
     );
   }
+
+  /// Temporary directory for incoming avatar files (kept out of the user's download folder).
+  String _avatarTempDirectory() => path.join(Directory.systemTemp.path, 'woxxy_avatars');
 
   /// Processes a received avatar file by loading it into memory and cleaning up
   Future<void> _processReceivedAvatar(String filePath, String senderIp) async {
