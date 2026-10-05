@@ -68,6 +68,10 @@ class NetworkService {
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
   // Expose current IP address if needed externally
   String? get currentIpAddress => _identity.ipAddress;
+  /// MD5 of the avatar announced to the peers (null when there is none)
+  @visibleForTesting
+  String? get avatarHash => _identity.avatarHash;
+
   /// True while at least one consumer listens to [onFileReceived] (used to detect leaks in tests)
   @visibleForTesting
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
@@ -172,6 +176,7 @@ class NetworkService {
   }
 
   void setProfileImagePath(String? imagePath) {
+    if (imagePath == _identity.profileImagePath) return; // Same picture: nothing to hash again
     _identity.profileImagePath = imagePath;
     zprint("🖼️ Profile image path updated: $imagePath");
 

@@ -1,5 +1,9 @@
 # Changes Log
 
+## Do not hash the avatar again on every send
+
+`sendAvatar` reuses the hash announced in discovery when it belongs to the same file, and `NetworkService.setProfileImagePath` ignores an unchanged path, so saving a new username no longer rehashes the picture. Tests: `test/avatar_hash_reuse_test.dart`.
+
 ## Use a generation token in the send queue
 
 `SendQueueController` replaces the shared cancelled flag with a generation number bumped by `cancelAll`. A cancelled send that rejects late is ignored and can no longer fail the first of the files added afterwards; a new loop starts for them. Test in `test/send_queue_controller_test.dart`.

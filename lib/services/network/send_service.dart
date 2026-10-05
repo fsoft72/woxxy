@@ -174,8 +174,11 @@ class SendService {
   }
 
   /// Creates metadata specifically for avatar transfers
+  /// The checksum announced in discovery is reused when it belongs to this very file, so a burst
+  /// of avatar requests does not read the image once per peer.
   Future<Map<String, dynamic>> _createAvatarMetadata(File avatarFile, String transferId) async {
-    final originalMetadata = await _createFileMetadata(avatarFile, transferId);
+    final announced = identity.profileImagePath == avatarFile.path ? identity.avatarHash : null;
+    final originalMetadata = await _createFileMetadata(avatarFile, transferId, knownChecksum: announced);
     
     return {
       ...originalMetadata,
@@ -217,15 +220,18 @@ class SendService {
 
   /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
   /// cannot be hashed, and the receiver then skips verification.
-  Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId) async {
+  /// [knownChecksum] skips reading the file for the MD5.
+  Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId, {String? knownChecksum}) async {
     final fileSize = await file.length();
     final filename = path.basename(file.path);
 
-    String? checksum;
-    try {
-      checksum = await md5OfFile(file);
-    } catch (e) {
-      zprint("⚠️ Error calculating MD5 checksum for ${file.path}: $e. Sending without checksum.");
+    var checksum = knownChecksum;
+    if (checksum == null) {
+      try {
+        checksum = await md5OfFile(file);
+      } catch (e) {
+        zprint("⚠️ Error calculating MD5 checksum for ${file.path}: $e. Sending without checksum.");
+      }
     }
 
     return {
