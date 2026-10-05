@@ -1,5 +1,15 @@
 # Changes Log
 
+## Serialize history saves and log failures
+
+HistoryRepository.autoSave runs one write at a time, merges changes made during a write into one more write with the latest state, and logs failures instead of leaving unhandled async errors. Added tests.
+
+### Files
+- `lib/services/history_repository.dart`
+- `test/history_persistence_test.dart`
+
+---
+
 ## Limit the decoded size of received avatars
 
 AvatarStore reads the declared size first (ImageDescriptor), rejects sides above MAX_AVATAR_SIDE_PIXELS and decodes at most AVATAR_DECODE_SIDE_PIXELS on the longest side. Added tests with real PNGs.

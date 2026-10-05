@@ -38,7 +38,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
 - [x] **Received avatar is decoded without dimension limits** - Only the byte size is limited (10 MB), but a small compressed image can decode to a huge bitmap. Pass `targetWidth`/`targetHeight` to `ui.instantiateImageCodec` (avatars are shown at most 80 px).
   - File(s): `lib/models/avatars.dart`
-- [ ] **History is saved without ordering or error handling** - `autoSave` fires an un-awaited `save` on every change; two quick changes can finish out of order and a failure is an unhandled async error. Serialize the writes (single in-flight future plus "dirty" flag) and catch errors.
+- [x] **History is saved without ordering or error handling** - `autoSave` fires an un-awaited `save` on every change; two quick changes can finish out of order and a failure is an unhandled async error. Serialize the writes (single in-flight future plus "dirty" flag) and catch errors.
   - File(s): `lib/services/history_repository.dart`
 - [ ] **`PeerManager` is created inside `NetworkService` and wired by setter** - The constructor builds `PeerManager` itself and `setRequestAvatarCallback` closes the circular dependency afterwards, which makes the order of construction important and hard to test. Inject `PeerManager` (like the other collaborators) and pass the avatar request function at construction. Also align `SendAvatarCallback` (`Future<void>`) with `SendService.sendAvatar` (`Future<bool>`).
   - File(s): `lib/services/network_service.dart`, `lib/models/peer_manager.dart`, `lib/services/network/discovery_service.dart`

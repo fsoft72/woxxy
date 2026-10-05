@@ -30,8 +30,31 @@ class HistoryRepository {
   }
 
   /// Saves [history] every time it changes. Returns a function that stops saving.
+  ///
+  /// Writes never overlap: while one is running, further changes only mark the history as dirty
+  /// and one more write with the latest state follows. A failing write is logged, not thrown.
   void Function() autoSave(FileHistory history) {
-    void listener() => save(history);
+    var running = false;
+    var dirty = false;
+
+    Future<void> saveLatest() async {
+      if (running) {
+        dirty = true;
+        return;
+      }
+      running = true;
+      do {
+        dirty = false;
+        try {
+          await save(history);
+        } catch (e, s) {
+          zprint('❌ Could not save the history: $e\n$s');
+        }
+      } while (dirty);
+      running = false;
+    }
+
+    void listener() => saveLatest();
     history.addListener(listener);
     return () => history.removeListener(listener);
   }

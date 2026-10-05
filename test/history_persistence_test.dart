@@ -11,6 +11,8 @@ FileHistoryEntry _entry(String path, DateTime at) =>
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  _slowSaveTests();
+
   test('history saved by one repository is loaded by another (survives restart)', () async {
     final first = HistoryRepository();
     final history = FileHistory();
@@ -55,5 +57,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('report.pdf'), findsNothing);
     expect(history.entries, isEmpty);
+  });
+}
+
+/// A repository whose writes are slow and can fail, recording how they overlap.
+class _SlowRepository extends HistoryRepository {
+  int running = 0;
+  int maxRunning = 0;
+  int calls = 0;
+  bool failFirst = false;
+  final List<int> savedLengths = [];
+
+  @override
+  Future<void> save(FileHistory history) async {
+    calls++;
+    running++;
+    if (running > maxRunning) maxRunning = running;
+    final length = history.entries.length;
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    running--;
+    if (failFirst && calls == 1) throw StateError('disk full');
+    savedLengths.add(length);
+  }
+}
+
+void _slowSaveTests() {
+  test('saves never overlap and the last write has the latest history', () async {
+    final repo = _SlowRepository();
+    final history = FileHistory();
+    repo.autoSave(history);
+
+    for (var i = 0; i < 5; i++) {
+      history.addEntry(_entry('/f$i', DateTime(2026, 1, i + 1)));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+
+    expect(repo.maxRunning, 1);
+    expect(repo.savedLengths.last, 5);
+    expect(repo.calls, lessThan(5), reason: 'changes during a write are merged into one more write');
+  });
+
+  test('a failing save is logged and later changes are still saved', () async {
+    final repo = _SlowRepository()..failFirst = true;
+    final history = FileHistory();
+    repo.autoSave(history);
+
+    history.addEntry(_entry('/a', DateTime(2026, 1, 1)));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    history.addEntry(_entry('/b', DateTime(2026, 1, 2)));
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+
+    expect(repo.savedLengths, [2]);
   });
 }
