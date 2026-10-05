@@ -1,5 +1,12 @@
 # Changes Log
 
+## Regenerate OPTIMIZE.md with a new code analysis
+
+All items of the previous list were done, so `OPTIMIZE.md` was rewritten from a fresh read of `lib/`. It has 4 High, 11 Medium and 8 Low items (the main ones: cancel is ignored while preparing a send, rejected avatars are re-requested forever, no result frame from the receiver, folders dropped on the queue). No code was changed.
+
+### Files
+- `OPTIMIZE.md`
+
 ## Guard the app version and drop the dangling env.dart symlink
 
 The publish script already writes APP_VERSION from pubspec.yaml, so instead of adding a dependency a test now fails when version.dart and pubspec.yaml differ. The tracked lib/config/env.dart symlink (target missing, already in .gitignore, unused by the code) was removed, with a test that no dangling link lives in lib.
