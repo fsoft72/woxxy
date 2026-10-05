@@ -1,10 +1,13 @@
-import 'dart:io';
+// ignore_for_file: constant_identifier_names
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:path/path.dart' as path;
+import 'package:woxxy/funcs/bundled_assets.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 import 'notification_backend.dart';
+
+/// Asset used as the notification icon.
+const String NOTIFICATION_ICON_ASSET = 'assets/icons/head.png';
 
 /// Linux (D-Bus notifications).
 ///
@@ -54,9 +57,8 @@ class LinuxNotificationBackend implements NotificationBackend {
   }
 
   Future<String?> _iconPath() async {
-    final iconPath = path.join(Directory.current.path, 'build', 'flutter_assets', 'assets', 'icons', 'head.png');
-    if (await File(iconPath).exists()) return iconPath;
-    zprint('⚠️ Notification icon not found at: $iconPath');
-    return null;
+    final iconPath = bundledAssetPath(NOTIFICATION_ICON_ASSET);
+    if (iconPath == null) zprint('⚠️ Notification icon not found in the app bundle: $NOTIFICATION_ICON_ASSET');
+    return iconPath;
   }
 }

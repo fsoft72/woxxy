@@ -1,5 +1,9 @@
 # Changes Log
 
+## Find icons from the app bundle, not from the working directory
+
+New `bundledAssetPath` locates Flutter assets from `Platform.resolvedExecutable` (Linux, Windows and macOS layouts); the Linux notification icon and the Windows tray and window icon fallbacks use it instead of `Directory.current`. Tests: `test/bundled_assets_test.dart`.
+
 ## Make the NetworkService collaborators injectable
 
 `NetworkService` accepts the identity, send, server and discovery services (the IP lookup moved to `LocalIpResolver` earlier) and the avatar hashing moved to `md5OfPathOrNull` in `funcs/hashing.dart`. Tests: `test/network_service_injection_test.dart`, `test/hashing_test.dart`.

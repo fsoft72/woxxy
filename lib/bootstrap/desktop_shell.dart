@@ -3,15 +3,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as path;
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:woxxy/funcs/bundled_assets.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 /// Window and system tray setup for the desktop platforms.
 class DesktopShell {
   static const String _TOOLTIP = 'Woxxy';
   static const String _ICON_PNG = 'assets/icons/head.png';
+  static const String _ICON_ICO = 'assets/icons/head.ico';
 
   /// True on Windows, Linux and macOS.
   static bool get isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -52,11 +53,11 @@ class DesktopShell {
     } catch (e) {
       zprint("❌ Failed to set window icon using asset path: $e");
       try {
-        final absoluteIconPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
-        if (await File(absoluteIconPath).exists()) {
-          await windowManager.setIcon(absoluteIconPath);
+        final bundledIcon = bundledAssetPath(_ICON_PNG);
+        if (bundledIcon != null) {
+          await windowManager.setIcon(bundledIcon);
         } else {
-          zprint("⚠️ Absolute icon path not found either: $absoluteIconPath");
+          zprint("⚠️ Icon not found in the app bundle either: $_ICON_PNG");
         }
       } catch (e2) {
         zprint("❌ Failed to set window icon using absolute path: $e2");
@@ -109,18 +110,15 @@ class DesktopShell {
 
   /// Windows prefers .ico (falling back to .png), the other platforms use the .png asset.
   static Future<String> _resolveTrayIconPath() async {
-    if (!Platform.isWindows) {
-      if (!await File(_ICON_PNG).exists()) zprint("❌ Icon head.png not found at $_ICON_PNG");
-      return _ICON_PNG;
-    }
+    if (!Platform.isWindows) return _ICON_PNG; // The tray plugin resolves Flutter asset paths itself
 
-    final icoPath = path.join(Directory.current.path, 'assets', 'icons', 'head.ico');
-    if (await File(icoPath).exists()) return icoPath;
+    final icoPath = bundledAssetPath(_ICON_ICO);
+    if (icoPath != null) return icoPath;
 
-    zprint("⚠️ head.ico not found at $icoPath, falling back to PNG.");
-    final pngPath = path.join(Directory.current.path, 'assets', 'icons', 'head.png');
-    if (!await File(pngPath).exists()) zprint("❌ Fallback head.png also not found at $pngPath");
-    return pngPath;
+    zprint("⚠️ $_ICON_ICO not found in the app bundle, falling back to PNG.");
+    final pngPath = bundledAssetPath(_ICON_PNG);
+    if (pngPath == null) zprint("❌ Fallback $_ICON_PNG also not found in the app bundle");
+    return pngPath ?? _ICON_PNG;
   }
 
   /// Applies icon, tooltip and menu in the order each platform tolerates.
