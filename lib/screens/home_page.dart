@@ -9,8 +9,6 @@ import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 import '../app_services.dart';
-import '../models/file_received_event.dart';
-import '../models/history.dart';
 import '../models/user.dart';
 import '../services/network_service.dart';
 import '../services/settings_service.dart';
@@ -32,8 +30,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   late final NetworkService _networkService = widget.services.networkService;
   late final SettingsService _settingsService = widget.services.settingsService;
-  late final FileHistory _fileHistory = widget.services.history;
-  StreamSubscription<FileReceivedEvent>? _fileReceivedSubscription;
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
@@ -86,8 +82,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       return;
     }
 
-    _setupFileReceivedListener();
-
     if (mounted) {
       setState(() {
         _isLoading = false; // Loading is complete as initialUser is provided
@@ -97,31 +91,9 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
 
   // Removed _loadSettings method as initial user is passed via constructor
 
-  void _setupFileReceivedListener() {
-    _fileReceivedSubscription?.cancel(); // A retry must not add a second listener
-    _fileReceivedSubscription = _networkService.onFileReceived.listen((event) async {
-      if (!mounted) return;
-
-      _fileHistory.addEntry(FileHistoryEntry(
-        destinationPath: event.filePath,
-        senderUsername: event.senderUsername,
-        fileSize: event.fileSize,
-        uploadSpeedMBps: event.speedMBps,
-      ));
-
-      await widget.services.notificationManager.showFileReceivedNotification(
-        filePath: event.filePath,
-        senderUsername: event.senderUsername,
-        fileSizeMB: event.fileSizeMB,
-        speedMBps: event.speedMBps,
-      );
-    });
-  }
-
   @override
   void dispose() {
     zprint("👋 HomePage disposing...");
-    _fileReceivedSubscription?.cancel();
     if (_isDesktop) {
       trayManager.removeListener(this);
       windowManager.removeListener(this);
@@ -185,7 +157,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       ];
     }
     return [
-      HistoryScreen(history: _fileHistory),
+      HistoryScreen(history: widget.services.history),
       HomeContent(networkService: _networkService, notificationManager: widget.services.notificationManager),
       SettingsScreen(
         user: _currentUser!,

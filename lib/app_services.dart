@@ -3,6 +3,7 @@ import 'models/file_transfer_manager.dart';
 import 'models/history.dart';
 import 'models/notification_manager.dart';
 import 'services/network_service.dart';
+import 'services/received_files_handler.dart';
 import 'services/settings_service.dart';
 
 /// The long lived objects of the app, created once in main() and passed down explicitly.
@@ -14,6 +15,9 @@ class AppServices {
   final NetworkService networkService;
   final FileHistory history;
 
+  /// Records received files in the history and notifies the user, for the whole app lifetime
+  final ReceivedFilesHandler receivedFiles;
+
   AppServices({
     required this.settingsService,
     required this.fileTransferManager,
@@ -21,6 +25,7 @@ class AppServices {
     required this.notificationManager,
     required this.networkService,
     required this.history,
+    required this.receivedFiles,
   });
 
   /// Creates the real services wired together. This is the only place that builds them.
@@ -28,18 +33,25 @@ class AppServices {
     final settingsService = SettingsService();
     final fileTransferManager = FileTransferManager(downloadPath: downloadPath);
     final avatarStore = AvatarStore();
+    final notificationManager = NotificationManager();
+    final networkService = NetworkService(
+      fileTransferManager: fileTransferManager,
+      avatarStore: avatarStore,
+      settingsService: settingsService,
+    );
 
     return AppServices(
       settingsService: settingsService,
       fileTransferManager: fileTransferManager,
       avatarStore: avatarStore,
-      notificationManager: NotificationManager(),
-      networkService: NetworkService(
-        fileTransferManager: fileTransferManager,
-        avatarStore: avatarStore,
-        settingsService: settingsService,
-      ),
+      notificationManager: notificationManager,
+      networkService: networkService,
       history: history,
+      receivedFiles: ReceivedFilesHandler(
+        events: networkService.onFileReceived,
+        history: history,
+        notificationManager: notificationManager,
+      ),
     );
   }
 }

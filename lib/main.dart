@@ -36,6 +36,7 @@ void main() async {
 
     zprint('🔔 Starting notification manager initialization...');
     await services.notificationManager.init();
+    services.receivedFiles.start();
 
     runApp(MyApp(initialUser: user, services: services));
   } catch (e, stackTrace) {

@@ -1,5 +1,18 @@
 # Changes Log
 
+## Move received-file handling out of HomePage
+
+New ReceivedFilesHandler (history entry plus notification) is created in AppServices and started in main(), so it lives as long as the app and no file is lost when a screen is unmounted. HomePage no longer listens to onFileReceived. Added tests.
+
+### Files
+- `lib/services/received_files_handler.dart`
+- `lib/app_services.dart`
+- `lib/main.dart`
+- `lib/screens/home_page.dart`
+- `test/received_files_handler_test.dart`
+
+---
+
 ## Share one LocalIdentity between the network services
 
 New LocalIdentity holds the local IP, username, profile image and avatar hash. NetworkService, SendService and DiscoveryService share it, so the updateUserDetails fan-out is gone. Also adds DEFAULT_USERNAME. Tests updated, new local_identity_test.
