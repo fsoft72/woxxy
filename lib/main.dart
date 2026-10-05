@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -12,6 +13,7 @@ import 'services/network_service.dart';
 import 'services/settings_service.dart';
 import 'models/notification_manager.dart';
 import 'models/user.dart';
+import 'models/file_received_event.dart';
 import 'models/history.dart';
 import 'models/file_transfer_manager.dart';
 import 'package:path_provider/path_provider.dart';
@@ -245,6 +247,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   final NetworkService _networkService = NetworkService();
   final SettingsService _settingsService = SettingsService();
   final FileHistory _fileHistory = FileHistory();
+  StreamSubscription<FileReceivedEvent>? _fileReceivedSubscription;
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
@@ -284,7 +287,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   // Removed _loadSettings method as initial user is passed via constructor
 
   void _setupFileReceivedListener() {
-    _networkService.onFileReceived.listen((event) async {
+    _fileReceivedSubscription = _networkService.onFileReceived.listen((event) async {
       if (!mounted) return;
 
       setState(() {
@@ -308,6 +311,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   @override
   void dispose() {
     zprint("👋 HomePage disposing...");
+    _fileReceivedSubscription?.cancel();
     if (_isDesktop) {
       trayManager.removeListener(this);
       windowManager.removeListener(this);

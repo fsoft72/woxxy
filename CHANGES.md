@@ -1,5 +1,17 @@
 # Changes Log
 
+## Replace the stringly-typed
+
+The string stream and the dead '|' parser are gone (typed FileReceivedEvent introduced in the previous commit); both consumers now keep their StreamSubscription and cancel it in dispose, so HomeContent no longer leaks a listener (and duplicate snackbars) each time it is rebuilt. Added widget tests.
+
+### Files
+- `lib/services/network_service.dart`
+- `lib/screens/home.dart`
+- `lib/main.dart`
+- `test/home_content_test.dart`
+
+---
+
 ## Remove UI side effects from the `FileTransfer` model
 
 FileTransfer.end() and FileTransferManager no longer touch NotificationManager or FileHistory. ReceiveService emits a typed FileReceivedEvent (path, sender, size, speed) through NetworkService.onFileReceived, and HomePage is the single consumer that records history and shows the notification. Added event assertions to the loopback test and a layering guard test.

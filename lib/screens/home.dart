@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
+import '../models/file_received_event.dart';
 import '../models/peer.dart';
 import '../models/notification_manager.dart';
 import '../funcs/utils.dart';
@@ -21,14 +24,22 @@ class HomeContent extends StatefulWidget {
 }
 
 class _HomeContentState extends State<HomeContent> {
+  StreamSubscription<FileReceivedEvent>? _fileReceivedSubscription;
+
   @override
   void initState() {
     super.initState();
     // Listen to file received events from the NetworkService facade
-    widget.networkService.onFileReceived.listen((event) {
+    _fileReceivedSubscription = widget.networkService.onFileReceived.listen((event) {
       if (!mounted) return;
       showSnackbar(context, 'Received: ${path.basename(event.filePath)} from ${event.senderUsername}');
     });
+  }
+
+  @override
+  void dispose() {
+    _fileReceivedSubscription?.cancel();
+    super.dispose();
   }
 
   @override

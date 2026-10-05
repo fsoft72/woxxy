@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/services/settings_service.dart';
@@ -52,6 +53,9 @@ class NetworkService {
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
   // Expose current IP address if needed externally
   String? get currentIpAddress => _currentIpAddress;
+  /// True while at least one consumer listens to [onFileReceived] (used to detect leaks in tests)
+  @visibleForTesting
+  bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
 
   // --- Initialization & Lifecycle ---
   NetworkService() {
@@ -62,7 +66,7 @@ class NetworkService {
       fileTransferManager: _fileTransferManager,
       avatarStore: _avatarStore,
       peerManager: _peerManager, // Pass PeerManager for UI updates on avatar receive
-      onFileReceivedCallback: _handleFileReceived, // Optional: Callback for facade logic
+      onFileReceivedCallback: handleFileReceived, // Optional: Callback for facade logic
     );
 
     _serverService = ServerService(
@@ -163,7 +167,8 @@ class NetworkService {
   // --- Internal Helper Methods ---
 
   // Callback for ReceiveService to notify the facade when a file is fully received
-  void _handleFileReceived(FileReceivedEvent event) {
+  @visibleForTesting
+  void handleFileReceived(FileReceivedEvent event) {
     zprint('🎉 Facade notified: File received from ${event.senderUsername} at ${event.filePath}');
     if (_fileReceivedController.isClosed) return;
     _fileReceivedController.add(event);
