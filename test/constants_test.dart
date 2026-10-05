@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/config/desktop_constants.dart';
 import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/transfer_id.dart';
@@ -19,6 +20,21 @@ void main() {
       expect(source, isNot(contains("'FILE'")), reason: file.path);
       expect(RegExp(r'\b809[01]\b').hasMatch(source), isFalse, reason: '${file.path} hardcodes a port');
     }
+  });
+
+  test('the window sizes, tray delays and the avatar temp folder are named constants', () {
+    for (final file in _libFiles()) {
+      final source = file.readAsStringSync();
+      expect(source, isNot(contains("'woxxy_avatars'")), reason: file.path);
+      expect(RegExp(r'Size\(\s*540').hasMatch(source), isFalse, reason: '${file.path} hardcodes the window width');
+    }
+    final shell = File('lib/bootstrap/desktop_shell.dart').readAsStringSync();
+    expect(RegExp(r'Duration\(milliseconds: \d+\)').hasMatch(shell), isFalse, reason: 'desktop_shell.dart hardcodes a delay');
+  });
+
+  test('the window width is locked and the height limits are in order', () {
+    expect(WINDOW_MIN_HEIGHT, lessThanOrEqualTo(WINDOW_HEIGHT));
+    expect(WINDOW_HEIGHT, lessThanOrEqualTo(WINDOW_MAX_HEIGHT));
   });
 
   test('FileTransfer uses idiomatic camelCase names', () {

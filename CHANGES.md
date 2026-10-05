@@ -1,5 +1,9 @@
 # Changes Log
 
+## Name the window sizes, tray delays and temp folder as constants
+
+Window size limits, tray delays and the profile picture radius live in the new `lib/config/desktop_constants.dart`, and the avatar temp folder is `AVATAR_TEMP_FOLDER`. Tests in `test/constants_test.dart`.
+
 ## Flush the history before the app exits
 
 `HistoryRepository` keeps its pending write loop and offers `flush()`; `AppServices.dispose` (run by the tray Quit before `exit(0)`) awaits it, so a file received just before quitting is saved. Tests in `test/history_persistence_test.dart` and `test/app_services_test.dart`.

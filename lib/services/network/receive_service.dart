@@ -232,7 +232,7 @@ class ReceiveService {
   }
 
   /// Temporary directory for incoming avatar files (kept out of the user's download folder).
-  String _avatarTempDirectory() => path.join(Directory.systemTemp.path, 'woxxy_avatars');
+  String _avatarTempDirectory() => path.join(Directory.systemTemp.path, AVATAR_TEMP_FOLDER);
 
   /// Processes a received avatar file by loading it into memory and cleaning up
   Future<void> _processReceivedAvatar(String filePath, String senderIp) async {

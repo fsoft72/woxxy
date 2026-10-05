@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:woxxy/config/desktop_constants.dart';
 import 'package:woxxy/funcs/bundled_assets.dart';
 import 'package:woxxy/funcs/debug.dart';
 
@@ -33,14 +34,10 @@ class DesktopShell {
   static Future<void> _setupWindow() async {
     await windowManager.ensureInitialized();
 
-    const windowSize = Size(540, 960);
-    const minSize = Size(540, 600);
-    const maxSize = Size(540, 4096);
-
     // Width is locked, only height is resizable
-    await windowManager.setSize(windowSize);
-    await windowManager.setMinimumSize(minSize);
-    await windowManager.setMaximumSize(maxSize);
+    await windowManager.setSize(const Size(WINDOW_WIDTH, WINDOW_HEIGHT));
+    await windowManager.setMinimumSize(const Size(WINDOW_WIDTH, WINDOW_MIN_HEIGHT));
+    await windowManager.setMaximumSize(const Size(WINDOW_WIDTH, WINDOW_MAX_HEIGHT));
     await windowManager.center();
     await windowManager.setTitle('Woxxy');
     await windowManager.setPreventClose(true); // Ensure window hides on close
@@ -72,7 +69,7 @@ class DesktopShell {
       zprint("🔧 Using tray icon path: $iconPath");
 
       await trayManager.destroy(); // Ensure clean state
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(TRAY_RESET_DELAY);
 
       final menu = Menu(items: [
         MenuItem(
@@ -126,9 +123,9 @@ class DesktopShell {
     if (Platform.isWindows) {
       // Small delays between steps avoid context menu issues on Windows
       await trayManager.setIcon(iconPath);
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(WINDOWS_TRAY_STEP_DELAY);
       await trayManager.setToolTip(_TOOLTIP);
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(WINDOWS_TRAY_STEP_DELAY);
       await trayManager.setContextMenu(menu);
     } else if (Platform.isLinux) {
       // Everything at once on Linux avoids DBus menu issues

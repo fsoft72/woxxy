@@ -44,3 +44,6 @@ const int RESULT_OK = 0x4B; // "K"
 
 /// Single byte a receiver sends back when it could not store or verify the file
 const int RESULT_FAILED = 0x46; // "F"
+
+/// Folder inside the system temp directory where incoming avatar files are written before they are read
+const String AVATAR_TEMP_FOLDER = 'woxxy_avatars';

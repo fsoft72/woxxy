@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import '../config/desktop_constants.dart';
 import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
 import '../services/profile_image_store.dart';
@@ -135,13 +136,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildProfileImage() {
     if (_selectedImagePath == null) {
       return const CircleAvatar(
-        radius: 50,
-        child: Icon(Icons.person, size: 50),
+        radius: PROFILE_AVATAR_RADIUS,
+        child: Icon(Icons.person, size: PROFILE_AVATAR_RADIUS),
       );
     }
 
     return CircleAvatar(
-      radius: 50,
+      radius: PROFILE_AVATAR_RADIUS,
       backgroundImage: FileImage(File(_selectedImagePath!)),
     );
   }
