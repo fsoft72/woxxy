@@ -1,5 +1,22 @@
 # Changes Log
 
+## Share one LocalIdentity between the network services
+
+New LocalIdentity holds the local IP, username, profile image and avatar hash. NetworkService, SendService and DiscoveryService share it, so the updateUserDetails fan-out is gone. Also adds DEFAULT_USERNAME. Tests updated, new local_identity_test.
+
+### Files
+- `lib/models/local_identity.dart`
+- `lib/config/network_constants.dart`
+- `lib/services/network_service.dart`
+- `lib/services/network/send_service.dart`
+- `lib/services/network/discovery_service.dart`
+- `test/local_identity_test.dart`
+- `test/discovery_protocol_test.dart`
+- `test/send_backpressure_test.dart`
+- `test/transfer_loopback_test.dart`
+
+---
+
 ## Rate limit avatar requests per address
 
 DiscoveryService answers an avatar request from the same address at most once per AVATAR_REQUEST_MIN_INTERVAL (injectable clock). Added a test.

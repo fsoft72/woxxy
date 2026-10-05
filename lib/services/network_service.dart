@@ -9,6 +9,7 @@ import 'package:woxxy/services/settings_service.dart';
 
 import '../models/avatars.dart';
 import '../models/file_received_event.dart';
+import '../models/local_identity.dart';
 import '../models/file_transfer_manager.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
@@ -54,11 +55,8 @@ class NetworkService {
   final IpResolver? _ipResolver;
   late final IpMonitor _ipMonitor;
 
-  // State managed by the facade
-  String? _currentIpAddress;
-  String _currentUsername = 'WoxxyUser';
-  String? _profileImagePath;
-  String? _avatarHash;
+  // Who this device is; shared with the send and discovery services
+  final LocalIdentity _identity = LocalIdentity();
 
   // Stream Controllers (if needed publicly)
   // Note: Peer stream is now accessed via PeerManager
@@ -72,7 +70,7 @@ class NetworkService {
   /// Emits one typed event for every file that was received and verified
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
   // Expose current IP address if needed externally
-  String? get currentIpAddress => _currentIpAddress;
+  String? get currentIpAddress => _identity.ipAddress;
   /// True while at least one consumer listens to [onFileReceived] (used to detect leaks in tests)
   @visibleForTesting
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
@@ -90,7 +88,7 @@ class NetworkService {
         _peerManager = PeerManager(avatarStore: avatarStore),
         _ipResolver = ipResolver {
     // Instantiate internal services, passing dependencies and callbacks
-    _sendService = SendService(); // SendService needs user details updated later
+    _sendService = SendService(identity: _identity);
 
     _receiveService = ReceiveService(
       fileTransferManager: _fileTransferManager,
@@ -115,6 +113,7 @@ class NetworkService {
       peerManager: _peerManager,
       avatarStore: _avatarStore,
       sendAvatarCallback: _sendService.sendAvatar, // Wire Discovery to SendService for avatar sending
+      identity: _identity,
     );
 
     // Set the callback in PeerManager for requesting avatars
@@ -124,26 +123,23 @@ class NetworkService {
   Future<void> start() async {
     zprint('🚀 Starting NetworkService Facade...');
     try {
-      _currentIpAddress = await (_ipResolver ?? _getIpAddress)();
-      if (_currentIpAddress == null) {
+      final ipAddress = await (_ipResolver ?? _getIpAddress)();
+      if (ipAddress == null) {
         zprint("❌ Could not determine IP address. Network service cannot start.");
         throw NetworkStartException('No local network address found. Connect to a Wi-Fi or Ethernet network and retry.');
       }
-      zprint('  -> Determined IP: $_currentIpAddress');
+      zprint('  -> Determined IP: $ipAddress');
+      _identity.ipAddress = ipAddress;
 
       // Load initial user details (username, avatar path)
-      await _loadCurrentUserDetails(); // Sets _currentUsername and _profileImagePath
-
-      // Update internal services with initial user details
-      _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-      _avatarHash = await _avatarHashFor(_profileImagePath);
-      _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: _avatarHash);
+      await _loadCurrentUserDetails();
+      _identity.avatarHash = await _avatarHashFor(_identity.profileImagePath);
 
       // Start the underlying services
       await _serverService.start();
-      await _discoveryService.start(_currentIpAddress!, _currentUsername); // Pass initial details
+      await _discoveryService.start();
       _peerManager.startPeerCleanup(); // Start peer cleanup timer
-      _ipMonitor.start(_currentIpAddress);
+      _ipMonitor.start(ipAddress);
 
       zprint('✅ NetworkService Facade started successfully.');
     } on NetworkStartException {
@@ -174,27 +170,18 @@ class NetworkService {
   // --- Public Methods ---
 
   void setUsername(String username) {
-    if (username.isEmpty) {
-      zprint("⚠️ Attempted to set empty username. Using default.");
-      _currentUsername = "WoxxyUser";
-    } else {
-      _currentUsername = username;
-    }
-    // Update relevant services
-    _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-    _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: _avatarHash);
-    zprint("👤 Username updated to: $_currentUsername");
+    if (username.isEmpty) zprint("⚠️ Attempted to set empty username. Using default.");
+    _identity.username = username; // The identity falls back to the default name when empty
+    zprint("👤 Username updated to: ${_identity.username}");
   }
 
   void setProfileImagePath(String? imagePath) {
-    _profileImagePath = imagePath;
-    _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-    zprint("🖼️ Profile image path updated: $_profileImagePath");
+    _identity.profileImagePath = imagePath;
+    zprint("🖼️ Profile image path updated: $imagePath");
 
     // Announce the new avatar hash so peers refresh their cached copy
     _avatarHashFor(imagePath).then((hash) {
-      _avatarHash = hash;
-      _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: hash);
+      if (_identity.profileImagePath == imagePath) _identity.avatarHash = hash; // Ignore a stale answer
     });
   }
 
@@ -233,9 +220,7 @@ class NetworkService {
       zprint('⚠️ Network lost. Waiting for a new address.');
       return;
     }
-    _currentIpAddress = newIp;
-    _sendService.updateUserDetails(newIp, _currentUsername, _profileImagePath);
-    _discoveryService.updateUserDetails(newIp, _currentUsername, avatarHash: _avatarHash);
+    _identity.ipAddress = newIp;
     _discoveryService.restart().catchError((Object e) => zprint('❌ Could not restart discovery after IP change: $e'));
   }
 
@@ -249,9 +234,9 @@ class NetworkService {
 
   Future<void> _loadCurrentUserDetails() async {
     final user = await _settingsService.loadSettings();
-    _currentUsername = user.username.isNotEmpty ? user.username : "WoxxyUser";
-    _profileImagePath = user.profileImage;
-    zprint('👤 Facade User Details Loaded: Name=$_currentUsername, Avatar=$_profileImagePath');
+    _identity.username = user.username;
+    _identity.profileImagePath = user.profileImage;
+    zprint('👤 Facade User Details Loaded: Name=${_identity.username}, Avatar=${_identity.profileImagePath}');
   }
 
   Future<String?> _getIpAddress() async {

@@ -9,6 +9,7 @@ import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/file_received_event.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
+import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/services/network/receive_service.dart';
@@ -73,7 +74,7 @@ void main() {
   test('SendService to ReceiveService delivers the file intact', () async {
     final bytes = List.generate(300000, (i) => i % 251);
     final src = await makeFile('payload.bin', bytes);
-    final sender = SendService()..updateUserDetails('127.0.0.1', 'alice', null);
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice'));
 
     await sender.sendFile('t1', src.path, peer);
     await waitFor(() => received.isNotEmpty);
@@ -89,7 +90,7 @@ void main() {
     final bytes = List.generate(500000, (i) => (i * 7) % 256);
     final src = await makeFile('big.bin', bytes);
     final avatarFile = await makeFile('me.png', _png);
-    final sender = SendService()..updateUserDetails('127.0.0.1', 'alice', avatarFile.path);
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice', profileImagePath: avatarFile.path));
 
     final results = await Future.wait([
       sender.sendFile('file-1', src.path, peer),

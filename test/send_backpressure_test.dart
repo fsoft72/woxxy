@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/config/transfer_constants.dart';
+import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/services/network/send_service.dart';
 
@@ -38,7 +39,7 @@ void main() {
     final raf = file.openSync(mode: FileMode.write)..truncateSync(size);
     raf.closeSync();
 
-    final sender = SendService()..updateUserDetails('127.0.0.1', 'alice', null);
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice'));
     var lastBytes = 0;
     final done = sender.sendFile('stalled', file.path, peer, onProgress: (total, sent) => lastBytes = sent);
     final failure = expectLater(done, throwsA(anything));

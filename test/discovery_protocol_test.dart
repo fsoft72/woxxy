@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/models/avatars.dart';
+import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/services/network/discovery_protocol.dart';
 import 'package:woxxy/services/network/discovery_service.dart';
@@ -62,9 +63,10 @@ void main() {
       peerManager: peers,
       avatarStore: AvatarStore(),
       sendAvatarCallback: (_) async {},
+      identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       restartDelay: const Duration(milliseconds: 50),
     );
-    await service.start('10.255.255.1', 'me');
+    await service.start();
     service.simulateSocketLoss();
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
@@ -93,9 +95,10 @@ void main() {
       peerManager: PeerManager(avatarStore: AvatarStore()),
       avatarStore: AvatarStore(),
       sendAvatarCallback: (_) async {},
+      identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       restartDelay: const Duration(milliseconds: 20),
     );
-    await service.start('10.255.255.1', 'me');
+    await service.start();
     service.simulateSocketLoss();
     await service.dispose();
     await Future<void>.delayed(const Duration(milliseconds: 150));
@@ -118,8 +121,9 @@ void main() {
       peerManager: peers,
       avatarStore: AvatarStore(),
       sendAvatarCallback: (_) async {},
+      identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
     );
-    await service.start('10.255.255.1', 'me');
+    await service.start();
 
     final sender = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
     sender.send(encodeAnnounce(name: 'Zoë: 🚀', ip: '127.0.0.1', port: 9999), InternetAddress.loopbackIPv4, port);
@@ -149,9 +153,10 @@ void main() {
       peerManager: PeerManager(avatarStore: AvatarStore()),
       avatarStore: AvatarStore(),
       sendAvatarCallback: (peer) async => answered.add(peer.id),
+      identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       clock: () => now,
     );
-    await service.start('10.255.255.1', 'me');
+    await service.start();
 
     final sender = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
     Future<void> request(int expectedCount) async {

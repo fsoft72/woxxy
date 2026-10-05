@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:woxxy/funcs/debug.dart';
+import '../../models/local_identity.dart';
 import '../../models/peer.dart';
 import '../../models/peer_manager.dart'; // Import PeerManager
 import '../../models/avatars.dart'; // Import AvatarStore
@@ -19,6 +20,9 @@ class DiscoveryService {
   final AvatarStore avatarStore;
   final SendAvatarCallback sendAvatarCallback; // Callback to trigger sending avatar
 
+  /// Local address, name and avatar hash announced to the other devices
+  final LocalIdentity identity;
+
   /// Delay before the socket is re-bound after it was lost unexpectedly.
   final Duration restartDelay;
 
@@ -32,9 +36,6 @@ class DiscoveryService {
   Timer? _discoveryTimer;
   Timer? _restartTimer;
   bool _disposed = true; // True until start() is called and again after dispose()
-  String? _currentIpAddress; // Local IP address
-  String _currentUsername = 'WoxxyUser'; // Local username
-  String? _avatarHash; // MD5 of the local avatar, announced so peers can refresh their cache
 
   DiscoveryService({
     required this.discoveryPort,
@@ -42,14 +43,13 @@ class DiscoveryService {
     required this.peerManager,
     required this.avatarStore,
     required this.sendAvatarCallback,
+    required this.identity,
     this.restartDelay = const Duration(seconds: 3),
     DateTime Function()? clock,
   }) : _now = clock ?? DateTime.now;
 
   /// Binds the discovery socket and starts announcing this device.
-  Future<void> start(String currentIpAddress, String currentUsername) async {
-    _currentIpAddress = currentIpAddress;
-    _currentUsername = currentUsername;
+  Future<void> start() async {
     _disposed = false;
 
     try {
@@ -135,15 +135,6 @@ class DiscoveryService {
     _onSocketLost(socket, 'simulated');
   }
 
-  void updateUserDetails(String? ipAddress, String username, {String? avatarHash}) {
-    _currentIpAddress = ipAddress;
-    _avatarHash = avatarHash;
-    _currentUsername = username.isNotEmpty ? username : "WoxxyUser";
-    // No need to explicitly call send here, the timer will pick up the new message
-    zprint(
-        '🔄 Discovery message parameters updated (IP: $_currentIpAddress, Name: $_currentUsername). Next broadcast will use new info.');
-  }
-
   void _startDiscoveryBroadcaster() {
     zprint('🔍 Starting peer discovery broadcast service...');
     _discoveryTimer?.cancel(); // Cancel existing timer if any
@@ -152,7 +143,7 @@ class DiscoveryService {
 
   /// Sends one announcement to the global broadcast address and to the local /24 broadcast address.
   void _broadcastAnnouncement() {
-    final ip = _currentIpAddress;
+    final ip = identity.ipAddress;
     final socket = _discoverySocket;
     if (ip == null || socket == null) {
       zprint("⚠️ Skipping discovery broadcast: IP address or socket unavailable.");
@@ -171,7 +162,8 @@ class DiscoveryService {
   }
 
   Uint8List _buildDiscoveryMessage() =>
-      encodeAnnounce(name: _currentUsername, ip: _currentIpAddress ?? 'NO_IP', port: mainServerPort, avatarHash: _avatarHash);
+      encodeAnnounce(
+          name: identity.username, ip: identity.ipAddress ?? 'NO_IP', port: mainServerPort, avatarHash: identity.avatarHash);
 
   void _startDiscoveryListener(RawDatagramSocket socket) {
     zprint('👂 Starting discovery listener on port $discoveryPort...');
@@ -183,7 +175,7 @@ class DiscoveryService {
             final message = decodeDiscoveryMessage(datagram.data);
             switch (message) {
               case AnnounceMessage():
-                if (datagram.address.address != _currentIpAddress) {
+                if (datagram.address.address != identity.ipAddress) {
                   _handlePeerAnnouncement(message, datagram.address);
                 }
               case AvatarRequestMessage():
@@ -252,12 +244,13 @@ class DiscoveryService {
 
   // Method called by PeerManager (via NetworkService facade) to initiate an avatar request
   void requestAvatar(Peer peer) {
-    if (_currentIpAddress == null) {
+    final localIp = identity.ipAddress;
+    if (localIp == null) {
       zprint('⚠️ Cannot request avatar: Missing local IP.');
       return;
     }
     zprint('❓ Requesting avatar from ${peer.name} (${peer.id}) at ${peer.address.address}:$discoveryPort');
-    final requestMessage = encodeAvatarRequest(ip: _currentIpAddress!, port: mainServerPort);
+    final requestMessage = encodeAvatarRequest(ip: localIp, port: mainServerPort);
     try {
       _discoverySocket?.send(
         requestMessage,

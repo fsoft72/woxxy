@@ -23,3 +23,6 @@ const Duration RECEIVE_IDLE_TIMEOUT = Duration(seconds: 30);
 
 /// Minimum time between two avatar requests answered for the same peer address
 const Duration AVATAR_REQUEST_MIN_INTERVAL = Duration(seconds: 5);
+
+/// Name announced when the user did not set one
+const String DEFAULT_USERNAME = 'WoxxyUser';

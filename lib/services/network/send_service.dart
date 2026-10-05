@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
 import '../../config/transfer_constants.dart';
+import '../../models/local_identity.dart';
 import '../../models/peer.dart';
 import 'transfer_protocol.dart';
 import '../../config/network_constants.dart';
@@ -14,24 +15,13 @@ import '../../config/network_constants.dart';
 typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
 
 class SendService {
-  // State needed from the facade
-  String? _currentIpAddress;
-  String _currentUsername = 'WoxxyUser';
-  String? _profileImagePath;
+  /// Local address, name and avatar written into the metadata of every transfer
+  final LocalIdentity identity;
 
   // Active outbound transfers - for cancellation support
   final Map<String, Socket> _activeTransfers = {};
 
-  SendService(); // Constructor
-
-  // Method to update user details needed for sending
-  void updateUserDetails(String? ipAddress, String username, String? profileImagePath) {
-    _currentIpAddress = ipAddress;
-    _currentUsername = username.isNotEmpty ? username : "WoxxyUser";
-    _profileImagePath = profileImagePath;
-    zprint(
-        '✉️ SendService User Details Updated: IP=$_currentIpAddress, Name=$_currentUsername, Avatar=$_profileImagePath');
-  }
+  SendService({LocalIdentity? identity}) : identity = identity ?? LocalIdentity();
 
   /// Cancel an active file transfer
   /// Returns true if transfer was found and canceled, false otherwise
@@ -62,7 +52,7 @@ class SendService {
       throw Exception('File does not exist: $filePath');
     }
 
-    if (_currentIpAddress == null) {
+    if (identity.ipAddress == null) {
       zprint("❌ Cannot send file: Local IP address is unknown.");
       throw Exception('Local IP address is unknown.');
     }
@@ -98,7 +88,7 @@ class SendService {
       return false;
     }
 
-    final avatarFile = File(_profileImagePath!);
+    final avatarFile = File(identity.profileImagePath!);
     final transferId = 'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}';
     
     try {
@@ -112,7 +102,7 @@ class SendService {
       zprint("📋 [Avatar Send] Metadata prepared for ${receiver.name}");
       
       // Send the avatar file
-      await _sendFileWithMetadata(transferId, _profileImagePath!, receiver, avatarMetadata);
+      await _sendFileWithMetadata(transferId, identity.profileImagePath!, receiver, avatarMetadata);
       
       zprint('✅ Avatar sent successfully to ${receiver.name}');
       return true;
@@ -126,12 +116,12 @@ class SendService {
 
   /// Validates prerequisites for sending an avatar
   bool _validateAvatarSendPrerequisites(Peer receiver) {
-    if (_profileImagePath == null || _profileImagePath!.isEmpty) {
+    if (identity.profileImagePath == null || identity.profileImagePath!.isEmpty) {
       zprint('🚫 Cannot send avatar: No profile image configured');
       return false;
     }
     
-    if (_currentIpAddress == null || _currentIpAddress!.isEmpty) {
+    if (identity.ipAddress == null || identity.ipAddress!.isEmpty) {
       zprint('🚫 Cannot send avatar: Local IP address unknown');
       return false;
     }
@@ -180,7 +170,7 @@ class SendService {
     return {
       ...originalMetadata,
       'type': TRANSFER_TYPE_AVATAR,
-      'senderIp': _currentIpAddress,
+      'senderIp': identity.ipAddress,
     };
   }
 
@@ -269,8 +259,8 @@ class SendService {
     return {
       'name': filename,
       'size': fileSize,
-      'senderUsername': _currentUsername,
-      'senderIp': _currentIpAddress,
+      'senderUsername': identity.username,
+      'senderIp': identity.ipAddress,
       'md5Checksum': checksum,
       'transferId': transferId,
       'type': TRANSFER_TYPE_FILE,
