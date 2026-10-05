@@ -1,5 +1,9 @@
 # Changes Log
 
+## Rename the DiscoveryService running flag
+
+`_disposed` (true before start) became `_running` with the natural meaning, and the avatar send started by a request is explicitly `unawaited`. Test in `test/discovery_protocol_test.dart`.
+
 ## Use one notification channel on Android and normal urgency on Linux
 
 Android creates and uses the same `woxxy_channel` (the extra `file_transfer_channel` is gone), and Linux notifications are no longer critical and resident, so they expire and close on click. Tests: `test/notification_details_test.dart`.

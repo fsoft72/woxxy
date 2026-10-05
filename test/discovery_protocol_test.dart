@@ -51,6 +51,30 @@ void main() {
     expect(broadcastAddressesFor('not-an-ip'), ['255.255.255.255']);
   });
 
+  test('restart() does nothing before start() and after dispose()', () async {
+    final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    probe.close();
+    final service = DiscoveryService(
+      discoveryPort: port,
+      mainServerPort: 8090,
+      peerManager: PeerManager(avatarStore: AvatarStore()),
+      avatarStore: AvatarStore(),
+      sendAvatarCallback: (_) async => true,
+      identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
+    );
+
+    await service.restart(); // Not running: the port must stay free
+    final first = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
+    first.close();
+
+    await service.start();
+    await service.dispose();
+    await service.restart(); // Disposed: must not bind again
+    final second = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
+    second.close();
+  });
+
   test('DiscoveryService re-binds after the socket is lost and keeps receiving', () async {
     final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = probe.port;

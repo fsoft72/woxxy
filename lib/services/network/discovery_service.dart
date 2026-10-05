@@ -35,7 +35,7 @@ class DiscoveryService {
   RawDatagramSocket? _discoverySocket;
   Timer? _discoveryTimer;
   Timer? _restartTimer;
-  bool _disposed = true; // True until start() is called and again after dispose()
+  bool _running = false; // True between start() and dispose()
 
   DiscoveryService({
     required this.discoveryPort,
@@ -50,7 +50,7 @@ class DiscoveryService {
 
   /// Binds the discovery socket and starts announcing this device.
   Future<void> start() async {
-    _disposed = false;
+    _running = true;
 
     try {
       await _bindAndRun();
@@ -63,7 +63,7 @@ class DiscoveryService {
 
   /// Re-binds the socket and restarts announcing, for example after the local IP changed.
   Future<void> restart() async {
-    if (_disposed) return;
+    if (!_running) return;
     zprint('🔁 Restarting discovery service...');
     _closeSocket();
     await _bindAndRun();
@@ -87,7 +87,7 @@ class DiscoveryService {
 
   Future<void> dispose() async {
     zprint('🛑 Disposing DiscoveryService...');
-    _disposed = true;
+    _running = false;
     _restartTimer?.cancel();
     _restartTimer = null;
     _closeSocket();
@@ -105,7 +105,7 @@ class DiscoveryService {
 
   /// Called when a socket that is still the current one was lost: re-bind after a delay.
   void _onSocketLost(RawDatagramSocket socket, String reason) {
-    if (_disposed || !identical(socket, _discoverySocket)) return;
+    if (!_running || !identical(socket, _discoverySocket)) return;
     zprint('⚠️ Discovery socket lost ($reason). Re-binding in ${restartDelay.inSeconds}s.');
 
     _closeSocket();
@@ -116,7 +116,7 @@ class DiscoveryService {
   void _scheduleRestart() {
     _restartTimer?.cancel();
     _restartTimer = Timer(restartDelay, () async {
-      if (_disposed) return;
+      if (!_running) return;
       try {
         await _bindAndRun();
       } catch (e) {
@@ -239,7 +239,7 @@ class DiscoveryService {
       address: InternetAddress(message.ip),
       port: message.port,
     );
-    sendAvatarCallback(requesterPeer);
+    unawaited(sendAvatarCallback(requesterPeer)); // Failures are logged inside the callback
   }
 
   // Method called by PeerManager (via NetworkService facade) to initiate an avatar request
