@@ -6,7 +6,7 @@ import 'package:woxxy/screens/history.dart';
 import 'package:woxxy/services/history_repository.dart';
 
 FileHistoryEntry _entry(String path, DateTime at) =>
-    FileHistoryEntry(destinationPath: path, senderUsername: 'bob', fileSize: 1048576, uploadSpeedMBps: 2, createdAt: at);
+    FileHistoryEntry(destinationPath: path, senderUsername: 'bob', fileSize: 1048576, speedMBps: 2, createdAt: at);
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));

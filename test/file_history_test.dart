@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/models/history.dart';
 
 FileHistoryEntry _entry(String path, DateTime at) =>
-    FileHistoryEntry(destinationPath: path, senderUsername: 'bob', fileSize: 10, uploadSpeedMBps: 1.5, createdAt: at);
+    FileHistoryEntry(destinationPath: path, senderUsername: 'bob', fileSize: 10, speedMBps: 1.5, createdAt: at);
 
 void main() {
   historyBehaviorTests();
@@ -14,6 +14,23 @@ void main() {
       ..addEntry(_entry('/b', DateTime(2026, 1, 2)));
 
     expect(history.entries.map((e) => e.destinationPath), ['/c', '/b', '/a']);
+  });
+
+  test('a history saved with the old "uploadSpeedMBps" key still loads, and new saves use "speedMBps"', () {
+    final old = {
+      'destinationPath': '/old.txt',
+      'senderUsername': 'bob',
+      'fileSize': 10,
+      'uploadSpeedMBps': 3.5,
+      'createdAt': DateTime(2026, 1, 1).toIso8601String(),
+    };
+
+    final history = FileHistory.fromJson([old]);
+
+    expect(history.entries.single.speedMBps, 3.5);
+    final saved = history.toJson().single;
+    expect(saved['speedMBps'], 3.5);
+    expect(saved.containsKey('uploadSpeedMBps'), isFalse);
   });
 
   test('removeEntry removes only the matching entry', () {
@@ -33,7 +50,7 @@ void main() {
 
     expect(copy.entries.single.destinationPath, '/a');
     expect(copy.entries.single.fileSize, 10);
-    expect(copy.entries.single.uploadSpeedMBps, 1.5);
+    expect(copy.entries.single.speedMBps, 1.5);
     expect(copy.entries.single.createdAt, DateTime(2026, 1, 1));
   });
 }
@@ -73,11 +90,11 @@ void historyBehaviorTests() {
 
   test('fromJson skips corrupt entries and accepts integer speeds', () {
     final history = FileHistory.fromJson([
-      {'destinationPath': '/ok', 'senderUsername': 'x', 'fileSize': 5, 'uploadSpeedMBps': 2, 'createdAt': '2026-01-01T00:00:00.000'},
+      {'destinationPath': '/ok', 'senderUsername': 'x', 'fileSize': 5, 'speedMBps': 2, 'createdAt': '2026-01-01T00:00:00.000'},
       {'broken': true},
       'not a map',
     ]);
     expect(history.entries.map((e) => e.destinationPath), ['/ok']);
-    expect(history.entries.single.uploadSpeedMBps, 2.0);
+    expect(history.entries.single.speedMBps, 2.0);
   });
 }

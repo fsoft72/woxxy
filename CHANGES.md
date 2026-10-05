@@ -1,5 +1,9 @@
 # Changes Log
 
+## Rename the history speed field to speedMBps
+
+`FileHistoryEntry.uploadSpeedMBps` (the speed of a received file) is now `speedMBps`; `fromJson` still reads the old `uploadSpeedMBps` key so saved histories load, and new saves use the new key. Test in `test/file_history_test.dart`.
+
 ## Name the window sizes, tray delays and temp folder as constants
 
 Window size limits, tray delays and the profile picture radius live in the new `lib/config/desktop_constants.dart`, and the avatar temp folder is `AVATAR_TEMP_FOLDER`. Tests in `test/constants_test.dart`.

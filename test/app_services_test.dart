@@ -24,7 +24,7 @@ void main() {
     repository.autoSave(history);
     final services = AppServices.create(downloadPath: Directory.systemTemp.path, history: history, historyRepository: repository);
 
-    history.addEntry(FileHistoryEntry(destinationPath: '/d/a.txt', senderUsername: 'bob', fileSize: 1, uploadSpeedMBps: 1));
+    history.addEntry(FileHistoryEntry(destinationPath: '/d/a.txt', senderUsername: 'bob', fileSize: 1, speedMBps: 1));
     await services.dispose(); // No other wait: dispose itself must flush the write
 
     expect((await HistoryRepository().load()).entries.map((e) => e.destinationPath), ['/d/a.txt']);

@@ -41,7 +41,7 @@ class ReceivedFilesHandler {
       destinationPath: event.filePath,
       senderUsername: event.senderUsername,
       fileSize: event.fileSize,
-      uploadSpeedMBps: event.speedMBps,
+      speedMBps: event.speedMBps,
     ));
 
     try {

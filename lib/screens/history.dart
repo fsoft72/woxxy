@@ -65,7 +65,7 @@ class HistoryScreen extends StatelessWidget {
                   children: [
                     Text(entry.senderUsername),
                     Text(
-                      '${entry.uploadSpeedMBps.toStringAsFixed(1)} MB/s',
+                      '${entry.speedMBps.toStringAsFixed(1)} MB/s',
                       style: const TextStyle(fontWeight: FontWeight.w300),
                     ),
                   ],

@@ -11,14 +11,16 @@ class FileHistoryEntry {
   final String destinationPath;
   final String senderUsername;
   final int fileSize;
-  final double uploadSpeedMBps;
+  /// Average speed of the transfer, in MB/s
+  /// Average speed of the transfer, in MB/s
+  final double speedMBps;
   final DateTime createdAt;
 
   FileHistoryEntry({
     required this.destinationPath,
     required this.senderUsername,
     required this.fileSize,
-    required this.uploadSpeedMBps,
+    required this.speedMBps,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -26,7 +28,7 @@ class FileHistoryEntry {
         'destinationPath': destinationPath,
         'senderUsername': senderUsername,
         'fileSize': fileSize,
-        'uploadSpeedMBps': uploadSpeedMBps,
+        'speedMBps': speedMBps,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -35,7 +37,8 @@ class FileHistoryEntry {
       destinationPath: json['destinationPath'] as String,
       senderUsername: json['senderUsername'] as String,
       fileSize: (json['fileSize'] as num).toInt(),
-      uploadSpeedMBps: (json['uploadSpeedMBps'] as num).toDouble(),
+      // Histories saved by older versions called the key "uploadSpeedMBps"
+      speedMBps: ((json['speedMBps'] ?? json['uploadSpeedMBps']) as num).toDouble(),
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
