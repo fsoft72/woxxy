@@ -1,5 +1,17 @@
 # Changes Log
 
+## Make logging cheap in release builds
+
+zprint is now switchable (zprintEnabled/zprintSink) and a new zprintLazy only builds its message when logging is enabled; the expensive calls (metadata JSON and maps) use it. No file calls print() directly any more. Added logging tests including a guard against direct print().
+
+### Files
+- `lib/funcs/debug.dart`
+- `lib/services/network/send_service.dart`
+- `lib/models/file_transfer.dart`
+- `test/logging_test.dart`
+
+---
+
 ## Centralize constants and style cleanups
 
 Ports, discovery interval, ready-signal and connect timeouts, the avatar size cap and BYTES_PER_MB moved to config/network_constants.dart and transfer_constants.dart (no more literals in services). FileTransfer fields and parameters are camelCase (the lint ignore is gone), and generateTransferId now adds a counter and random part so ids cannot collide. withOpacity was already replaced in the extracted widgets. Added guard and uniqueness tests.

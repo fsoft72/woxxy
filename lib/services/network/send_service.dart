@@ -69,7 +69,7 @@ class SendService {
 
     try {
       final metadata = await _createFileMetadata(file, transferId);
-      zprint("  [Send] Generated metadata: ${json.encode(metadata)}");
+      zprintLazy(() => "  [Send] Generated metadata: ${json.encode(metadata)}");
 
       await _sendFileWithMetadata(transferId, filePath, receiver, metadata, onProgress: onProgress);
 

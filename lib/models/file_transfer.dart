@@ -85,7 +85,7 @@ class FileTransfer {
       zprint("   Size: $size bytes");
       zprint("   Sender: $senderUsername");
       zprint("   Expected MD5: $expectedMd5");
-      zprint("   Metadata: $metadata");
+      zprintLazy(() => "   Metadata: $metadata");
 
       // Ensure download directory exists
       Directory dir = Directory(downloadPath);
