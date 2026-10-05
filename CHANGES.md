@@ -1,5 +1,14 @@
 # Changes Log
 
+## Code Optimization Analysis
+
+Added `OPTIMIZE.md`, a prioritized checklist of 25 optimization, security and refactoring items found by reviewing the whole `lib/` tree. No application code was changed.
+
+### Files Added
+- `OPTIMIZE.md`
+
+---
+
 ## Open Destination Folder on Notification Click (Desktop)
 
 Clicking a "File Received" notification now opens the containing directory in the platform's file manager (`xdg-open` on Linux, `open` on macOS, `explorer.exe` on Windows). The file's parent directory is passed as the notification payload and handled in the click callback.
