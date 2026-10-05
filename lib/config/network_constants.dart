@@ -26,3 +26,6 @@ const Duration AVATAR_REQUEST_MIN_INTERVAL = Duration(seconds: 5);
 
 /// Name announced when the user did not set one
 const String DEFAULT_USERNAME = 'WoxxyUser';
+
+/// How long the sender waits for the result byte of the receiver after the last byte was sent
+const Duration RESULT_TIMEOUT = Duration(seconds: 30);

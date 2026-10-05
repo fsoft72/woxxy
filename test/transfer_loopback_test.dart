@@ -186,4 +186,39 @@ void main() {
       expect(manager.files, isEmpty);
     });
   });
+  group('result byte', () {
+    /// Sends a file with the given declared checksum and returns every byte the receiver answered.
+    Future<List<int>> sendWithChecksum(String checksum) async {
+      final data = List.filled(100, 5);
+      final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);
+      final answers = <int>[];
+      final done = socket.listen((chunk) => answers.addAll(chunk)).asFuture<void>();
+      socket.add(encodeMetadataFrame({
+        'name': 'r.bin',
+        'size': data.length,
+        'senderUsername': 'eve',
+        'md5Checksum': checksum,
+        'transferId': 'result-${DateTime.now().microsecondsSinceEpoch}',
+        'type': TRANSFER_TYPE_FILE,
+      }));
+      socket.add(data);
+      await socket.flush();
+      await socket.close();
+      await done.timeout(const Duration(seconds: 5));
+      return answers;
+    }
+
+    test('the receiver confirms a verified file', () async {
+      final answers = await sendWithChecksum(md5.convert(List.filled(100, 5)).toString());
+
+      expect(answers, [...READY_SIGNAL, RESULT_OK]);
+    });
+
+    test('the receiver reports a file whose checksum does not match', () async {
+      final answers = await sendWithChecksum('0' * 32);
+
+      expect(answers, [...READY_SIGNAL, RESULT_FAILED]);
+      expect(received, isEmpty);
+    });
+  });
 }

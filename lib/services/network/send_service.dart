@@ -202,6 +202,19 @@ class SendService {
     zprint("⏰ Ready signal timeout - proceeding anyway");
   }
 
+  /// Closes the write side so the receiver can finalize, then reads the result byte it sends back.
+  /// Throws when the receiver says it could not store the file. No byte (an older receiver, or a
+  /// timeout) is not an error: the outcome is just unknown.
+  Future<void> _checkResult(Socket socket, SocketReader reader) async {
+    await socket.close();
+    final result = await reader.read(1, RESULT_TIMEOUT);
+    if (result.isEmpty) {
+      zprint("ℹ️ The receiver sent no result. Assuming the file arrived.");
+      return;
+    }
+    if (result[0] == RESULT_FAILED) throw Exception('The receiver could not store or verify the file');
+  }
+
   /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
   /// cannot be hashed, and the receiver then skips verification.
   Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId) async {
@@ -270,6 +283,7 @@ class SendService {
       // A cancel destroys the socket, which can end addStream without an error
       _throwIfCancelled(transferId);
       await socket.flush();
+      await _checkResult(socket, reader);
       onProgress?.call(fileSize, fileSize); // Final progress
       zprint("  [Send Data] Stream flushed. Bytes sent: $bytesSent");
       zprint("✅ Stream processing finished for $transferId.");

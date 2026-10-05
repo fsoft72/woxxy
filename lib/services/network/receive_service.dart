@@ -56,6 +56,7 @@ class ReceiveService {
     String? fileTransferKey; // Set once metadata is accepted
     var receivedBytes = 0;
     var dataExpected = 0;
+    bool? outcome; // Reported to the sender; stays null when no transfer was accepted
 
     try {
       while (await iterator.moveNext()) {
@@ -87,7 +88,7 @@ class ReceiveService {
         }
       }
 
-      await _onConnectionClosed(
+      outcome = await _onConnectionClosed(
         key: fileTransferKey,
         info: receivedInfo,
         receivedBytes: receivedBytes,
@@ -99,11 +100,25 @@ class ReceiveService {
       if (fileTransferKey != null) {
         zprint("🧨 Cleaning up transfer due to error...");
         await fileTransferManager.handleSocketClosure(fileTransferKey);
+        outcome = false;
       }
     } finally {
       _activeSockets.remove(socket);
+      await _sendResult(socket, outcome);
       await iterator.cancel();
       socket.destroy();
+    }
+  }
+
+  /// Tells the sender whether the file was stored and verified. Best effort: the sender may be
+  /// gone, and older senders do not read it.
+  Future<void> _sendResult(Socket socket, bool? outcome) async {
+    if (outcome == null) return;
+    try {
+      socket.add([outcome ? RESULT_OK : RESULT_FAILED]);
+      await socket.flush();
+    } catch (e) {
+      zprint('ℹ️ Could not send the result to the sender: $e');
     }
   }
 
@@ -165,7 +180,9 @@ class ReceiveService {
   }
 
   /// Runs when the sender closes the connection: finalizes or cleans up the transfer.
-  Future<void> _onConnectionClosed({
+  /// Returns true when the file was stored and verified, false when it was not, and null when
+  /// there was no accepted transfer to report about.
+  Future<bool?> _onConnectionClosed({
     required String? key,
     required Map<String, dynamic>? info,
     required int receivedBytes,
@@ -175,26 +192,26 @@ class ReceiveService {
     zprint('📊 Socket closed after ${elapsed.inMilliseconds}ms. Received $receivedBytes/$dataExpected bytes.');
     if (key == null || info == null) {
       zprint("ℹ️ Socket closed before any metadata was accepted.");
-      return;
+      return null;
     }
 
     final fileTransfer = fileTransferManager.files[key];
     if (fileTransfer == null) {
       zprint("ℹ️ Socket closed, but transfer not found for key $key.");
-      return;
+      return null;
     }
 
     if (receivedBytes < dataExpected) {
       zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
       await fileTransferManager.handleSocketClosure(key);
-      return;
+      return false;
     }
 
     zprint('✅ Transfer complete ($receivedBytes/$dataExpected). Finalizing...');
     final success = await fileTransferManager.end(key);
     if (!success) {
       zprint('❌ File transfer finalization failed (end() returned false).');
-      return;
+      return false;
     }
 
     final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
@@ -214,6 +231,7 @@ class ReceiveService {
         speedMBps: fileTransfer.getSpeedMBps(),
       ));
     }
+    return true;
   }
 
   /// Temporary directory for incoming avatar files (kept out of the user's download folder).

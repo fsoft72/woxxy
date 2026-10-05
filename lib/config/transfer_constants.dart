@@ -38,3 +38,9 @@ const int MAX_AVATAR_SIDE_PIXELS = 4096;
 
 /// Avatars are decoded at most this many pixels on their longest side (they are shown at 80 px)
 const int AVATAR_DECODE_SIDE_PIXELS = 512;
+
+/// Single byte a receiver sends back after it finished a transfer: the file was stored and verified
+const int RESULT_OK = 0x4B; // "K"
+
+/// Single byte a receiver sends back when it could not store or verify the file
+const int RESULT_FAILED = 0x46; // "F"

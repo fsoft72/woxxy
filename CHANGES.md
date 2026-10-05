@@ -1,5 +1,9 @@
 # Changes Log
 
+## Receiver confirms each transfer with a result byte
+
+After finalizing, the receiver sends one byte (`RESULT_OK` or `RESULT_FAILED`). The sender half-closes, waits up to 30 s for it and fails the send when the receiver reports a failure; a missing byte (older receiver) still counts as success. Tests: `test/transfer_result_test.dart` and the `result byte` group of `test/transfer_loopback_test.dart`.
+
 ## Fail fast when the receiver closes before the ready signal
 
 A new `SocketReader` owns the single socket subscription of a send. A receiver that closes the connection now fails the send at once, a ready signal split in several chunks is buffered, and only a silent receiver still gets the file after the timeout. Tests: `test/ready_signal_test.dart`.
