@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/models/avatars.dart';
+import 'package:woxxy/models/file_received_event.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
@@ -26,6 +27,7 @@ void main() {
   late ServerSocket server;
   late ReceiveService receive;
   late List<String> received;
+  late List<FileReceivedEvent> events;
   late Peer peer;
 
   setUp(() async {
@@ -33,11 +35,15 @@ void main() {
     manager = FileTransferManager(downloadPath: path.join(tmp.path, 'downloads'));
     manager.files.clear();
     received = [];
+    events = [];
     receive = ReceiveService(
       fileTransferManager: manager,
       avatarStore: AvatarStore(),
       peerManager: PeerManager(),
-      onFileReceivedCallback: (filePath, sender) => received.add(filePath),
+      onFileReceivedCallback: (event) {
+        events.add(event);
+        received.add(event.filePath);
+      },
     );
     server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     server.listen(receive.handleNewConnection);
@@ -73,6 +79,9 @@ void main() {
 
     expect(File(received.single).readAsBytesSync(), bytes);
     expect(manager.files, isEmpty);
+    expect(events.single.senderUsername, 'alice');
+    expect(events.single.fileSize, bytes.length);
+    expect(events.single.speedMBps, greaterThan(0));
   });
 
   test('an avatar and a file sent in parallel from the same IP do not collide', () async {

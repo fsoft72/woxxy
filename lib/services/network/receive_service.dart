@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:woxxy/funcs/debug.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
+import '../../models/file_received_event.dart';
 import '../../models/file_transfer_manager.dart';
 import '../../models/peer_manager.dart'; // Needed for notifyPeersUpdated
 import 'transfer_protocol.dart';
@@ -17,7 +18,7 @@ class ReceiveService {
   final PeerManager peerManager; // To notify UI after avatar update
 
   // Optional callback to notify the facade/UI about successfully received files
-  final Function(String filePath, String senderUsername)? onFileReceivedCallback;
+  final void Function(FileReceivedEvent event)? onFileReceivedCallback;
 
   ReceiveService({
     required this.fileTransferManager,
@@ -182,7 +183,12 @@ class ReceiveService {
       }
     } else {
       zprint('✅ File transfer finalized successfully.');
-      onFileReceivedCallback?.call(fileTransfer.destination_filename, fileTransfer.senderUsername);
+      onFileReceivedCallback?.call(FileReceivedEvent(
+        filePath: fileTransfer.destination_filename,
+        senderUsername: fileTransfer.senderUsername,
+        fileSize: fileTransfer.size,
+        speedMBps: fileTransfer.getSpeedMBps(),
+      ));
     }
   }
 

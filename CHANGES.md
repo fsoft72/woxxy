@@ -1,5 +1,22 @@
 # Changes Log
 
+## Remove UI side effects from the `FileTransfer` model
+
+FileTransfer.end() and FileTransferManager no longer touch NotificationManager or FileHistory. ReceiveService emits a typed FileReceivedEvent (path, sender, size, speed) through NetworkService.onFileReceived, and HomePage is the single consumer that records history and shows the notification. Added event assertions to the loopback test and a layering guard test.
+
+### Files
+- `lib/models/file_received_event.dart`
+- `lib/models/file_transfer.dart`
+- `lib/models/file_transfer_manager.dart`
+- `lib/services/network/receive_service.dart`
+- `lib/services/network_service.dart`
+- `lib/main.dart`
+- `lib/screens/home.dart`
+- `test/transfer_loopback_test.dart`
+- `test/layering_test.dart`
+
+---
+
 ## Fix notification click on Linux and the fixed notification id
 
 Linux now registers the same click handler as the other platforms (it only logged before), so clicking a file received notification opens the folder; every notification gets an incrementing id instead of always 0. Includes the previously uncommitted Linux payload workaround in this file. Added unit tests.

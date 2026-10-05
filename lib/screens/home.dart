@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as path;
 import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/peer.dart';
@@ -24,14 +25,9 @@ class _HomeContentState extends State<HomeContent> {
   void initState() {
     super.initState();
     // Listen to file received events from the NetworkService facade
-    widget.networkService.onFileReceived.listen((message) {
+    widget.networkService.onFileReceived.listen((event) {
       if (!mounted) return;
-      // The message format is now simpler, e.g., "Received: filename.ext from SenderName"
-      // We can just display the message directly in a snackbar
-      showSnackbar(
-        context,
-        message, // Display the message directly
-      );
+      showSnackbar(context, 'Received: ${path.basename(event.filePath)} from ${event.senderUsername}');
     });
   }
 

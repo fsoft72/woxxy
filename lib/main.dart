@@ -272,7 +272,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     // Start network service *after* setting username (and potentially IP)
     await _networkService.start(); // Start discovers peers, etc.
 
-    FileTransferManager.instance.setFileHistory(_fileHistory);
     _setupFileReceivedListener();
 
     if (mounted) {
@@ -285,40 +284,24 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   // Removed _loadSettings method as initial user is passed via constructor
 
   void _setupFileReceivedListener() {
-    _networkService.onFileReceived.listen((fileInfo) async {
-      // Ensure mounted check
+    _networkService.onFileReceived.listen((event) async {
       if (!mounted) return;
 
-      final parts = fileInfo.split('|');
-      if (parts.length >= 4) {
-        final filePath = parts[0];
-        final fileSizeMB = double.tryParse(parts[1]) ?? 0.0; // Safer parsing
-        final speedMBps = double.tryParse(parts[3]) ?? 0.0; // Safer parsing
-        final senderUsername = parts.length >= 5 ? parts[4] : 'Unknown';
+      setState(() {
+        _fileHistory.addEntry(FileHistoryEntry(
+          destinationPath: event.filePath,
+          senderUsername: event.senderUsername,
+          fileSize: event.fileSize,
+          uploadSpeedMBps: event.speedMBps,
+        ));
+      });
 
-        final entry = FileHistoryEntry(
-          destinationPath: filePath,
-          senderUsername: senderUsername,
-          fileSize: (fileSizeMB * 1024 * 1024).toInt(),
-          uploadSpeedMBps: speedMBps,
-        );
-
-        // Check mounted again before setState
-        if (!mounted) return;
-        setState(() {
-          _fileHistory.addEntry(entry);
-        });
-
-        // Show notification for all received files
-        await NotificationManager.instance.showFileReceivedNotification(
-          filePath: filePath,
-          senderUsername: senderUsername,
-          fileSizeMB: fileSizeMB,
-          speedMBps: speedMBps,
-        );
-      } else {
-        zprint("⚠️ Received invalid file info format: $fileInfo");
-      }
+      await NotificationManager.instance.showFileReceivedNotification(
+        filePath: event.filePath,
+        senderUsername: event.senderUsername,
+        fileSizeMB: event.fileSizeMB,
+        speedMBps: event.speedMBps,
+      );
     });
   }
 

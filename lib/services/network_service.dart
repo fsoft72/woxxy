@@ -6,6 +6,7 @@ import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/services/settings_service.dart';
 
 import '../models/avatars.dart';
+import '../models/file_received_event.dart';
 import '../models/file_transfer_manager.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
@@ -42,13 +43,13 @@ class NetworkService {
 
   // Stream Controllers (if needed publicly)
   // Note: Peer stream is now accessed via PeerManager
-  final _fileReceivedController = StreamController<String>.broadcast(); // Example if UI needs direct notification
+  final _fileReceivedController = StreamController<FileReceivedEvent>.broadcast();
 
   // --- Public Streams & Getters ---
   Stream<List<Peer>> get peerStream => _peerManager.peerStream;
   List<Peer> get currentPeers => _peerManager.currentPeers;
-  // Expose file received stream if UI needs it directly from here
-  Stream<String> get onFileReceived => _fileReceivedController.stream;
+  /// Emits one typed event for every file that was received and verified
+  Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
   // Expose current IP address if needed externally
   String? get currentIpAddress => _currentIpAddress;
 
@@ -162,11 +163,10 @@ class NetworkService {
   // --- Internal Helper Methods ---
 
   // Callback for ReceiveService to notify the facade when a file is fully received
-  void _handleFileReceived(String filePath, String senderUsername) {
-    zprint('🎉 Facade notified: File received from $senderUsername at $filePath');
-    // Example: Add info to the public stream if UI listens to it
-    // You might want more structured data than just a string here
-    _fileReceivedController.add("Received: ${filePath.split('/').last} from $senderUsername");
+  void _handleFileReceived(FileReceivedEvent event) {
+    zprint('🎉 Facade notified: File received from ${event.senderUsername} at ${event.filePath}');
+    if (_fileReceivedController.isClosed) return;
+    _fileReceivedController.add(event);
   }
 
   Future<void> _loadCurrentUserDetails() async {

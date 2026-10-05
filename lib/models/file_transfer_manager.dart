@@ -1,6 +1,5 @@
 import 'file_transfer.dart';
 import 'dart:io';
-import 'history.dart';
 import 'package:woxxy/funcs/debug.dart'; // Import zprint
 
 /// Manages multiple file transfers from different sources
@@ -13,12 +12,6 @@ class FileTransferManager {
 
   /// Path where downloaded files will be stored
   String downloadPath;
-
-  /// File history manager
-  FileHistory? _fileHistory;
-
-  // Instance of AvatarStore - No longer needed here as processing moved to NetworkService
-  // final AvatarStore _avatarStore = AvatarStore();
 
   /// Private constructor
   FileTransferManager._({required this.downloadPath});
@@ -42,12 +35,6 @@ class FileTransferManager {
       throw StateError('FileTransferManager not initialized. Call FileTransferManager() with downloadPath first.');
     }
     return _instance!;
-  }
-
-  /// Set the FileHistory instance for tracking transfers
-  void setFileHistory(FileHistory history) {
-    _fileHistory = history;
-    zprint("📜 FileHistory instance set for FileTransferManager.");
   }
 
   /// Creates a new file transfer instance and adds it to the manager
@@ -79,7 +66,6 @@ class FileTransferManager {
         senderUsername, // Corrected parameter name if it was mismatched
         metadata, // Pass metadata to FileTransfer.start
         effectiveMd5, // Pass the derived/provided checksum
-        onTransferComplete: _handleTransferComplete, // Callback on successful end()
         sourceIp: sourceIp,
       );
 
@@ -205,39 +191,5 @@ class FileTransferManager {
       zprint('❌ Error updating download path: $e\n$s');
       return false;
     }
-  }
-
-  /// Callback executed when a FileTransfer's end() method completes successfully.
-  void _handleTransferComplete(FileTransfer transfer) {
-    // Key is the source IP stored in the transfer object
-    final key = transfer.source_ip;
-    zprint("🎉 Transfer complete callback triggered for key '$key'.");
-
-    if (_fileHistory != null) {
-      // Check the type from metadata stored in the transfer object
-      final transferType = transfer.metadata['type'] as String? ?? 'FILE';
-
-      if (transferType == 'AVATAR_FILE') {
-        // Avatar processing logic moved to NetworkService after end() succeeds
-        zprint('🖼️ Avatar transfer complete callback, skipping history entry.');
-        // The actual avatar processing (reading file, storing in AvatarStore, deleting file)
-        // should happen in NetworkService *after* `end(key)` returns true.
-      } else {
-        // Add regular files to history
-        zprint('📜 Adding transfer to history: ${transfer.destination_filename}');
-        final entry = FileHistoryEntry(
-          destinationPath: transfer.destination_filename,
-          senderUsername: transfer.senderUsername,
-          fileSize: transfer.size,
-          uploadSpeedMBps: transfer.getSpeedMBps(),
-        );
-        _fileHistory!.addEntry(entry);
-      }
-    } else {
-      zprint("⚠️ FileHistory not set, cannot add entry for completed transfer.");
-    }
-
-    // No need to notify PeerManager here, NetworkService handles avatar updates.
-    // Regular file completion doesn't require peer list UI refresh typically.
   }
 } // End of FileTransferManager class

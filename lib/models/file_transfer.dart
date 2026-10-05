@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/filename.dart';
-import 'package:woxxy/models/notification_manager.dart';
 
 /// Collects the single digest emitted by a chunked hash conversion.
 class _DigestSink implements Sink<Digest> {
@@ -18,8 +17,6 @@ class _DigestSink implements Sink<Digest> {
   @override
   void close() {}
 }
-
-typedef OnTransferComplete = void Function(FileTransfer);
 
 /// Represents a single file transfer operation with progress tracking
 class FileTransfer {
@@ -41,9 +38,6 @@ class FileTransfer {
   /// Username of the sender, as reported in metadata
   final String senderUsername;
 
-  /// Callback when transfer completes successfully (after end() returns true)
-  final OnTransferComplete? onTransferComplete;
-
   /// Expected MD5 checksum of the file, as reported in metadata
   final String? expectedMd5;
 
@@ -64,7 +58,6 @@ class FileTransfer {
     required this.senderUsername,
     required this.metadata, // Initialize metadata
     required this.expectedMd5,
-    this.onTransferComplete,
   }) {
     // Decide if we need to buffer data for MD5 check
     // FIX: Add '!' after expectedMd5 when accessing isNotEmpty
@@ -86,8 +79,7 @@ class FileTransfer {
       String senderUsername,
       Map<String, dynamic> metadata, // Accept metadata map
       String? expectedMd5, // Accept expected checksum
-      {OnTransferComplete? onTransferComplete,
-      String? sourceIp}) async {
+      {String? sourceIp}) async {
     try {
       zprint("🏁 Starting new file transfer preparation for '$original_filename' from '$key'");
       zprint("   Download Path: $downloadPath");
@@ -134,7 +126,6 @@ class FileTransfer {
         senderUsername: senderUsername,
         metadata: metadata, // Store metadata
         expectedMd5: expectedMd5,
-        onTransferComplete: onTransferComplete,
       );
     } catch (e, s) {
       zprint('❌ Error creating FileTransfer for key $key: $e\n$s');
@@ -197,7 +188,8 @@ class FileTransfer {
     }
   }
 
-  /// Finalizes the transfer: closes the file, verifies MD5, calls completion callback, and triggers notification.
+  /// Finalizes the transfer: closes the file and verifies the MD5. Has no side effects beyond the file itself;
+  /// the caller decides about history and notifications.
   /// Returns `true` if the transfer is considered successful (file closed, MD5 matches if applicable).
   /// Returns `false` if MD5 verification fails (file is deleted in this case).
   Future<bool> end() async {
@@ -225,24 +217,6 @@ class FileTransfer {
       } else {
         zprint('   Skipping MD5 verification (not required or not possible).');
         success = true; // Assume success if no MD5 check needed
-      }
-
-      // If successful so far, call the completion callback and show notification
-      if (success) {
-        onTransferComplete?.call(this); // Call internal completion callback (e.g., for history add)
-
-        // Trigger user notification only for successful, non-avatar files
-        final transferType = metadata['type'] as String? ?? 'FILE';
-        if (transferType != 'AVATAR_FILE') {
-          NotificationManager.instance.showFileReceivedNotification(
-            filePath: destination_filename,
-            senderUsername: senderUsername,
-            fileSizeMB: size / (1024 * 1024),
-            speedMBps: getSpeedMBps(),
-          );
-        } else {
-          zprint("   Skipping notification for AVATAR_FILE type.");
-        }
       }
 
       return success; // Return true if closed and MD5 passed (or wasn't needed)
