@@ -1,5 +1,14 @@
 # Changes Log
 
+## Make the current user non-nullable in HomePage
+
+_currentUser is always the initial user, so it is now non-nullable and the unreachable null branches in _getScreens and build are gone. The screen list is still built on each build because SettingsScreen must receive the updated user (it is cheap). HomePage needs tray and window plugins, so there is no widget test for it: covered by analyzer and the existing suite.
+
+### Files
+- `lib/screens/home_page.dart`
+
+---
+
 ## Remove outdated and noisy comments
 
 Deleted comments that described history instead of the code (Removed userId, Removed _loadSettings, FIX notes, class end markers, 'Consider...' notes, import labels, commented out code). Comment-only change: analyzer clean and the full suite still passes.

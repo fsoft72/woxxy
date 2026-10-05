@@ -32,7 +32,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   late final NetworkService _networkService = widget.services.networkService;
   late final SettingsService _settingsService = widget.services.settingsService;
   int _selectedIndex = 1; // Default to home screen
-  User? _currentUser;
+  late User _currentUser = widget.initialUser;
   bool _isLoading = true;
   String? _startupError;
   final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -40,8 +40,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   @override
   void initState() {
     super.initState();
-    // Use the initial user data passed to the widget
-    _currentUser = widget.initialUser;
     _initializeApp();
   }
 
@@ -63,7 +61,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   }
 
   Future<void> _startNetwork() async {
-    _networkService.setUsername(_currentUser!.username);
+    _networkService.setUsername(_currentUser.username);
 
     // Start network service *after* setting username (and potentially IP)
     try {
@@ -146,20 +144,11 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   }
 
   List<Widget> _getScreens() {
-    // Ensure _currentUser is not null before building screens dependent on it
-    if (_currentUser == null) {
-      // This shouldn't happen if initialized correctly, but handle defensively
-      return [
-        const Center(child: Text("Error: User data not available.")),
-        const Center(child: CircularProgressIndicator()), // Home placeholder
-        const Center(child: Text("Error: User data not available.")),
-      ];
-    }
     return [
       HistoryScreen(history: widget.services.history),
       HomeContent(networkService: _networkService, notificationManager: widget.services.notificationManager),
       SettingsScreen(
-        user: _currentUser!,
+        user: _currentUser,
         onUserUpdated: _updateUser,
         fileTransferManager: widget.services.fileTransferManager,
       )
@@ -172,8 +161,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     if (startupError != null) {
       return StartupErrorView(message: startupError, onRetry: _retryStart);
     }
-    if (_isLoading || _currentUser == null) {
-      // Check for currentUser null as well
+    if (_isLoading) {
       return const Scaffold(
         body: Center(
           child: CircularProgressIndicator(),

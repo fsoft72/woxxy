@@ -59,7 +59,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
 - [x] **Outdated and noisy comments** - Leftovers such as "Removed userId", "Removed _loadSettings method", "FIX: Add '!'", "// End of FileTransferManager class" and the "Consider how to handle..." notes describe history, not the code. Delete them or turn them into real decisions.
   - File(s): `lib/services/settings_service.dart`, `lib/screens/home_page.dart`, `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
-- [ ] **Dead defensive code in `HomePage`** - `_currentUser` is always set from `initialUser`, so the null branches in `_getScreens` and `build` can never run, and `_getScreens()` rebuilds the screen list on every build. Make `_currentUser` non-nullable and build the list once.
+- [x] **Dead defensive code in `HomePage`** - `_currentUser` is always set from `initialUser`, so the null branches in `_getScreens` and `build` can never run, and `_getScreens()` rebuilds the screen list on every build. Make `_currentUser` non-nullable and build the list once.
   - File(s): `lib/screens/home_page.dart`
 - [ ] **Logging in the build path of the peer list** - `StreamBuilder` calls `zprint` twice per rebuild; in release builds the strings are still built. Use `zprintLazy` or remove them.
   - File(s): `lib/screens/home.dart`
