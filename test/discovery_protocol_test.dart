@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/services/network/discovery_protocol.dart';
@@ -133,5 +134,44 @@ void main() {
     final peer = peers.currentPeers.firstWhere((p) => p.id == '127.0.0.1');
     expect(peer.name, 'Zoë: 🚀');
     expect(peer.port, 9999);
+  });
+
+  test('DiscoveryService answers an avatar request again only after the minimum interval', () async {
+    final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    probe.close();
+
+    var now = DateTime(2026, 1, 1);
+    final answered = <String>[];
+    final service = DiscoveryService(
+      discoveryPort: port,
+      mainServerPort: 8090,
+      peerManager: PeerManager(avatarStore: AvatarStore()),
+      avatarStore: AvatarStore(),
+      sendAvatarCallback: (peer) async => answered.add(peer.id),
+      clock: () => now,
+    );
+    await service.start('10.255.255.1', 'me');
+
+    final sender = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    Future<void> request(int expectedCount) async {
+      sender.send(encodeAvatarRequest(ip: '127.0.0.1', port: 1), InternetAddress.loopbackIPv4, port);
+      final deadline = DateTime.now().add(const Duration(milliseconds: 500));
+      while (answered.length < expectedCount && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100)); // Time for a wrongly answered one
+    }
+
+    await request(1);
+    await request(2); // Same instant: ignored
+    expect(answered, hasLength(1));
+
+    now = now.add(AVATAR_REQUEST_MIN_INTERVAL);
+    await request(2);
+    expect(answered, hasLength(2));
+
+    sender.close();
+    await service.dispose();
   });
 }

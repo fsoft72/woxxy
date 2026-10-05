@@ -20,3 +20,6 @@ const int MAX_CONCURRENT_CONNECTIONS = 16;
 
 /// An incoming transfer that sends nothing for this long is aborted
 const Duration RECEIVE_IDLE_TIMEOUT = Duration(seconds: 30);
+
+/// Minimum time between two avatar requests answered for the same peer address
+const Duration AVATAR_REQUEST_MIN_INTERVAL = Duration(seconds: 5);

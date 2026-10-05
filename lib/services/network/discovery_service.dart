@@ -22,6 +22,12 @@ class DiscoveryService {
   /// Delay before the socket is re-bound after it was lost unexpectedly.
   final Duration restartDelay;
 
+  /// Source of the current time; injectable so tests can control the avatar request limit.
+  final DateTime Function() _now;
+
+  /// When an avatar request of each address was last answered.
+  final Map<String, DateTime> _lastAvatarRequestAnswered = {};
+
   RawDatagramSocket? _discoverySocket;
   Timer? _discoveryTimer;
   Timer? _restartTimer;
@@ -37,7 +43,8 @@ class DiscoveryService {
     required this.avatarStore,
     required this.sendAvatarCallback,
     this.restartDelay = const Duration(seconds: 3),
-  });
+    DateTime Function()? clock,
+  }) : _now = clock ?? DateTime.now;
 
   /// Binds the discovery socket and starts announcing this device.
   Future<void> start(String currentIpAddress, String currentUsername) async {
@@ -221,6 +228,16 @@ class DiscoveryService {
       zprint("⚠️ AVATAR_REQUEST mismatch: declared IP (${message.ip}) != source (${sourceAddress.address}). Ignoring.");
       return;
     }
+
+    // Every answer reads the avatar and opens a TCP connection, so a flood must not be followed
+    final now = _now();
+    final last = _lastAvatarRequestAnswered[message.ip];
+    if (last != null && now.difference(last) < AVATAR_REQUEST_MIN_INTERVAL) {
+      zprint('⏳ Ignoring avatar request from ${message.ip}: asked again too soon.');
+      return;
+    }
+    _lastAvatarRequestAnswered[message.ip] = now;
+    _lastAvatarRequestAnswered.removeWhere((_, at) => now.difference(at) >= AVATAR_REQUEST_MIN_INTERVAL);
 
     zprint('🖼️ Received avatar request from ${message.ip}:${message.port}');
     // Temporary peer used only to send the avatar back to the requester's listening port

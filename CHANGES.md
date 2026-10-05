@@ -1,5 +1,16 @@
 # Changes Log
 
+## Rate limit avatar requests per address
+
+DiscoveryService answers an avatar request from the same address at most once per AVATAR_REQUEST_MIN_INTERVAL (injectable clock). Added a test.
+
+### Files
+- `lib/config/network_constants.dart`
+- `lib/services/network/discovery_service.dart`
+- `test/discovery_protocol_test.dart`
+
+---
+
 ## Apply backpressure on disk writes
 
 FileTransfer.write waits for fileSink.flush() once WRITE_FLUSH_THRESHOLD_BYTES (4 MiB) are buffered, so a slow disk throttles the sender through TCP instead of growing memory. Added a test.
