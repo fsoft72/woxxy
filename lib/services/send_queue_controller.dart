@@ -46,7 +46,7 @@ class SendQueueController extends ChangeNotifier {
   final Queue<QueuedFile> _queue = Queue<QueuedFile>();
   final List<QueuedFile> _completed = [];
   bool _processing = false;
-  bool _cancelled = false;
+  int _generation = 0; // Bumped by cancelAll so a loop (or a late result) of an older run can tell it is stale
   bool _disposed = false;
   String? _activeTransferId;
 
@@ -120,7 +120,6 @@ class SendQueueController extends ChangeNotifier {
     if (skipped.isNotEmpty) onMessage?.call('Skipped (not a readable file): ${skipped.join(', ')}');
     if (accepted.isEmpty) return;
 
-    _cancelled = false;
     if (!_isTransferring) {
       _isTransferring = true;
       _progress = 0;
@@ -143,7 +142,7 @@ class SendQueueController extends ChangeNotifier {
       _activeTransferId = null;
     }
 
-    _cancelled = true;
+    _generation++;
     _isTransferring = false;
     _queue.clear();
     _completed.clear();
@@ -155,8 +154,10 @@ class SendQueueController extends ChangeNotifier {
   Future<void> _processQueue() async {
     if (_processing || _queue.isEmpty) return;
     _processing = true;
+    final generation = _generation;
+    bool stale() => generation != _generation || _disposed;
 
-    while (_queue.isNotEmpty && !_cancelled && !_disposed) {
+    while (_queue.isNotEmpty && !stale()) {
       final item = _queue.first;
       _currentFileName = item.name;
       _progress = 0;
@@ -173,7 +174,7 @@ class SendQueueController extends ChangeNotifier {
 
       try {
         await _send(transferId, item.path, (totalSize, bytesSent) {
-          if (_disposed || _cancelled) return;
+          if (stale()) return;
           _preparing = false;
           // Chunks arrive far faster than the UI needs; the final update is always delivered
           if (!_throttle.shouldEmit(force: bytesSent >= totalSize)) return;
@@ -184,12 +185,12 @@ class SendQueueController extends ChangeNotifier {
         });
         stopwatch.stop();
 
-        if (_cancelled || _disposed) break;
+        if (stale()) break;
         _onSuccess(item, stopwatch.elapsed);
         await Future<void>.delayed(_pauseAfterSuccess);
       } catch (e, stackTrace) {
         zprint('❌ Error during file transfer: $e\n$stackTrace');
-        if (_cancelled || _disposed) break;
+        if (stale()) break;
         _onFailure(item, e);
         await Future<void>.delayed(_pauseAfterFailure);
       } finally {
@@ -201,6 +202,8 @@ class SendQueueController extends ChangeNotifier {
     _processing = false;
     if (_queue.isEmpty) _isTransferring = false;
     _notify();
+    // Files added after a cancel while this loop was still finishing need a new loop
+    if (_queue.isNotEmpty && !_disposed) unawaited(_processQueue());
   }
 
   void _onSuccess(QueuedFile item, Duration elapsed) {

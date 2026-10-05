@@ -93,6 +93,31 @@ void main() {
     expect(messages.first, contains('(10 B in'), reason: 'sizes use the shared formatBytes');
   });
 
+  test('files added right after cancelAll are all sent and none is failed by the cancelled send', () async {
+    final gate = Completer<void>();
+    final c = controller((id, path, onProgress) async {
+      sent.add(path.split('/').last);
+      if (path.endsWith('a.txt')) {
+        await gate.future;
+        throw Exception('socket destroyed');
+      }
+      onProgress(10, 10);
+      return id;
+    });
+
+    await c.addFiles([await makeFile('a.txt')]);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    c.cancelAll();
+    await c.addFiles([await makeFile('b.txt'), await makeFile('c.txt')]);
+    gate.complete(); // The cancelled send now rejects, after the new files were queued
+    await idle(c);
+
+    expect(sent, ['a.txt', 'b.txt', 'c.txt']);
+    expect(c.completed.map((f) => f.name), ['b.txt', 'c.txt']);
+    expect(c.completed.every((f) => f.isCompleted), isTrue);
+    expect(messages.where((m) => m.startsWith('Error')), isEmpty);
+  });
+
   test('a failure is recorded and the next file is still sent', () async {
     final c = controller((id, path, onProgress) async {
       if (path.endsWith('bad.txt')) throw Exception('peer vanished');

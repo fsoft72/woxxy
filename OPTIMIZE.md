@@ -20,7 +20,7 @@ No critical issues found.
 
 ## Medium
 
-- [ ] **`cancelAll` followed quickly by `addFiles` can fail the wrong file** - `addFiles` resets the shared `_cancelled` flag, so when the cancelled send rejects a moment later, the loop's `catch` no longer sees `_cancelled`, calls `_onFailure` and `_queue.removeFirst()`, which removes the first of the new files. Give every run a generation number (or token) captured by the loop and ignore results of an old generation.
+- [x] **`cancelAll` followed quickly by `addFiles` can fail the wrong file** - `addFiles` resets the shared `_cancelled` flag, so when the cancelled send rejects a moment later, the loop's `catch` no longer sees `_cancelled`, calls `_onFailure` and `_queue.removeFirst()`, which removes the first of the new files. Give every run a generation number (or token) captured by the loop and ignore results of an old generation.
   - File(s): `lib/services/send_queue_controller.dart` (lines 102, 121-135, 172-176)
 - [x] **A closed connection while waiting for the ready signal is treated as "proceed anyway"** - On `onDone` and on `onError` `_waitForReadySignal` completes normally, so a receiver that rejected the transfer (size limit, connection limit, add failed) still gets the whole file pushed into a dead socket, and the real error only appears later from `addStream`. Make closure and error fail fast with a clear exception and keep the "proceed" behavior only for the timeout. Also a first chunk shorter than 3 bytes is ignored and costs the full 5 second timeout; buffer until `READY_SIGNAL_LENGTH` bytes.
   - File(s): `lib/services/network/send_service.dart` (lines 180-233)

@@ -1,5 +1,9 @@
 # Changes Log
 
+## Use a generation token in the send queue
+
+`SendQueueController` replaces the shared cancelled flag with a generation number bumped by `cancelAll`. A cancelled send that rejects late is ignored and can no longer fail the first of the files added afterwards; a new loop starts for them. Test in `test/send_queue_controller_test.dart`.
+
 ## Skip invalid paths when files are queued
 
 `SendQueueController.addFiles` now checks every path first, skips folders and vanished files with a message, and only then touches the queue state, so the UI cannot get stuck. `_pickFiles` ignores null paths. Tests in `test/send_queue_controller_test.dart`.
