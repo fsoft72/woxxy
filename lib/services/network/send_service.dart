@@ -8,6 +8,7 @@ import 'package:woxxy/funcs/debug.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/peer.dart';
 import 'transfer_protocol.dart';
+import '../../config/network_constants.dart';
 
 /// Callback function type for file transfer progress updates
 typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
@@ -158,9 +159,8 @@ class SendService {
       }
       
       // Check reasonable file size limits (e.g., max 10MB for avatar)
-      const maxAvatarSize = 10 * 1024 * 1024; // 10MB
-      if (fileSize > maxAvatarSize) {
-        zprint('🚫 Cannot send avatar: File too large (${fileSize ~/ 1024 ~/ 1024}MB > ${maxAvatarSize ~/ 1024 ~/ 1024}MB)');
+      if (fileSize > MAX_AVATAR_SIZE_BYTES) {
+        zprint('🚫 Cannot send avatar: File too large (${fileSize ~/ BYTES_PER_MB}MB > ${MAX_AVATAR_SIZE_BYTES ~/ BYTES_PER_MB}MB)');
         return false;
       }
       
@@ -195,7 +195,7 @@ class SendService {
       bool signalReceived = false;
       
       // Set up timeout
-      final timeout = Timer(const Duration(seconds: 5), () {
+      final timeout = Timer(READY_SIGNAL_TIMEOUT, () {
         if (!completer.isCompleted) {
           subscription.cancel();
           completer.complete(); // Continue even without signal
@@ -286,7 +286,7 @@ class SendService {
 
     try {
       zprint("  [Send Meta] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
-      socket = await Socket.connect(receiver.address, receiver.port).timeout(const Duration(seconds: 10));
+      socket = await Socket.connect(receiver.address, receiver.port).timeout(CONNECT_TIMEOUT);
       
       // Configure socket for better Windows compatibility
       socket.setOption(SocketOption.tcpNoDelay, true);

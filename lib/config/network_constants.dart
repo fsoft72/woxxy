@@ -1,0 +1,16 @@
+// ignore_for_file: constant_identifier_names
+
+/// TCP port where every device accepts file transfers
+const int TRANSFER_PORT = 8090;
+
+/// UDP port used for peer discovery broadcasts and avatar requests
+const int DISCOVERY_PORT = 8091;
+
+/// Time between two discovery announcements
+const Duration DISCOVERY_PING_INTERVAL = Duration(seconds: 5);
+
+/// How long the sender waits for the receiver's ready signal before sending anyway
+const Duration READY_SIGNAL_TIMEOUT = Duration(seconds: 5);
+
+/// Maximum time to open the TCP connection to a peer
+const Duration CONNECT_TIMEOUT = Duration(seconds: 10);

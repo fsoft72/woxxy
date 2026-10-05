@@ -9,6 +9,7 @@ import 'package:woxxy/funcs/throttle.dart';
 import 'package:woxxy/funcs/utils.dart';
 
 import 'network/send_service.dart';
+import '../config/transfer_constants.dart';
 
 /// Sends one file; returns when the transfer finished. Matches [NetworkService.sendFile] for one peer.
 typedef SendFileFunction = Future<String> Function(
@@ -152,7 +153,7 @@ class SendQueueController extends ChangeNotifier {
           if (!_throttle.shouldEmit(force: bytesSent >= totalSize)) return;
           final seconds = stopwatch.elapsedMilliseconds / 1000;
           _progress = totalSize == 0 ? 100 : (bytesSent / totalSize) * 100;
-          if (seconds > 0) _speedMBps = bytesSent / seconds / (1024 * 1024);
+          if (seconds > 0) _speedMBps = bytesSent / seconds / BYTES_PER_MB;
           _notify();
         });
         stopwatch.stop();
@@ -177,7 +178,7 @@ class SendQueueController extends ChangeNotifier {
 
   void _onSuccess(QueuedFile item, Duration elapsed) {
     final seconds = elapsed.inMilliseconds / 1000;
-    final speed = seconds > 0 ? item.size / seconds / (1024 * 1024) : 0.0;
+    final speed = seconds > 0 ? item.size / seconds / BYTES_PER_MB : 0.0;
 
     _progress = 100;
     _transferComplete = true;

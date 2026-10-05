@@ -47,7 +47,7 @@ void main() {
     );
     expect(results.every((r) => r), isTrue);
 
-    final paths = manager.files.values.map((t) => t.destination_filename).toSet();
+    final paths = manager.files.values.map((t) => t.destinationFilename).toSet();
     expect(paths.length, 10);
     for (var i = 0; i < 10; i++) {
       await manager.handleSocketClosure('k$i');
@@ -58,7 +58,7 @@ void main() {
     final other = await Directory.systemTemp.createTemp('woxxy_avatar_');
     try {
       expect(await manager.add('av', 'me.png', 1, 'bob', {}, directory: other.path), isTrue);
-      expect(path.dirname(manager.files['av']!.destination_filename), other.path);
+      expect(path.dirname(manager.files['av']!.destinationFilename), other.path);
       expect(tmp.listSync(), isEmpty);
       await manager.handleSocketClosure('av');
     } finally {

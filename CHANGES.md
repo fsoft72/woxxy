@@ -1,5 +1,29 @@
 # Changes Log
 
+## Centralize constants and style cleanups
+
+Ports, discovery interval, ready-signal and connect timeouts, the avatar size cap and BYTES_PER_MB moved to config/network_constants.dart and transfer_constants.dart (no more literals in services). FileTransfer fields and parameters are camelCase (the lint ignore is gone), and generateTransferId now adds a counter and random part so ids cannot collide. withOpacity was already replaced in the extracted widgets. Added guard and uniqueness tests.
+
+### Files
+- `lib/config/network_constants.dart`
+- `lib/config/transfer_constants.dart`
+- `lib/funcs/utils.dart`
+- `lib/models/file_transfer.dart`
+- `lib/models/file_transfer_manager.dart`
+- `lib/models/file_received_event.dart`
+- `lib/screens/history.dart`
+- `lib/services/network_service.dart`
+- `lib/services/network/send_service.dart`
+- `lib/services/network/discovery_service.dart`
+- `lib/services/network/receive_service.dart`
+- `lib/services/send_queue_controller.dart`
+- `test/constants_test.dart`
+- `test/filename_test.dart`
+- `test/file_transfer_manager_test.dart`
+- `test/file_transfer_md5_test.dart`
+
+---
+
 ## Inject dependencies instead of singletons
 
 FileTransferManager, AvatarStore and NotificationManager are plain classes now (no static instances), NetworkService receives its collaborators and a single SettingsService, and widgets get the AvatarStore/NotificationManager/FileTransferManager they need through constructors. main() builds everything once in AppServices.create and passes it to MyApp/HomePage. Tests build isolated instances (test/support/test_services.dart) and a guard test checks no singleton came back.

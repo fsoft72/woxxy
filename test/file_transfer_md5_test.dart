@@ -22,7 +22,7 @@ void main() {
     }
 
     expect(await transfer.end(), isTrue);
-    expect(File(transfer.destination_filename).readAsBytesSync(), data);
+    expect(File(transfer.destinationFilename).readAsBytesSync(), data);
   });
 
   test('a mismatching checksum deletes the file and fails', () async {
@@ -30,19 +30,19 @@ void main() {
     await transfer.write([9, 9, 9]);
 
     expect(await transfer.end(), isFalse);
-    expect(File(transfer.destination_filename).existsSync(), isFalse);
+    expect(File(transfer.destinationFilename).existsSync(), isFalse);
   });
 
   test('closeOnSocketClosure keeps a file whose checksum matches and deletes one that does not', () async {
     final good = await start(md5.convert([1, 2, 3]).toString(), 3);
     await good.write([1, 2, 3]);
     await good.closeOnSocketClosure();
-    expect(File(good.destination_filename).existsSync(), isTrue);
+    expect(File(good.destinationFilename).existsSync(), isTrue);
 
     final bad = await start(md5.convert([1, 2, 3]).toString(), 3);
     await bad.write([1, 2]);
     await bad.closeOnSocketClosure();
-    expect(File(bad.destination_filename).existsSync(), isFalse);
+    expect(File(bad.destinationFilename).existsSync(), isFalse);
   });
 
   test('without a checksum the transfer is accepted as is', () async {

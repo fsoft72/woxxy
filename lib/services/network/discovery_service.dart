@@ -7,13 +7,14 @@ import '../../models/peer.dart';
 import '../../models/peer_manager.dart'; // Import PeerManager
 import '../../models/avatars.dart'; // Import AvatarStore
 import 'discovery_protocol.dart';
+import '../../config/network_constants.dart';
 
 // Define a type for the sendAvatar callback
 typedef SendAvatarCallback = Future<void> Function(Peer receiver);
 
 class DiscoveryService {
   final int discoveryPort;
-  final int mainServerPort; // Port where the main TCP server listens (e.g., 8090)
+  final int mainServerPort; // Port where the main TCP server listens 
   final PeerManager peerManager;
   final AvatarStore avatarStore;
   final SendAvatarCallback sendAvatarCallback; // Callback to trigger sending avatar
@@ -28,8 +29,6 @@ class DiscoveryService {
   String? _currentIpAddress; // Local IP address
   String _currentUsername = 'WoxxyUser'; // Local username
   String? _avatarHash; // MD5 of the local avatar, announced so peers can refresh their cache
-
-  static const Duration _pingInterval = Duration(seconds: 5);
 
   DiscoveryService({
     required this.discoveryPort,
@@ -141,7 +140,7 @@ class DiscoveryService {
   void _startDiscoveryBroadcaster() {
     zprint('🔍 Starting peer discovery broadcast service...');
     _discoveryTimer?.cancel(); // Cancel existing timer if any
-    _discoveryTimer = Timer.periodic(_pingInterval, (_) => _broadcastAnnouncement());
+    _discoveryTimer = Timer.periodic(DISCOVERY_PING_INTERVAL, (_) => _broadcastAnnouncement());
   }
 
   /// Sends one announcement to the global broadcast address and to the local /24 broadcast address.

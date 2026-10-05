@@ -22,3 +22,6 @@ const int MAX_TRANSFER_SIZE_BYTES = 64 * 1024 * 1024 * 1024;
 
 /// Largest avatar image accepted or sent (10 MB)
 const int MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024;
+
+/// Bytes in one MB, used for sizes and speeds shown to the user
+const int BYTES_PER_MB = 1024 * 1024;

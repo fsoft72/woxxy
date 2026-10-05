@@ -110,8 +110,8 @@ class FileTransferManager {
       // Try to delete the potentially corrupted file if transfer object is available
       if (transfer != null) {
         try {
-          await File(transfer.destination_filename).delete();
-          zprint("🗑️ Deleted potentially problematic file after error during end(): ${transfer.destination_filename}");
+          await File(transfer.destinationFilename).delete();
+          zprint("🗑️ Deleted potentially problematic file after error during end(): ${transfer.destinationFilename}");
         } catch (_) {} // Ignore delete error
       }
       return false;

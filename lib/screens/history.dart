@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../models/history.dart';
 import '../funcs/utils.dart';
+import '../config/transfer_constants.dart';
 
 class HistoryScreen extends StatefulWidget {
   final FileHistory history;
@@ -33,7 +34,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         itemBuilder: (context, index) {
           final entry = entries[index];
           final filename = path.basename(entry.destinationPath);
-          final fileSizeMB = (entry.fileSize / (1024 * 1024)).toStringAsFixed(1);
+          final fileSizeMB = (entry.fileSize / BYTES_PER_MB).toStringAsFixed(1);
 
           return Dismissible(
             key: Key(entry.destinationPath + entry.createdAt.toString()),

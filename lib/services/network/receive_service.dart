@@ -191,14 +191,14 @@ class ReceiveService {
     if (transferType == TRANSFER_TYPE_AVATAR) {
       final senderIp = info['senderIp'] as String?;
       if (senderIp != null) {
-        await _processReceivedAvatar(fileTransfer.destination_filename, senderIp);
+        await _processReceivedAvatar(fileTransfer.destinationFilename, senderIp);
       } else {
         zprint("⚠️ Avatar received but sender IP missing in metadata.");
       }
     } else {
       zprint('✅ File transfer finalized successfully.');
       onFileReceivedCallback?.call(FileReceivedEvent(
-        filePath: fileTransfer.destination_filename,
+        filePath: fileTransfer.destinationFilename,
         senderUsername: fileTransfer.senderUsername,
         fileSize: fileTransfer.size,
         speedMBps: fileTransfer.getSpeedMBps(),

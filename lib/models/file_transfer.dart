@@ -1,9 +1,8 @@
-// ignore_for_file: non_constant_identifier_names, avoid_print
-
 import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/filename.dart';
 
@@ -21,16 +20,16 @@ class _DigestSink implements Sink<Digest> {
 /// Represents a single file transfer operation with progress tracking
 class FileTransfer {
   /// IP address of the source sending the file (used as the key in FileTransferManager)
-  final String source_ip;
+  final String sourceIp;
 
   /// The filename on the local filesystem where the file will be saved
-  final String destination_filename;
+  final String destinationFilename;
 
   /// Total size of the file in bytes, as reported in metadata
   final int size;
 
   /// File sink for writing the incoming data
-  final IOSink file_sink;
+  final IOSink fileSink;
 
   /// Stopwatch to measure the transfer duration
   final Stopwatch duration;
@@ -50,10 +49,10 @@ class FileTransfer {
   bool _calculatingMd5 = false; // Flag to indicate if we need to hash incoming data
 
   FileTransfer._internal({
-    required this.source_ip,
-    required this.destination_filename,
+    required this.sourceIp,
+    required this.destinationFilename,
     required this.size,
-    required this.file_sink,
+    required this.fileSink,
     required this.duration,
     required this.senderUsername,
     required this.metadata, // Initialize metadata
@@ -64,16 +63,16 @@ class FileTransfer {
     _calculatingMd5 = expectedMd5 != null && expectedMd5!.isNotEmpty && expectedMd5 != "CHECKSUM_ERROR";
     if (_calculatingMd5) {
       _md5Input = md5.startChunkedConversion(_md5Sink);
-      zprint(" M-> MD5 check required for $destination_filename. Incremental hashing enabled.");
+      zprint(" M-> MD5 check required for $destinationFilename. Incremental hashing enabled.");
     }
   }
 
   /// Creates a new FileTransfer instance and prepares the file for writing.
   /// Returns null if the file cannot be created.
-  /// `key` (source_ip) is the identifier used in FileTransferManager.
+  /// `key` (sourceIp) is the identifier used in FileTransferManager.
   static Future<FileTransfer?> start(
       String key, // Typically source IP
-      String original_filename,
+      String originalFilename,
       int size,
       String downloadPath,
       String senderUsername,
@@ -81,7 +80,7 @@ class FileTransfer {
       String? expectedMd5, // Accept expected checksum
       {String? sourceIp}) async {
     try {
-      zprint("🏁 Starting new file transfer preparation for '$original_filename' from '$key'");
+      zprint("🏁 Starting new file transfer preparation for '$originalFilename' from '$key'");
       zprint("   Download Path: $downloadPath");
       zprint("   Size: $size bytes");
       zprint("   Sender: $senderUsername");
@@ -96,9 +95,9 @@ class FileTransfer {
       }
 
       // Never trust the remote name: keep only a safe last path segment
-      final safeFilename = sanitizeFilename(original_filename);
-      if (safeFilename != original_filename) {
-        zprint("   ⚠️ Remote filename '$original_filename' sanitized to '$safeFilename'");
+      final safeFilename = sanitizeFilename(originalFilename);
+      if (safeFilename != originalFilename) {
+        zprint("   ⚠️ Remote filename '$originalFilename' sanitized to '$safeFilename'");
       }
 
       // Generate unique filename to avoid overwriting
@@ -118,10 +117,10 @@ class FileTransfer {
       zprint("   Stopwatch started.");
 
       return FileTransfer._internal(
-        source_ip: sourceIp ?? key,
-        destination_filename: finalPath,
+        sourceIp: sourceIp ?? key,
+        destinationFilename: finalPath,
         size: size,
-        file_sink: sink,
+        fileSink: sink,
         duration: watch,
         senderUsername: senderUsername,
         metadata: metadata, // Store metadata
@@ -134,15 +133,15 @@ class FileTransfer {
   }
 
   /// Writes binary data to the file sink and feeds it to the incremental MD5 if needed.
-  Future<void> write(List<int> binary_data) async {
+  Future<void> write(List<int> binaryData) async {
     try {
-      _md5Input?.add(binary_data);
+      _md5Input?.add(binaryData);
       // Always write to the file sink
-      file_sink.add(binary_data);
+      fileSink.add(binaryData);
       // Avoid awaiting flush here for performance, rely on close() or closeOnSocketClosure()
-      // await file_sink.flush();
+      // await fileSink.flush();
     } catch (e, s) {
-      zprint('❌ Error writing chunk to file sink for $destination_filename: $e\n$s');
+      zprint('❌ Error writing chunk to file sink for $destinationFilename: $e\n$s');
       // Consider how to handle write errors - maybe close and delete?
       // For now, rethrow to let the caller (NetworkService) handle it.
       rethrow;
@@ -152,11 +151,11 @@ class FileTransfer {
   /// Safely closes the file sink when the connection is closed unexpectedly (onDone/onError).
   /// Verifies MD5 if applicable and deletes the file if incomplete or checksum fails.
   Future<void> closeOnSocketClosure() async {
-    zprint("🔌 Closing file sink due to unexpected socket closure: $destination_filename");
+    zprint("🔌 Closing file sink due to unexpected socket closure: $destinationFilename");
     try {
       // Ensure all buffered data is written before closing
-      await file_sink.flush();
-      await file_sink.close();
+      await fileSink.flush();
+      await fileSink.close();
       duration.stop(); // Stop timer as transfer is definitively over (failed or succeeded partially)
       zprint('   File sink flushed and closed.');
 
@@ -193,12 +192,12 @@ class FileTransfer {
   /// Returns `true` if the transfer is considered successful (file closed, MD5 matches if applicable).
   /// Returns `false` if MD5 verification fails (file is deleted in this case).
   Future<bool> end() async {
-    zprint("✅ Finalizing transfer for: $destination_filename");
+    zprint("✅ Finalizing transfer for: $destinationFilename");
     bool success = false;
     try {
       // Ensure data is written and close the file sink
-      await file_sink.flush();
-      await file_sink.close();
+      await fileSink.flush();
+      await fileSink.close();
       duration.stop(); // Stop the timer
       zprint('   File sink flushed and closed. Duration: ${duration.elapsedMilliseconds}ms');
 
@@ -237,13 +236,13 @@ class FileTransfer {
   /// Helper method to safely delete the destination file.
   Future<void> _deleteFile() async {
     try {
-      final file = File(destination_filename);
+      final file = File(destinationFilename);
       if (await file.exists()) {
         await file.delete();
-        zprint("   🗑️ Deleted file: $destination_filename");
+        zprint("   🗑️ Deleted file: $destinationFilename");
       }
     } catch (e) {
-      zprint("   ❌ Error deleting file $destination_filename: $e");
+      zprint("   ❌ Error deleting file $destinationFilename: $e");
     }
   }
 
@@ -252,7 +251,7 @@ class FileTransfer {
     final elapsedSeconds = duration.elapsedMilliseconds / 1000.0;
     if (elapsedSeconds <= 0 || size <= 0) return 0.0;
     // Speed = (Total Bytes / Elapsed Seconds) / Bytes per MB
-    return (size / elapsedSeconds) / (1024 * 1024);
+    return (size / elapsedSeconds) / BYTES_PER_MB;
   }
 
   /// Reserves a unique file path inside [directory] and returns it.

@@ -19,6 +19,7 @@ import 'network/ip_monitor.dart';
 import 'network/receive_service.dart';
 import 'network/send_service.dart';
 import 'network/server_service.dart';
+import '../config/network_constants.dart';
 
 // Re-export the progress callback type if needed by consumers
 export 'network/send_service.dart' show FileTransferProgressCallback;
@@ -37,8 +38,6 @@ typedef IpResolver = Future<String?> Function();
 
 class NetworkService {
   // --- Constants ---
-  static const int _port = 8090;
-  static const int _discoveryPort = 8091;
 
   // --- Dependencies & State ---
   final PeerManager _peerManager;
@@ -101,7 +100,7 @@ class NetworkService {
     );
 
     _serverService = ServerService(
-      port: _port,
+      port: TRANSFER_PORT,
       connectionHandler: _receiveService.handleNewConnection, // Wire Server to ReceiveService
     );
 
@@ -111,8 +110,8 @@ class NetworkService {
     );
 
     _discoveryService = DiscoveryService(
-      discoveryPort: _discoveryPort,
-      mainServerPort: _port,
+      discoveryPort: DISCOVERY_PORT,
+      mainServerPort: TRANSFER_PORT,
       peerManager: _peerManager,
       avatarStore: _avatarStore,
       sendAvatarCallback: _sendService.sendAvatar, // Wire Discovery to SendService for avatar sending

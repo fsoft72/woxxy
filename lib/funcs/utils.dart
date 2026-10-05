@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
@@ -13,14 +14,15 @@ void showSnackbar(BuildContext context, String message) {
   );
 }
 
-/// Generates a unique transfer ID based on filename and timestamp
+int _transferIdCounter = 0;
+final Random _random = Random();
+
+/// Generates a unique transfer ID. A process wide counter and a random part guarantee two ids
+/// differ even for the same filename in the same microsecond.
 String generateTransferId(String filename) {
-  int date = DateTime.now().millisecondsSinceEpoch;
-
-  // calc md5 hash
-  String s = '${filename}_$date';
-
-  return md5.convert(utf8.encode(s)).toString();
+  final date = DateTime.now().microsecondsSinceEpoch;
+  final unique = '${filename}_${date}_${_transferIdCounter++}_${_random.nextInt(1 << 32)}';
+  return md5.convert(utf8.encode(unique)).toString();
 }
 
 /// Opens the folder containing the specified file.

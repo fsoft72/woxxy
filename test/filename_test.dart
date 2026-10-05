@@ -37,8 +37,8 @@ void main() {
     try {
       final transfer = await FileTransfer.start('k', '../escaped.txt', 1, downloads.path, 'bob', {}, null);
       expect(transfer, isNotNull);
-      expect(path.dirname(transfer!.destination_filename), downloads.path);
-      await transfer.file_sink.close();
+      expect(path.dirname(transfer!.destinationFilename), downloads.path);
+      await transfer.fileSink.close();
       expect(File(path.join(root.path, 'escaped.txt')).existsSync(), isFalse);
     } finally {
       await root.delete(recursive: true);

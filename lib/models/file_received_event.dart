@@ -1,3 +1,5 @@
+import '../config/transfer_constants.dart';
+
 /// Emitted when a file has been fully received and verified.
 class FileReceivedEvent {
   /// Absolute path of the saved file
@@ -20,5 +22,5 @@ class FileReceivedEvent {
   });
 
   /// File size in MB
-  double get fileSizeMB => fileSize / (1024 * 1024);
+  double get fileSizeMB => fileSize / BYTES_PER_MB;
 }
