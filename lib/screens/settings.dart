@@ -1,18 +1,28 @@
+// ignore_for_file: constant_identifier_names
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
 import '../models/user.dart';
 import '../models/file_transfer_manager.dart';
+import '../services/profile_image_store.dart';
+
+/// Pause after the last keystroke before the new username is saved and announced.
+const Duration USERNAME_SAVE_DELAY = Duration(milliseconds: 600);
 
 class SettingsScreen extends StatefulWidget {
   final User user;
   final Function(User) onUserUpdated;
+  final ProfileImageStore? profileImageStore;
 
   const SettingsScreen({
     super.key,
     required this.user,
     required this.onUserUpdated,
+    this.profileImageStore,
   });
 
   @override
@@ -23,6 +33,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _usernameController;
   String? _selectedImagePath;
   String? _selectedDirectory;
+  Timer? _usernameDebounce;
+  String? _usernameError;
+  late final ProfileImageStore _profileImageStore = widget.profileImageStore ?? ProfileImageStore();
 
   @override
   void initState() {
@@ -34,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _usernameDebounce?.cancel();
     _usernameController.dispose();
     super.dispose();
   }
@@ -41,20 +55,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _pickImage() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
+      // SVG is not offered: peers decode avatars as raster images and would reject it
       allowedExtensions: [
         'jpg',
         'jpeg',
         'png',
-        'svg'
       ],
     );
 
-    if (result != null) {
-      setState(() {
-        _selectedImagePath = result.files.single.path;
-      });
-      _updateUser();
-    }
+    final pickedPath = result?.files.single.path;
+    if (pickedPath == null) return;
+
+    final storedPath = await _profileImageStore.import(pickedPath);
+    if (!mounted) return;
+    setState(() {
+      _selectedImagePath = storedPath;
+    });
+    _updateUser();
   }
 
   Future<void> _pickDirectory() async {
@@ -71,9 +88,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Called on every keystroke: validates immediately but saves only after a short pause.
+  void _onUsernameChanged(String _) {
+    _usernameDebounce?.cancel();
+    final empty = _usernameController.text.trim().isEmpty;
+    setState(() => _usernameError = empty ? 'Username cannot be empty' : null);
+    if (empty) return;
+    _usernameDebounce = Timer(USERNAME_SAVE_DELAY, _commitUsername);
+  }
+
+  void _commitUsername() {
+    _usernameDebounce?.cancel();
+    if (_usernameController.text.trim().isEmpty) return;
+    _updateUser();
+  }
+
   void _updateUser() {
+    // An empty username would be announced as an anonymous peer, keep the last valid one
+    final username = _usernameController.text.trim().isEmpty ? widget.user.username : _usernameController.text.trim();
     final updatedUser = widget.user.copyWith(
-      username: _usernameController.text,
+      username: username,
       profileImage: _selectedImagePath,
       defaultDownloadDirectory: _selectedDirectory,
     );
@@ -92,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return CircleAvatar(
         radius: 50,
         child: ClipOval(
-          child: SvgPicture.asset(_selectedImagePath!),
+          child: SvgPicture.file(File(_selectedImagePath!)),
         ),
       );
     }
@@ -132,11 +166,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 24),
             TextField(
               controller: _usernameController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Username',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                errorText: _usernameError,
               ),
-              onChanged: (_) => _updateUser(),
+              onChanged: _onUsernameChanged,
+              onSubmitted: (_) => _commitUsername(),
             ),
             const SizedBox(height: 24),
             Row(

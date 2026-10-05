@@ -1,5 +1,16 @@
 # Changes Log
 
+## Fix the settings screen behaviors
+
+The username is validated per keystroke but saved/announced only after a 600 ms pause or on submit, and empty names are rejected with a message. SVG is no longer offered as a profile picture (peers cannot decode it) and legacy SVG paths render with SvgPicture.file. Picked pictures are copied into app storage by ProfileImageStore (new file name each time so the image cache never shows a stale picture). Added widget and unit tests.
+
+### Files
+- `lib/screens/settings.dart`
+- `lib/services/profile_image_store.dart`
+- `test/settings_test.dart`
+
+---
+
 ## Fix `FileHistory` sorting, persistence and notifications
 
 FileHistory is now a ChangeNotifier that keeps entries sorted on insert (no sort inside the getter), caps itself at 500 entries and tolerates corrupt saved data. A HistoryRepository persists it in SharedPreferences on every change and main() loads it before the first frame; HistoryScreen listens with ListenableBuilder instead of manual setState. Added history, persistence and widget tests.
