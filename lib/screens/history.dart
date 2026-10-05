@@ -19,10 +19,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
       appBar: AppBar(
         title: const Text('File History'),
       ),
-      body: ListView.builder(
-        itemCount: widget.history.entries.length,
+      body: ListenableBuilder(
+        listenable: widget.history,
+        builder: (context, _) => _buildList(),
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    final entries = widget.history.entries;
+    return ListView.builder(
+        itemCount: entries.length,
         itemBuilder: (context, index) {
-          final entry = widget.history.entries[index];
+          final entry = entries[index];
           final filename = path.basename(entry.destinationPath);
           final fileSizeMB = (entry.fileSize / (1024 * 1024)).toStringAsFixed(1);
 
@@ -35,11 +44,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               padding: const EdgeInsets.only(right: 16.0),
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (direction) {
-              setState(() {
-                widget.history.removeEntry(entry);
-              });
-            },
+            onDismissed: (direction) => widget.history.removeEntry(entry),
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
               child: ListTile(
@@ -78,7 +83,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           );
         },
-      ),
     );
   }
 }

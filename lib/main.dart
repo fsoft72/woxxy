@@ -11,6 +11,7 @@ import 'screens/home.dart';
 import 'screens/settings.dart';
 import 'widgets/persistent_tabs.dart';
 import 'widgets/startup_error_view.dart';
+import 'services/history_repository.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
 import 'models/notification_manager.dart';
@@ -193,8 +194,12 @@ void main() async {
     await NotificationManager.instance.init();
     zprint('🔔 Notification manager initialization attempt completed');
 
-    // Pass the loaded user object to the MyApp widget
-    runApp(MyApp(initialUser: user)); // Pass initial user data
+    // Saved history is loaded before the UI so the History tab is complete from the first frame
+    final historyRepository = HistoryRepository();
+    final history = await historyRepository.load();
+    historyRepository.autoSave(history);
+
+    runApp(MyApp(initialUser: user, history: history));
   } catch (e, stackTrace) {
     // Log the error and stack trace
     zprint('❌ Fatal error during initialization: $e');
@@ -220,7 +225,8 @@ void main() async {
 
 class MyApp extends StatelessWidget {
   final User initialUser; // Receive initial user data
-  const MyApp({super.key, required this.initialUser});
+  final FileHistory history;
+  const MyApp({super.key, required this.initialUser, required this.history});
 
   @override
   Widget build(BuildContext context) {
@@ -232,14 +238,15 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.white,
       ),
       // Pass initial user data to HomePage
-      home: HomePage(initialUser: initialUser),
+      home: HomePage(initialUser: initialUser, history: history),
     );
   }
 }
 
 class HomePage extends StatefulWidget {
   final User initialUser; // Receive initial user data
-  const HomePage({super.key, required this.initialUser});
+  final FileHistory history;
+  const HomePage({super.key, required this.initialUser, required this.history});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -248,7 +255,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   final NetworkService _networkService = NetworkService();
   final SettingsService _settingsService = SettingsService();
-  final FileHistory _fileHistory = FileHistory();
+  late final FileHistory _fileHistory = widget.history;
   StreamSubscription<FileReceivedEvent>? _fileReceivedSubscription;
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
@@ -318,14 +325,12 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     _fileReceivedSubscription = _networkService.onFileReceived.listen((event) async {
       if (!mounted) return;
 
-      setState(() {
-        _fileHistory.addEntry(FileHistoryEntry(
-          destinationPath: event.filePath,
-          senderUsername: event.senderUsername,
-          fileSize: event.fileSize,
-          uploadSpeedMBps: event.speedMBps,
-        ));
-      });
+      _fileHistory.addEntry(FileHistoryEntry(
+        destinationPath: event.filePath,
+        senderUsername: event.senderUsername,
+        fileSize: event.fileSize,
+        uploadSpeedMBps: event.speedMBps,
+      ));
 
       await NotificationManager.instance.showFileReceivedNotification(
         filePath: event.filePath,

@@ -1,5 +1,19 @@
 # Changes Log
 
+## Fix `FileHistory` sorting, persistence and notifications
+
+FileHistory is now a ChangeNotifier that keeps entries sorted on insert (no sort inside the getter), caps itself at 500 entries and tolerates corrupt saved data. A HistoryRepository persists it in SharedPreferences on every change and main() loads it before the first frame; HistoryScreen listens with ListenableBuilder instead of manual setState. Added history, persistence and widget tests.
+
+### Files
+- `lib/models/history.dart`
+- `lib/services/history_repository.dart`
+- `lib/screens/history.dart`
+- `lib/main.dart`
+- `test/file_history_test.dart`
+- `test/history_persistence_test.dart`
+
+---
+
 ## Keep tab state with `IndexedStack`
 
 The three tabs are shown through a PersistentTabs (IndexedStack) widget, so switching tabs no longer destroys and re-creates HomeContent, HistoryScreen and SettingsScreen state. Added a widget test.
