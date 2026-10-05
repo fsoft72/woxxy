@@ -42,7 +42,7 @@ void main() {
     final port = probe.port;
     probe.close();
 
-    final peers = PeerManager();
+    final peers = PeerManager(avatarStore: AvatarStore());
     peers.setRequestAvatarCallback((_) {});
     final service = DiscoveryService(
       discoveryPort: port,

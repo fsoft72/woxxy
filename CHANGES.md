@@ -1,5 +1,16 @@
 # Changes Log
 
+## Fix `PeerManager` lifecycle and updates
+
+PeerManager is no longer a global singleton (each NetworkService owns one, so disposing it cannot break a later instance), the avatar callback is optional, add/notify after dispose are ignored, announcements with a new name/port update the known peer, and the cleanup timer now runs at a third of the timeout. Clock and timeout are injectable; tests use fake_async.
+
+### Files
+- `lib/models/peer_manager.dart`
+- `test/peer_manager_test.dart`
+- `test/discovery_protocol_test.dart`
+
+---
+
 ## Harden the receiver against hostile peers
 
 The receiver rejects negative or oversized declared sizes (64 GiB files, 10 MB avatars) before creating any file and aborts a transfer, deleting the partial file, as soon as the peer sends more bytes than declared. Free-disk check and an accept prompt were intentionally not added (they need a plugin and a UX decision). Added hostile-sender loopback tests.
