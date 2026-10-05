@@ -34,7 +34,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/network/send_service.dart`, `lib/services/network_service.dart`, `lib/models/file_transfer.dart`
 - [x] **Timing-based heuristic for premature closure** - `_onConnectionClosed` treats "0 bytes in less than 100 ms" as a special Windows case, but the next branch (`receivedBytes < dataExpected`) already handles it identically. Remove the branch and the magic `100`.
   - File(s): `lib/services/network/receive_service.dart`
-- [ ] **In-flight receives are not stopped on dispose** - `ServerService.dispose` only closes the listening socket and `ReceiveService.dispose` is a no-op, so active incoming sockets and file sinks stay open. Track active sockets in `ReceiveService` and destroy them on dispose.
+- [x] **In-flight receives are not stopped on dispose** - `ServerService.dispose` only closes the listening socket and `ReceiveService.dispose` is a no-op, so active incoming sockets and file sinks stay open. Track active sockets in `ReceiveService` and destroy them on dispose.
   - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
 - [ ] **Received avatar is decoded without dimension limits** - Only the byte size is limited (10 MB), but a small compressed image can decode to a huge bitmap. Pass `targetWidth`/`targetHeight` to `ui.instantiateImageCodec` (avatars are shown at most 80 px).
   - File(s): `lib/models/avatars.dart`

@@ -25,6 +25,9 @@ class ReceiveService {
   /// A connection that sends nothing for this long is aborted and its partial file removed.
   final Duration idleTimeout;
 
+  /// Sockets of the transfers being received right now, destroyed by [dispose].
+  final Set<Socket> _activeSockets = {};
+
   ReceiveService({
     required this.fileTransferManager,
     required this.avatarStore,
@@ -41,6 +44,7 @@ class ReceiveService {
     final sourceIp = socket.remoteAddress.address;
     zprint('📥 New connection from $sourceIp:${socket.remotePort}');
     final stopwatch = Stopwatch()..start();
+    _activeSockets.add(socket);
 
     // Configure socket for better Windows compatibility
     socket.setOption(SocketOption.tcpNoDelay, true);
@@ -97,6 +101,7 @@ class ReceiveService {
         await fileTransferManager.handleSocketClosure(fileTransferKey);
       }
     } finally {
+      _activeSockets.remove(socket);
       await iterator.cancel();
       socket.destroy();
     }
@@ -299,7 +304,10 @@ class ReceiveService {
 
   Future<void> dispose() async {
     zprint('🛑 Disposing ReceiveService...');
-    // No specific resources to dispose here, managed by ServerService and FileTransferManager
+    // Destroying the socket ends handleNewConnection, which cleans up the partial file
+    for (final socket in _activeSockets.toList()) {
+      socket.destroy();
+    }
     zprint('✅ ReceiveService disposed');
   }
 }

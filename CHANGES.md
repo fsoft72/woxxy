@@ -1,5 +1,15 @@
 # Changes Log
 
+## Stop in-flight receives on dispose
+
+ReceiveService tracks its active sockets and destroys them in dispose, which closes the file sinks and removes the partial files. Added a test.
+
+### Files
+- `lib/services/network/receive_service.dart`
+- `test/server_limits_test.dart`
+
+---
+
 ## Remove the 100 ms zero-byte heuristic
 
 The special case for 'zero bytes in under 100 ms' did exactly what the next incomplete-transfer check does, so it was removed together with its magic number. Added a test for a sender that closes right after the header.

@@ -101,6 +101,34 @@ void main() {
     await server.dispose();
   });
 
+  test('dispose stops transfers that are still being received', () async {
+    final manager = FileTransferManager(downloadPath: path.join(tmp.path, 'downloads'));
+    final avatars = AvatarStore();
+    final receive = ReceiveService(
+      fileTransferManager: manager,
+      avatarStore: avatars,
+      peerManager: PeerManager(avatarStore: avatars),
+    );
+    final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
+    await server.start();
+
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.boundPort!);
+    socket.add(encodeMetadataFrame({'name': 'big.bin', 'size': 1000, 'senderUsername': 'x', 'transferId': 't'}));
+    socket.add([1, 2, 3]);
+    await socket.flush();
+    while (manager.files.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    await receive.dispose();
+
+    await socket.drain<void>().timeout(const Duration(seconds: 5)); // The receiver hung up
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(manager.files, isEmpty);
+    expect(Directory(path.join(tmp.path, 'downloads')).listSync(), isEmpty);
+    await server.dispose();
+  });
+
   test('ReceiveService aborts the transfer as soon as a write fails', () async {
     final manager = _FailingWriteManager(path.join(tmp.path, 'downloads'));
     final avatars = AvatarStore();
