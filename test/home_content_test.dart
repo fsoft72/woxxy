@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/models/file_received_event.dart';
 import 'package:woxxy/models/notification_manager.dart';
 import 'package:woxxy/screens/home.dart';
@@ -44,5 +45,18 @@ void main() {
     await tester.pump();
 
     expect(find.text('Received: report.pdf from alice'), findsOneWidget);
+  });
+
+  testWidgets('building the peer list writes nothing to the log', (tester) async {
+    final original = zprintSink;
+    final lines = <String>[];
+    zprintSink = lines.add;
+    addTearDown(() => zprintSink = original);
+
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
+    await tester.pump();
+
+    expect(find.text('No other peers found on the network'), findsOneWidget);
+    expect(lines, isEmpty);
   });
 }

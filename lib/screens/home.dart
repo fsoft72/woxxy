@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
-import 'package:woxxy/funcs/debug.dart';
 import '../services/network_service.dart';
 import '../models/file_received_event.dart';
 import '../models/peer.dart';
@@ -68,15 +67,12 @@ class _HomeContentState extends State<HomeContent> {
           child: StreamBuilder<List<Peer>>(
             stream: widget.networkService.peerStream,
             builder: (context, snapshot) {
-              zprint(
-                  '🔄 Stream builder update - hasData: ${snapshot.hasData}, data length: ${snapshot.data?.length ?? 0}');
               if (!snapshot.hasData) {
                 return const Center(
                   child: Text('No peers found. Searching...'),
                 );
               }
               final peers = snapshot.data!;
-              zprint('📊 Peers found: ${peers.length}');
 
               if (peers.isEmpty) {
                 return const Center(

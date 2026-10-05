@@ -1,5 +1,15 @@
 # Changes Log
 
+## Remove logging from the peer list build
+
+The StreamBuilder of the peer list no longer calls zprint on every rebuild. Added a test that building the list writes nothing to the log.
+
+### Files
+- `lib/screens/home.dart`
+- `test/home_content_test.dart`
+
+---
+
 ## Make the current user non-nullable in HomePage
 
 _currentUser is always the initial user, so it is now non-nullable and the unreachable null branches in _getScreens and build are gone. The screen list is still built on each build because SettingsScreen must receive the updated user (it is cheap). HomePage needs tray and window plugins, so there is no widget test for it: covered by analyzer and the existing suite.
