@@ -1,5 +1,9 @@
 # Changes Log
 
+## Unify the close and verify logic of FileTransfer
+
+`FileTransfer` closes the sink in one private method used by both paths. `closeOnSocketClosure` now always deletes the partial file (the old 'checksum matched, keep it' branch could never lead to a recorded file), and `end` is a flat close, verify, delete sequence. Test updated in `test/file_transfer_md5_test.dart`.
+
 ## Stop rebuilding the peer list when an avatar arrives
 
 `ReceiveService` no longer depends on `PeerManager`: a received avatar updates only the per-peer `AvatarStore` notifier, and `notifyPeersUpdated` was removed. Test in `test/transfer_loopback_test.dart`.

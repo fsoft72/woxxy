@@ -150,83 +150,54 @@ class FileTransfer {
     }
   }
 
-  /// Safely closes the file sink when the connection is closed unexpectedly (onDone/onError).
-  /// Verifies MD5 if applicable and deletes the file if incomplete or checksum fails.
+  /// Flushes and closes the file sink and stops the timer.
+  Future<void> _closeSink() async {
+    await fileSink.flush();
+    await fileSink.close();
+    duration.stop();
+    zprint('   File sink flushed and closed. Duration: ${duration.elapsedMilliseconds}ms');
+  }
+
+  /// Gives up on a transfer whose connection ended before the whole file arrived (or failed):
+  /// closes the sink and deletes the partial file. A partial file is never kept, and nobody would
+  /// be told about it.
   Future<void> closeOnSocketClosure() async {
     zprint("🔌 Closing file sink due to unexpected socket closure: $destinationFilename");
     try {
-      // Ensure all buffered data is written before closing
-      await fileSink.flush();
-      await fileSink.close();
-      duration.stop(); // Stop timer as transfer is definitively over (failed or succeeded partially)
-      zprint('   File sink flushed and closed.');
-
-      // Check MD5 if required and data was buffered
-      if (_calculatingMd5) {
-        zprint('   Verifying MD5 checksum on incomplete transfer...');
-        final actualMd5 = _finishMd5();
-        if (actualMd5 != expectedMd5) {
-          zprint('   ❌ MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
-          zprint('   Deleting potentially corrupted file...');
-          await _deleteFile();
-          return; // Exit after deleting
-        } else {
-          zprint('   ✅ MD5 checksum MATCHED despite socket closure (transfer might be complete).');
-          // File is kept as it seems valid, even if socket closed early.
-          // Potentially trigger notification here? Or let end() handle it if called later?
-          // Let's assume only end() triggers notifications.
-        }
-      } else {
-        // No MD5 check needed or possible. Assume incomplete if socket closed early.
-        zprint('   No MD5 check required/possible. Assuming incomplete.');
-        zprint('   Deleting potentially incomplete file...');
-        await _deleteFile();
-      }
+      await _closeSink();
     } catch (e, s) {
-      zprint('❌ Error closing/cleaning file sink on socket closure: $e\n$s');
-      // Attempt to delete the file even if closing/checking failed
-      await _deleteFile();
+      zprint('❌ Error closing the file sink on socket closure: $e\n$s');
     }
+    await _deleteFile();
   }
 
   /// Finalizes the transfer: closes the file and verifies the MD5. Has no side effects beyond the file itself;
   /// the caller decides about history and notifications.
   /// Returns `true` if the transfer is considered successful (file closed, MD5 matches if applicable).
-  /// Returns `false` if MD5 verification fails (file is deleted in this case).
+  /// Returns `false` if closing fails or the MD5 verification fails (the file is deleted in both cases).
   Future<bool> end() async {
     zprint("✅ Finalizing transfer for: $destinationFilename");
-    bool success = false;
     try {
-      // Ensure data is written and close the file sink
-      await fileSink.flush();
-      await fileSink.close();
-      duration.stop(); // Stop the timer
-      zprint('   File sink flushed and closed. Duration: ${duration.elapsedMilliseconds}ms');
-
-      // Verify MD5 checksum if required
-      if (_calculatingMd5) {
-        zprint('   Verifying final MD5 checksum...');
-        final actualMd5 = _finishMd5();
-        if (actualMd5 != expectedMd5) {
-          zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
-          zprint('   Deleting corrupted file...');
-          await _deleteFile();
-          return false; // Indicate failure due to checksum mismatch
-        }
-        zprint('   ✅ Final MD5 checksum verified successfully.');
-        success = true;
-      } else {
-        zprint('   Skipping MD5 verification (not required or not possible).');
-        success = true; // Assume success if no MD5 check needed
-      }
-
-      return success; // Return true if closed and MD5 passed (or wasn't needed)
+      await _closeSink();
     } catch (e, s) {
       zprint('❌ Error finalizing transfer or closing file: $e\n$s');
-      // Attempt to delete the file as finalization failed
       await _deleteFile();
-      return false; // Indicate failure
+      return false;
     }
+
+    if (!_calculatingMd5) {
+      zprint('   Skipping MD5 verification (not required or not possible).');
+      return true;
+    }
+
+    final actualMd5 = _finishMd5();
+    if (actualMd5 != expectedMd5) {
+      zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
+      await _deleteFile();
+      return false;
+    }
+    zprint('   ✅ Final MD5 checksum verified successfully.');
+    return true;
   }
 
   /// Closes the incremental hash and returns the hex digest of everything written so far.

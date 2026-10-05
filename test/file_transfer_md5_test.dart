@@ -41,16 +41,16 @@ void main() {
     expect(File(transfer.destinationFilename).existsSync(), isFalse);
   });
 
-  test('closeOnSocketClosure keeps a file whose checksum matches and deletes one that does not', () async {
-    final good = await start(md5.convert([1, 2, 3]).toString(), 3);
-    await good.write([1, 2, 3]);
-    await good.closeOnSocketClosure();
-    expect(File(good.destinationFilename).existsSync(), isTrue);
+  test('closeOnSocketClosure always deletes the partial file, even if its bytes happen to match', () async {
+    final complete = await start(md5.convert([1, 2, 3]).toString(), 3);
+    await complete.write([1, 2, 3]);
+    await complete.closeOnSocketClosure();
+    expect(File(complete.destinationFilename).existsSync(), isFalse);
 
-    final bad = await start(md5.convert([1, 2, 3]).toString(), 3);
-    await bad.write([1, 2]);
-    await bad.closeOnSocketClosure();
-    expect(File(bad.destinationFilename).existsSync(), isFalse);
+    final partial = await start(md5.convert([1, 2, 3]).toString(), 3);
+    await partial.write([1, 2]);
+    await partial.closeOnSocketClosure();
+    expect(File(partial.destinationFilename).existsSync(), isFalse);
   });
 
   test('without a checksum the transfer is accepted as is', () async {
