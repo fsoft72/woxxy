@@ -49,7 +49,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
 
 ## Low / Nice to have
 
-- [ ] **Default username defined in six places with two different values** - `'WoxxyUser'` is repeated in `NetworkService`, `SendService` and `DiscoveryService`, while `SettingsService` defaults to `'User'`. Create `DEFAULT_USERNAME` in `lib/config/` and use it everywhere.
+- [x] **Default username defined in six places with two different values** - `'WoxxyUser'` is repeated in `NetworkService`, `SendService` and `DiscoveryService`, while `SettingsService` defaults to `'User'`. Create `DEFAULT_USERNAME` in `lib/config/` and use it everywhere.
   - File(s): `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/discovery_service.dart`, `lib/services/settings_service.dart`
 - [ ] **`utils.dart` mixes unrelated responsibilities** - UI (`showSnackbar`), process launching (`openFileLocation`), id generation and formatting live in one file, and the "open folder" platform switch is repeated in `NotificationManager._openDirectory`. Split into `ui_helpers`, `file_opener` (shared by both callers) and `format`.
   - File(s): `lib/funcs/utils.dart`, `lib/models/notification_manager.dart`

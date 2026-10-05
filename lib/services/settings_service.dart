@@ -1,18 +1,16 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/network_constants.dart';
 import '../models/user.dart';
-// Removed uuid import as it's no longer needed
 
 class SettingsService {
-  // Removed _userIdKey
   static const String _usernameKey = 'username';
   static const String _profileImageKey = 'profile_image';
   static const String _downloadDirKey = 'download_directory';
 
   Future<User> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    // Removed userId retrieval logic
     return User(
-      username: prefs.getString(_usernameKey) ?? 'User', // Provide default 'User'
+      username: prefs.getString(_usernameKey) ?? DEFAULT_USERNAME,
       profileImage: prefs.getString(_profileImageKey),
       defaultDownloadDirectory: prefs.getString(_downloadDirKey) ?? '', // Default to empty string
     );

@@ -1,9 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/models/user.dart';
 import 'package:woxxy/services/settings_service.dart';
 
 void main() {
+  test('a first run gets the default username', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    expect((await SettingsService().loadSettings()).username, DEFAULT_USERNAME);
+  });
+
   late SettingsService service;
 
   setUp(() {

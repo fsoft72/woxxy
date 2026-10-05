@@ -1,5 +1,15 @@
 # Changes Log
 
+## Use DEFAULT_USERNAME everywhere
+
+The five 'WoxxyUser' literals were already replaced by DEFAULT_USERNAME with LocalIdentity; SettingsService now uses it too, so a first run gets the same name everywhere instead of 'User'. Added a test.
+
+### Files
+- `lib/services/settings_service.dart`
+- `test/settings_service_test.dart`
+
+---
+
 ## Await settings saves, report failures and write only changes
 
 HomePage._updateUser awaits saveSettings and shows a snackbar when it fails. SettingsService.saveSettings writes only the values that differ from the stored ones. Added settings_service_test.
