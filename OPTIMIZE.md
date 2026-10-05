@@ -10,7 +10,7 @@
   - File(s): `lib/models/file_transfer_manager.dart`, `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
 - [x] **Serialize the receive handler (race on metadata and data)** - `socket.listen((data) async {...})` does not wait for the previous callback, so chunks arriving during `await fileTransferManager.add(...)` or `socket.flush()` are appended to `buffer` and the metadata is parsed and added a second time, or file data is written out of order. Pause the subscription while handling metadata, or use a small state machine over a `StreamIterator`/`StreamTransformer` that frames the stream sequentially.
   - File(s): `lib/services/network/receive_service.dart`
-- [ ] **Do not buffer the whole received file in RAM for MD5** - `FileTransfer._receivedData` keeps every byte in a `List<int>` just to compute the checksum at the end, so a multi-GB transfer exhausts memory (and `addAll` on boxed ints makes it worse). Use `md5.startChunkedConversion` with an `AccumulatorSink<Digest>` and feed each chunk as it is written.
+- [x] **Do not buffer the whole received file in RAM for MD5** - `FileTransfer._receivedData` keeps every byte in a `List<int>` just to compute the checksum at the end, so a multi-GB transfer exhausts memory (and `addAll` on boxed ints makes it worse). Use `md5.startChunkedConversion` with an `AccumulatorSink<Digest>` and feed each chunk as it is written.
   - File(s): `lib/models/file_transfer.dart`
 
 ## High

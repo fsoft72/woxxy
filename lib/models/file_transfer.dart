@@ -2,10 +2,22 @@
 
 import 'package:path/path.dart' as path;
 import 'dart:io';
+import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/filename.dart';
 import 'package:woxxy/models/notification_manager.dart';
+
+/// Collects the single digest emitted by a chunked hash conversion.
+class _DigestSink implements Sink<Digest> {
+  Digest? digest;
+
+  @override
+  void add(Digest data) => digest = data;
+
+  @override
+  void close() {}
+}
 
 typedef OnTransferComplete = void Function(FileTransfer);
 
@@ -38,9 +50,10 @@ class FileTransfer {
   /// Full metadata map received from sender at the beginning of the transfer
   final Map<String, dynamic> metadata; // Add metadata here
 
-  /// Buffer to store received data for checksum verification if MD5 is present
-  final List<int> _receivedData = [];
-  bool _calculatingMd5 = false; // Flag to indicate if we need to buffer for MD5
+  /// Incremental MD5 state, fed chunk by chunk so the file is never held in memory
+  final _DigestSink _md5Sink = _DigestSink();
+  ByteConversionSink? _md5Input;
+  bool _calculatingMd5 = false; // Flag to indicate if we need to hash incoming data
 
   FileTransfer._internal({
     required this.source_ip,
@@ -57,7 +70,8 @@ class FileTransfer {
     // FIX: Add '!' after expectedMd5 when accessing isNotEmpty
     _calculatingMd5 = expectedMd5 != null && expectedMd5!.isNotEmpty && expectedMd5 != "CHECKSUM_ERROR";
     if (_calculatingMd5) {
-      zprint(" M-> MD5 check required for $destination_filename. Buffering enabled.");
+      _md5Input = md5.startChunkedConversion(_md5Sink);
+      zprint(" M-> MD5 check required for $destination_filename. Incremental hashing enabled.");
     }
   }
 
@@ -128,13 +142,10 @@ class FileTransfer {
     }
   }
 
-  /// Writes binary data to the file sink. Buffers data if MD5 check is needed.
+  /// Writes binary data to the file sink and feeds it to the incremental MD5 if needed.
   Future<void> write(List<int> binary_data) async {
     try {
-      // If MD5 calculation is needed, buffer the data
-      if (_calculatingMd5) {
-        _receivedData.addAll(binary_data);
-      }
+      _md5Input?.add(binary_data);
       // Always write to the file sink
       file_sink.add(binary_data);
       // Avoid awaiting flush here for performance, rely on close() or closeOnSocketClosure()
@@ -161,7 +172,7 @@ class FileTransfer {
       // Check MD5 if required and data was buffered
       if (_calculatingMd5) {
         zprint('   Verifying MD5 checksum on incomplete transfer...');
-        final actualMd5 = md5.convert(_receivedData).toString();
+        final actualMd5 = _finishMd5();
         if (actualMd5 != expectedMd5) {
           zprint('   ❌ MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
           zprint('   Deleting potentially corrupted file...');
@@ -202,7 +213,7 @@ class FileTransfer {
       // Verify MD5 checksum if required
       if (_calculatingMd5) {
         zprint('   Verifying final MD5 checksum...');
-        final actualMd5 = md5.convert(_receivedData).toString();
+        final actualMd5 = _finishMd5();
         if (actualMd5 != expectedMd5) {
           zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
           zprint('   Deleting corrupted file...');
@@ -241,6 +252,12 @@ class FileTransfer {
       await _deleteFile();
       return false; // Indicate failure
     }
+  }
+
+  /// Closes the incremental hash and returns the hex digest of everything written so far.
+  String _finishMd5() {
+    _md5Input!.close();
+    return _md5Sink.digest!.toString();
   }
 
   /// Helper method to safely delete the destination file.

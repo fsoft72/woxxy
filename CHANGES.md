@@ -1,5 +1,16 @@
 # Changes Log
 
+## Do not buffer the whole received file in RAM for MD5
+
+FileTransfer no longer keeps every received byte in memory: the MD5 is computed incrementally with a chunked conversion fed on each write. Added tests for matching/mismatching checksums and socket-closure behavior.
+
+### Files
+- `lib/models/file_transfer.dart`
+- `test/file_transfer_md5_test.dart`
+- `test/transfer_loopback_test.dart`
+
+---
+
 ## Serialize the receive handler
 
 ReceiveService now consumes the socket through a StreamIterator, so metadata parsing, transfer registration, the ready signal and data writes run strictly one at a time (no duplicate adds or out-of-order writes). Metadata framing moved to a reusable MetadataFrameDecoder/encodeMetadataFrame in transfer_protocol.dart (BytesBuilder instead of List<int>). Added loopback integration tests.
