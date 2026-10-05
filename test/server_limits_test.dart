@@ -75,4 +75,35 @@ void main() {
     expect(leftovers, isEmpty);
     await server.dispose();
   });
+
+  test('ReceiveService aborts the transfer as soon as a write fails', () async {
+    final manager = _FailingWriteManager(path.join(tmp.path, 'downloads'));
+    final avatars = AvatarStore();
+    final receive = ReceiveService(
+      fileTransferManager: manager,
+      avatarStore: avatars,
+      peerManager: PeerManager(avatarStore: avatars),
+    );
+    final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
+    await server.start();
+
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.boundPort!);
+    socket.add(encodeMetadataFrame({'name': 'a.bin', 'size': 1000, 'senderUsername': 'x', 'transferId': 't'}));
+    await socket.flush();
+    socket.add([1, 2, 3]);
+
+    // The receiver closes the connection right away instead of waiting for all the bytes
+    await socket.drain<void>().timeout(const Duration(seconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(manager.files, isEmpty);
+    await server.dispose();
+  });
+}
+
+/// A manager whose writes always fail, like a disk that became full.
+class _FailingWriteManager extends FileTransferManager {
+  _FailingWriteManager(String downloadPath) : super(downloadPath: downloadPath);
+
+  @override
+  Future<bool> write(String key, List<int> binaryData) async => false;
 }

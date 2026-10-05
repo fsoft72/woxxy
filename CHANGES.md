@@ -1,5 +1,15 @@
 # Changes Log
 
+## Abort receiving when a write fails
+
+ReceiveService now checks the result of FileTransferManager.write and aborts the transfer (partial file removed) instead of waiting for the end to find a corrupt file. Added a test with a failing manager.
+
+### Files
+- `lib/services/network/receive_service.dart`
+- `test/server_limits_test.dart`
+
+---
+
 ## Limit connections and abort stalled receives
 
 ServerService refuses connections above MAX_CONCURRENT_CONNECTIONS and ReceiveService aborts a transfer that sends nothing for RECEIVE_IDLE_TIMEOUT, cleaning the partial file. Added tests.

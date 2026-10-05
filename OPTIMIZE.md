@@ -13,7 +13,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
 
 - [x] **No connection limit and no idle timeout on the server** - A sender that connects and stalls keeps a socket, an open `IOSink` and a `FileTransferManager.files` entry forever, and the number of parallel connections is unbounded. Add a max concurrent connections value and a read inactivity timeout that triggers `handleSocketClosure`.
   - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
-- [ ] **Write failures are ignored while receiving** - `FileTransferManager.write` swallows errors and returns `false`, but `handleNewConnection` never checks the result, so a full disk or a revoked folder keeps the transfer "running" until the MD5 check fails at the end. Check the return value and abort the transfer right away.
+- [x] **Write failures are ignored while receiving** - `FileTransferManager.write` swallows errors and returns `false`, but `handleNewConnection` never checks the result, so a full disk or a revoked folder keeps the transfer "running" until the MD5 check fails at the end. Check the return value and abort the transfer right away.
   - File(s): `lib/services/network/receive_service.dart` (lines 58 and 75), `lib/models/file_transfer_manager.dart`
 - [ ] **No real backpressure on disk writes** - `FileTransfer.write` calls `fileSink.add` without awaiting anything, so if the disk is slower than the network the data piles up in memory. The doc comment of `handleNewConnection` promises backpressure that does not exist. Await `fileSink.flush()` every N bytes (or pipe through `addStream`).
   - File(s): `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`

@@ -61,7 +61,7 @@ class ReceiveService {
           if (receivedBytes + data.length > dataExpected) {
             throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
           }
-          await fileTransferManager.write(fileTransferKey, data);
+          await _writeOrThrow(fileTransferKey, data);
           receivedBytes += data.length;
           continue;
         }
@@ -78,7 +78,7 @@ class ReceiveService {
           throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
         }
         if (frame.remainingData.isNotEmpty) {
-          await fileTransferManager.write(fileTransferKey, frame.remainingData);
+          await _writeOrThrow(fileTransferKey, frame.remainingData);
           receivedBytes += frame.remainingData.length;
         }
       }
@@ -100,6 +100,12 @@ class ReceiveService {
       await iterator.cancel();
       socket.destroy();
     }
+  }
+
+  /// Writes a chunk and aborts the transfer when the write failed (full disk, folder gone).
+  Future<void> _writeOrThrow(String key, Uint8List data) async {
+    if (await fileTransferManager.write(key, data)) return;
+    throw FileSystemException('Could not write received data for transfer $key');
   }
 
   /// Registers the incoming transfer and sends the ready signal.
