@@ -1,5 +1,9 @@
 # Changes Log
 
+## Make the NetworkService collaborators injectable
+
+`NetworkService` accepts the identity, send, server and discovery services (the IP lookup moved to `LocalIpResolver` earlier) and the avatar hashing moved to `md5OfPathOrNull` in `funcs/hashing.dart`. Tests: `test/network_service_injection_test.dart`, `test/hashing_test.dart`.
+
 ## Unify the close and verify logic of FileTransfer
 
 `FileTransfer` closes the sink in one private method used by both paths. `closeOnSocketClosure` now always deletes the partial file (the old 'checksum matched, keep it' branch could never lead to a recorded file), and `end` is a flat close, verify, delete sequence. Test updated in `test/file_transfer_md5_test.dart`.

@@ -39,4 +39,25 @@ void main() {
       expect(File(transfer.destinationFilename).existsSync(), isTrue);
     }
   });
+
+  group('md5OfPathOrNull', () {
+    test('hashes an existing file', () async {
+      final file = File('${tmp.path}/a.bin')..writeAsBytesSync([1, 2, 3]);
+
+      expect(await md5OfPathOrNull(file.path), md5.convert([1, 2, 3]).toString());
+    });
+
+    test('gives null for no path, an empty path and a missing file', () async {
+      expect(await md5OfPathOrNull(null), isNull);
+      expect(await md5OfPathOrNull(''), isNull);
+      expect(await md5OfPathOrNull('${tmp.path}/missing.bin'), isNull);
+    });
+
+    test('gives null for a file above the size limit', () async {
+      final file = File('${tmp.path}/big.bin')..writeAsBytesSync(List.filled(11, 0));
+
+      expect(await md5OfPathOrNull(file.path, maxBytes: 10), isNull);
+      expect(await md5OfPathOrNull(file.path, maxBytes: 11), isNotNull);
+    });
+  });
 }

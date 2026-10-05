@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:woxxy/funcs/debug.dart';
@@ -53,7 +52,7 @@ class NetworkService {
   late final IpMonitor _ipMonitor;
 
   // Who this device is; shared with the send and discovery services
-  final LocalIdentity _identity = LocalIdentity();
+  final LocalIdentity _identity;
 
   // Peers are exposed through PeerManager
   final _fileReceivedController = StreamController<FileReceivedEvent>.broadcast();
@@ -80,21 +79,29 @@ class NetworkService {
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
 
   // --- Initialization & Lifecycle ---
-  /// Creates the facade over its collaborators. [ipResolver] and [peerManager] are injectable so tests can simulate network conditions and peers.
+  /// Creates the facade over its collaborators. Everything that touches the network or the system
+  /// is injectable so tests can simulate it: [ipResolver], [peerManager], [identity] and the
+  /// [sendService], [serverService] and [discoveryService]. A service that is not given is built
+  /// and wired here; an injected one is used as it is (it must share [identity] to be consistent).
   NetworkService({
     required FileTransferManager fileTransferManager,
     required AvatarStore avatarStore,
     IpResolver? ipResolver,
     PeerManager? peerManager,
+    LocalIdentity? identity,
+    SendService? sendService,
+    ServerService? serverService,
+    DiscoveryService? discoveryService,
   })  : _fileTransferManager = fileTransferManager,
         _avatarStore = avatarStore,
+        _identity = identity ?? LocalIdentity(),
         _ipResolver = ipResolver ?? LocalIpResolver().call {
     // The discovery service is created below; the lambda reads it only when a peer shows up
     _peerManager = peerManager ??
         PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
 
     // Instantiate internal services, passing dependencies and callbacks
-    _sendService = SendService(identity: _identity);
+    _sendService = sendService ?? SendService(identity: _identity);
 
     _receiveService = ReceiveService(
       fileTransferManager: _fileTransferManager,
@@ -102,24 +109,26 @@ class NetworkService {
       onFileReceivedCallback: handleFileReceived,
     );
 
-    _serverService = ServerService(
-      port: TRANSFER_PORT,
-      connectionHandler: _receiveService.handleNewConnection, // Wire Server to ReceiveService
-    );
+    _serverService = serverService ??
+        ServerService(
+          port: TRANSFER_PORT,
+          connectionHandler: _receiveService.handleNewConnection, // Wire Server to ReceiveService
+        );
 
     _ipMonitor = IpMonitor(
       resolver: () => _ipResolver(),
       onChanged: _handleIpChanged,
     );
 
-    _discoveryService = DiscoveryService(
-      discoveryPort: DISCOVERY_PORT,
-      mainServerPort: TRANSFER_PORT,
-      peerManager: _peerManager,
-      avatarStore: _avatarStore,
-      sendAvatarCallback: _sendService.sendAvatar, // Wire Discovery to SendService for avatar sending
-      identity: _identity,
-    );
+    _discoveryService = discoveryService ??
+        DiscoveryService(
+          discoveryPort: DISCOVERY_PORT,
+          mainServerPort: TRANSFER_PORT,
+          peerManager: _peerManager,
+          avatarStore: _avatarStore,
+          sendAvatarCallback: _sendService.sendAvatar, // Wire Discovery to SendService for avatar sending
+          identity: _identity,
+        );
   }
 
   /// Starts the network layer announcing [user] (name and profile picture) to the other devices.
@@ -136,7 +145,7 @@ class NetworkService {
 
       // Announce the user's name and avatar
       _loadCurrentUserDetails(user);
-      _identity.avatarHash = await _avatarHashFor(_identity.profileImagePath);
+      _identity.avatarHash = await md5OfPathOrNull(_identity.profileImagePath, maxBytes: MAX_AVATAR_SIZE_BYTES);
 
       // Start the underlying services
       await _serverService.start();
@@ -184,27 +193,9 @@ class NetworkService {
     zprint("🖼️ Profile image path updated: $imagePath");
 
     // Announce the new avatar hash so peers refresh their cached copy
-    _avatarHashFor(imagePath).then((hash) {
+    md5OfPathOrNull(imagePath, maxBytes: MAX_AVATAR_SIZE_BYTES).then((hash) {
       if (_identity.profileImagePath == imagePath) _identity.avatarHash = hash; // Ignore a stale answer
     });
-  }
-
-  /// MD5 of the avatar file, or null if there is none, it cannot be read or it is too big to be
-  /// sent (announcing a hash that nobody can fetch would make peers ask for it again and again).
-  Future<String?> _avatarHashFor(String? imagePath) async {
-    if (imagePath == null || imagePath.isEmpty) return null;
-    try {
-      final file = File(imagePath);
-      if (!await file.exists()) return null;
-      if (await file.length() > MAX_AVATAR_SIZE_BYTES) {
-        zprint('⚠️ Avatar $imagePath is bigger than $MAX_AVATAR_SIZE_BYTES bytes: not announced.');
-        return null;
-      }
-      return await md5OfFile(file);
-    } catch (e) {
-      zprint('⚠️ Could not hash avatar $imagePath: $e');
-      return null;
-    }
   }
 
   /// Send file to a peer. Delegates to SendService.
