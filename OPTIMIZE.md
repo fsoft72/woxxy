@@ -2,64 +2,70 @@
 
 > Generated on 2026-10-05. Items sorted by importance.
 
-## Critical
+## Not issues (by design)
 
-- [x] **Sanitize the remote filename (path traversal)** - The receiver builds the destination with `path.join(downloadPath, metadata['name'])` using an unvalidated name from the network, so a name like `../../.bashrc` writes outside the download folder. Apply `path.basename` plus a reject list (empty, `.`, `..`, separators) before generating the unique path.
-  - File(s): `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
-- [x] **Stop keying transfers by source IP only** - `FileTransferManager.files` is keyed by the sender IP, so an avatar transfer (sent automatically on peer discovery) or a second file from the same peer overwrites and corrupts the active transfer; the avatar is also written into the user's download folder. Key by `transferId` (already in the metadata) and write avatars to a temp directory. The `exists()` check in `_generateUniqueFilePath` followed by `openWrite` is also a race for same-name files.
-  - File(s): `lib/models/file_transfer_manager.dart`, `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
-- [x] **Serialize the receive handler (race on metadata and data)** - `socket.listen((data) async {...})` does not wait for the previous callback, so chunks arriving during `await fileTransferManager.add(...)` or `socket.flush()` are appended to `buffer` and the metadata is parsed and added a second time, or file data is written out of order. Pause the subscription while handling metadata, or use a small state machine over a `StreamIterator`/`StreamTransformer` that frames the stream sequentially.
-  - File(s): `lib/services/network/receive_service.dart`
-- [x] **Do not buffer the whole received file in RAM for MD5** - `FileTransfer._receivedData` keeps every byte in a `List<int>` just to compute the checksum at the end, so a multi-GB transfer exhausts memory (and `addAll` on boxed ints makes it worse). Use `md5.startChunkedConversion` with an `AccumulatorSink<Digest>` and feed each chunk as it is written.
-  - File(s): `lib/models/file_transfer.dart`
+These two items were in the first analysis as "Critical" and were reviewed by the maintainer: they are not problems. Woxxy is a trusted-LAN tool where receiving files automatically is the intended behavior, so no consent step or peer allow-list is needed.
+
+- **Receiver accepts files without consent** - intended: transfers are received automatically, the size cap and filename sanitizing are the accepted protection.
+- **Avatar owner taken from metadata `senderIp`** - accepted: the peer id is the IP and the LAN is trusted, so the metadata value is not treated as a security boundary.
 
 ## High
 
-- [x] **Respect backpressure when sending** - `SendService._sendFileWithMetadata` calls `socket.add(chunk)` in a `listen` callback without pausing, so a fast disk and a slow network queue the whole file in the socket buffer. Replace the manual subscription with `socket.addStream(file.openRead().map(...))` (count bytes in `map`) and then `flush()`.
-  - File(s): `lib/services/network/send_service.dart`
-- [x] **Throttle progress updates to the UI** - `onProgress` runs once per 64 KB chunk and each call does `setState` in `PeerDetailPage`, which rebuilds the whole page thousands of times per second. Emit progress at most every ~100 ms or on a 1% change, or expose it through a `ValueNotifier` consumed only by the progress widget.
-  - File(s): `lib/screens/peer_details.dart`, `lib/services/network/send_service.dart`
-- [x] **Fix notification click on Linux and the fixed notification id** - `_linuxInitialize` registers an inline callback that only logs, so `_onNotificationResponse` (and the "open folder" feature) never runs on Linux; the `_lastNotificationDirPath` workaround is therefore dead. Also every notification uses id `0`, so a new one replaces the previous one. Pass `_onNotificationResponse` and use an incrementing id.
-  - File(s): `lib/models/notification_manager.dart`
-- [x] **Remove UI side effects from the `FileTransfer` model** - `FileTransfer.end()` calls `NotificationManager.instance` directly and `FileTransferManager` adds history entries, so the data layer depends on the UI layer and cannot be tested in isolation. Have `end()` only return the result and let one coordinator (the manager emitting an event) trigger history and notification.
-  - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
-- [x] **Replace the stringly-typed `onFileReceived` stream** - `NetworkService` emits `"Received: name from sender"` but `_HomePageState._setupFileReceivedListener` splits on `|` and expects 4+ parts, so that listener always logs "invalid file info format" and is dead code. Emit a typed `FileReceivedEvent` (path, size, speed, sender) and keep a single consumer; store and cancel the `StreamSubscription` (it is never cancelled in `HomePage`, and `HomeContent.initState` subscribes again without cancelling).
-  - File(s): `lib/services/network_service.dart`, `lib/main.dart`, `lib/screens/home.dart`
-- [x] **Handle network start failure** - `NetworkService.start()` returns silently when no IP is found and rethrows otherwise, but `_initializeApp()` is called un-awaited from `initState`, so the user sees an endless spinner (`_isLoading` never becomes false) with no message. Surface a state (`starting`, `ready`, `error`) and show an error screen with a retry button.
-  - File(s): `lib/main.dart`, `lib/services/network_service.dart`
-- [x] **Make the discovery protocol robust** - Announcements use a `:`-delimited string, so a username containing `:` breaks parsing, and the receive side uses `String.fromCharCodes` while the sender uses `utf8.encode`, which garbles non-ASCII names (accents, emoji). Send a small JSON payload and decode with `utf8.decode`; include a protocol version.
-  - File(s): `lib/services/network/discovery_service.dart`
-- [x] **Add automated tests** - There is no `test/` directory, so the transfer protocol, checksum logic and peer lifecycle have no safety net. Start with unit tests for metadata framing, filename sanitization, `FileHistory`, `PeerManager` timeouts and the MD5 check, then a loopback send/receive integration test.
-  - File(s): `test/` (new), `lib/services/network/*.dart`, `lib/models/*.dart`
+- [ ] **No connection limit and no idle timeout on the server** - A sender that connects and stalls keeps a socket, an open `IOSink` and a `FileTransferManager.files` entry forever, and the number of parallel connections is unbounded. Add a max concurrent connections value and a read inactivity timeout that triggers `handleSocketClosure`.
+  - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
+- [ ] **Write failures are ignored while receiving** - `FileTransferManager.write` swallows errors and returns `false`, but `handleNewConnection` never checks the result, so a full disk or a revoked folder keeps the transfer "running" until the MD5 check fails at the end. Check the return value and abort the transfer right away.
+  - File(s): `lib/services/network/receive_service.dart` (lines 58 and 75), `lib/models/file_transfer_manager.dart`
+- [ ] **No real backpressure on disk writes** - `FileTransfer.write` calls `fileSink.add` without awaiting anything, so if the disk is slower than the network the data piles up in memory. The doc comment of `handleNewConnection` promises backpressure that does not exist. Await `fileSink.flush()` every N bytes (or pipe through `addStream`).
+  - File(s): `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
+- [ ] **Avatar requests have no rate limit** - Every UDP `avatar_request` makes the device hash/read the avatar and open a TCP connection. A single host can flood this path. Limit requests per source IP (for example one per few seconds) and ignore the rest.
+  - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network/send_service.dart`
+- [ ] **Local identity is copied into three services** - Username, IP and profile image are stored in `NetworkService`, `SendService` and `DiscoveryService`, and the same fan-out of `updateUserDetails` calls is repeated in `start`, `setUsername`, `setProfileImagePath` and `_handleIpChanged`. Introduce one `LocalIdentity` value object (or `ValueNotifier`) that the services read, so there is a single source of truth.
+  - File(s): `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/discovery_service.dart`
+- [ ] **Received-file side effects live inside a widget** - `HomePage` listens to `onFileReceived` to write the history and show the notification, and drops the event when `!mounted`. A file received while the window is closed or the tree is rebuilt is missing from the history. Move this wiring to a plain class created in `AppServices` and keep `HomePage` for UI only.
+  - File(s): `lib/screens/home_page.dart`, `lib/app_services.dart`
+- [ ] **`HomePage` disposes a service it does not own** - `AppServices` creates `NetworkService` in `main()`, but `_HomePageState.dispose` calls `_networkService.dispose()`. After that the service cannot be started again and any other holder breaks. Let the owner of `AppServices` dispose it.
+  - File(s): `lib/screens/home_page.dart`, `lib/main.dart`
 
 ## Medium
 
-- [x] **Harden the receiver against hostile peers** - Any LAN host can push a file with no confirmation, `receivedBytes` is never compared to `dataExpected` while streaming (a sender can send unlimited data), and the declared size is not checked against free disk space. Reject data beyond the declared size, cap the size, and optionally ask the user to accept from unknown peers. (Done: size caps and overrun rejection. Not done: free disk space check and the accept prompt, which need a plugin and a UX decision.)
+- [ ] **Whole file is hashed before the first byte is sent** - `_createFileMetadata` reads the file once for MD5 and then again to send, so big files wait a long time with no progress. Show a "preparing" state in `SendQueueController` or compute the checksum while streaming and send it in a trailer.
+  - File(s): `lib/services/network/send_service.dart`, `lib/services/send_queue_controller.dart`
+- [ ] **Hashing code is duplicated and verbose** - `_createFileMetadata` builds a `Completer` around `openRead().transform(md5).listen`, while `NetworkService._avatarHashFor` does the same with `md5.bind(...).first` in one line. Extract one `md5OfFile(File)` helper in `lib/funcs/` and use it in both places. Also replace the `"CHECKSUM_ERROR"` magic string with a nullable checksum.
+  - File(s): `lib/services/network/send_service.dart`, `lib/services/network_service.dart`, `lib/models/file_transfer.dart`
+- [ ] **Timing-based heuristic for premature closure** - `_onConnectionClosed` treats "0 bytes in less than 100 ms" as a special Windows case, but the next branch (`receivedBytes < dataExpected`) already handles it identically. Remove the branch and the magic `100`.
   - File(s): `lib/services/network/receive_service.dart`
-- [x] **Fix `PeerManager` lifecycle and updates** - It is a singleton whose `BehaviorSubject` is closed by `NetworkService.dispose()` (later `add` throws), `_requestAvatarCallback` is `late` and throws if `addPeer` runs before wiring, an existing peer only refreshes `lastSeen` so renamed users or changed ports are never updated, and the cleanup timer period equals the timeout so a dead peer can stay up to ~60 s.
-  - File(s): `lib/models/peer_manager.dart`, `lib/services/network_service.dart`
-- [x] **Fix avatar cache correctness and rebuild cost** - Avatars are never refreshed (`hasAvatar` short-circuits the request) or evicted when a peer leaves; `AvatarStore.setAvatar` disposes the old `ui.Image` while a `RawImage` may still paint it (disposed-image crash); each `PeerAvatarWidget` subscribes to the full peer stream so every peer update rebuilds all avatars; and `getAvatar` logs on every miss inside `build`. Add a version/hash to the announcement, dispose on eviction after the frame, and notify per peer id.
-  - File(s): `lib/models/avatars.dart`, `lib/widgets/peer_avatar.dart`, `lib/models/peer_manager.dart`
-- [x] **Recover from discovery socket loss and IP changes** - When the UDP socket closes or errors, the timer is cancelled and nothing restarts it; the local IP is read once at startup, so switching Wi-Fi leaves the app announcing a stale address; broadcast goes only to `255.255.255.255`. Re-detect the IP periodically and rebind/restart discovery, and use per-interface broadcast addresses.
-  - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network_service.dart`
-- [x] **Keep tab state with `IndexedStack`** - `_getScreens()` builds new screen widgets on every `build` and only `screens[_selectedIndex]` is mounted, so switching tabs destroys `HomeContent`/`SettingsScreen` state and re-runs `initState`. Build the screens once and show them with `IndexedStack`.
-  - File(s): `lib/main.dart`
-- [x] **Fix `FileHistory` sorting, persistence and notifications** - The `entries` getter sorts the underlying list on every access and is called inside `itemBuilder` for each row (O(n log n) per item); history is lost on restart although `toJson`/`fromJson` exist; the UI needs manual `setState` instead of a `ChangeNotifier`. Insert at index 0 (or sort once), make it a `ChangeNotifier`, persist it, and use `ListenableBuilder` in `HistoryScreen`.
-  - File(s): `lib/models/history.dart`, `lib/screens/history.dart`, `lib/main.dart`
-- [x] **Fix the settings screen behaviors** - `_updateUser` runs on every keystroke, writing to `SharedPreferences` and changing the announced username for each character (debounce or save on submit, reject empty names); SVG avatars are offered but rendered with `SvgPicture.asset` on a file path (should be `SvgPicture.file`) and the receiver rejects SVG data, so either drop `svg` from `allowedExtensions` or support it end to end; the picked image path is referenced in place and breaks if the file moves (copy it into app support).
-  - File(s): `lib/screens/settings.dart`, `lib/services/network/receive_service.dart`
-- [x] **Split `main()` and fix the fatal error screen** - `main()` is ~190 lines mixing settings, download dir, window, icon, tray and notifications, and its error handler checks `isRootWidgetAttached`, which is always false before the first `runApp`, so the "Failed to initialize" screen never shows. Extract `DesktopShell` (window and tray) and `_resolveDownloadPath()`, move `HomePage` to `lib/screens/`, and call `runApp` unconditionally in the catch block.
-  - File(s): `lib/main.dart`
-- [x] **Break up `peer_details.dart`** - The 635-line page holds queue logic, transfer state and four builders; `_progressSubscription` is never assigned, `newFiles` is unused, and `_formatFileSize` duplicates other size formatting. Move queue/transfer state to a `SendQueueController` (`ChangeNotifier`) and extract `TransferProgressCard`, `QueueSummary` and `DropZone` widgets; share one `formatBytes` helper.
-  - File(s): `lib/screens/peer_details.dart`, `lib/funcs/utils.dart`
-- [x] **Refactor `NotificationManager` per platform** - One class holds Android, Windows, macOS and Linux init and show logic in long `if (Platform.isX)` chains, with stray `print("DEBUG LINUX...")`, `\n\n\n=== NOTIF` logging and a commented-out block. Introduce a small `NotificationBackend` interface with one implementation per platform, and route all logging through `zprint`.
-  - File(s): `lib/models/notification_manager.dart`
-- [x] **Inject dependencies instead of singletons** - `FileTransferManager`, `PeerManager`, `AvatarStore`, `NotificationManager` are global singletons, `NetworkService` reads `FileTransferManager.instance` in a field initializer (crashes if created first) and `SettingsService()` is instantiated in three places. Pass instances through constructors from `main()` so services can be faked in tests.
-  - File(s): `lib/services/network_service.dart`, `lib/models/file_transfer_manager.dart`, `lib/models/peer_manager.dart`, `lib/models/avatars.dart`, `lib/main.dart`
+- [ ] **In-flight receives are not stopped on dispose** - `ServerService.dispose` only closes the listening socket and `ReceiveService.dispose` is a no-op, so active incoming sockets and file sinks stay open. Track active sockets in `ReceiveService` and destroy them on dispose.
+  - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
+- [ ] **Received avatar is decoded without dimension limits** - Only the byte size is limited (10 MB), but a small compressed image can decode to a huge bitmap. Pass `targetWidth`/`targetHeight` to `ui.instantiateImageCodec` (avatars are shown at most 80 px).
+  - File(s): `lib/models/avatars.dart`
+- [ ] **History is saved without ordering or error handling** - `autoSave` fires an un-awaited `save` on every change; two quick changes can finish out of order and a failure is an unhandled async error. Serialize the writes (single in-flight future plus "dirty" flag) and catch errors.
+  - File(s): `lib/services/history_repository.dart`
+- [ ] **`PeerManager` is created inside `NetworkService` and wired by setter** - The constructor builds `PeerManager` itself and `setRequestAvatarCallback` closes the circular dependency afterwards, which makes the order of construction important and hard to test. Inject `PeerManager` (like the other collaborators) and pass the avatar request function at construction. Also align `SendAvatarCallback` (`Future<void>`) with `SendService.sendAvatar` (`Future<bool>`).
+  - File(s): `lib/services/network_service.dart`, `lib/models/peer_manager.dart`, `lib/services/network/discovery_service.dart`
+- [ ] **Settings screen updates state after an `await` without `mounted`** - `_pickDirectory` calls `setState` after `updateDownloadPath` without checking `mounted`, and ignores the `false` result (invalid folder is still saved in the user). Check both.
+  - File(s): `lib/screens/settings.dart`
+- [ ] **Settings are saved fire-and-forget** - `_updateUser` in `HomePage` calls `saveSettings` without `await` and without error handling, and `SettingsService.saveSettings` writes three keys one after another. Await the call, report failures and write only what changed.
+  - File(s): `lib/screens/home_page.dart`, `lib/services/settings_service.dart`
 
 ## Low / Nice to have
 
-- [x] **Centralize constants and style cleanups** - Magic strings and numbers are scattered: `'AVATAR_FILE'` and `'FILE'` literals instead of `TRANSFER_TYPE_*`, ports `8090/8091`, timeouts (5 s ready signal, 10 s connect, 30 s peer), the 10 MB avatar limit and the 1 MB metadata limit. `FileTransfer` also uses snake_case fields under `ignore_for_file`, `withOpacity` is deprecated (use `withValues(alpha:)`), and `generateTransferId` (md5 of name and millisecond) can collide; use a counter or UUID.
-  - File(s): `lib/config/transfer_constants.dart`, `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`, `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/receive_service.dart`, `lib/funcs/utils.dart`, `lib/screens/peer_details.dart`
-- [x] **Make logging cheap in release builds** - `zprint` returns early in product mode, but callers still build the interpolated string (for example `json.encode(metadata)` and full metadata maps) before the call, and several files use `print` directly. Make `zprint` take a `String Function()` or guard heavy calls with `kDebugMode`, and replace direct `print`.
-  - File(s): `lib/funcs/debug.dart`, `lib/services/network/send_service.dart`, `lib/models/file_transfer.dart`, `lib/models/notification_manager.dart`
+- [ ] **Default username defined in six places with two different values** - `'WoxxyUser'` is repeated in `NetworkService`, `SendService` and `DiscoveryService`, while `SettingsService` defaults to `'User'`. Create `DEFAULT_USERNAME` in `lib/config/` and use it everywhere.
+  - File(s): `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/discovery_service.dart`, `lib/services/settings_service.dart`
+- [ ] **`utils.dart` mixes unrelated responsibilities** - UI (`showSnackbar`), process launching (`openFileLocation`), id generation and formatting live in one file, and the "open folder" platform switch is repeated in `NotificationManager._openDirectory`. Split into `ui_helpers`, `file_opener` (shared by both callers) and `format`.
+  - File(s): `lib/funcs/utils.dart`, `lib/models/notification_manager.dart`
+- [ ] **Size formatting is inconsistent** - `formatBytes` exists, but `HistoryScreen` and `SendQueueController._onSuccess` do their own `/ 1024 / 1024` and `toStringAsFixed`, and `send_service.dart` uses a raw `1024`. Reuse `formatBytes` and `BYTES_PER_MB`.
+  - File(s): `lib/screens/history.dart`, `lib/services/send_queue_controller.dart`, `lib/services/network/send_service.dart`
+- [ ] **`FileTransfer.start` has eight positional parameters** - `key` and `sourceIp` overlap and the order is easy to get wrong. Switch to named parameters and drop the redundant `key`.
+  - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
+- [ ] **Outdated and noisy comments** - Leftovers such as "Removed userId", "Removed _loadSettings method", "FIX: Add '!'", "// End of FileTransferManager class" and the "Consider how to handle..." notes describe history, not the code. Delete them or turn them into real decisions.
+  - File(s): `lib/services/settings_service.dart`, `lib/screens/home_page.dart`, `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
+- [ ] **Dead defensive code in `HomePage`** - `_currentUser` is always set from `initialUser`, so the null branches in `_getScreens` and `build` can never run, and `_getScreens()` rebuilds the screen list on every build. Make `_currentUser` non-nullable and build the list once.
+  - File(s): `lib/screens/home_page.dart`
+- [ ] **Logging in the build path of the peer list** - `StreamBuilder` calls `zprint` twice per rebuild; in release builds the strings are still built. Use `zprintLazy` or remove them.
+  - File(s): `lib/screens/home.dart`
+- [ ] **Avatar color depends on `String.hashCode`** - The same peer can get a different color on different platforms because the hash is not guaranteed to be stable. Use a simple deterministic hash (for example sum of code units).
+  - File(s): `lib/widgets/peer_avatar.dart`
+- [ ] **`AvatarStore` never releases notifiers and has an unused debug getter** - `_notifiers` grows with every peer id ever seen and `getKeys()` is not used. Dispose the notifier in `removeAvatar` when it has no listeners and remove `getKeys`.
+  - File(s): `lib/models/avatars.dart`
+- [ ] **Version is defined twice and `env.dart` is a dangling symlink** - `APP_VERSION` in `version.dart` must be kept in sync with `pubspec.yaml` by hand, and `lib/config/env.dart` is tracked in git as a symlink to a file that does not exist (`git ls-files | xargs wc` fails on it). Generate the version from `pubspec.yaml` (or read it with `package_info_plus`) and remove or fix the symlink.
+  - File(s): `lib/config/version.dart`, `lib/config/env.dart`, `pubspec.yaml`

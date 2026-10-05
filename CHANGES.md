@@ -1,5 +1,14 @@
 # Changes Log
 
+## Document the two Critical analysis items as not issues
+
+The "receiver accepts files without consent" and "avatar owner from metadata" findings were reviewed and declared not problems (trusted LAN, automatic receive by design). They are kept in OPTIMIZE.md under "Not issues (by design)" and are not fixed.
+
+### Files
+- `OPTIMIZE.md`
+
+---
+
 ## Make logging cheap in release builds
 
 zprint is now switchable (zprintEnabled/zprintSink) and a new zprintLazy only builds its message when logging is enabled; the expensive calls (metadata JSON and maps) use it. No file calls print() directly any more. Added logging tests including a guard against direct print().
