@@ -12,7 +12,14 @@ void main() {
   tearDown(() async => tmp.delete(recursive: true));
 
   Future<FileTransfer> start(String md5Sum, int size) async =>
-      (await FileTransfer.start('k', 'f.bin', size, tmp.path, 'bob', {}, md5Sum))!;
+      (await FileTransfer.start(
+          sourceIp: 'k',
+          originalFilename: 'f.bin',
+          size: size,
+          downloadPath: tmp.path,
+          senderUsername: 'bob',
+          metadata: {},
+          expectedMd5: md5Sum))!;
 
   test('verifies a checksum computed incrementally over many chunks', () async {
     final data = List.generate(100000, (i) => i % 256);
@@ -47,7 +54,8 @@ void main() {
   });
 
   test('without a checksum the transfer is accepted as is', () async {
-    final transfer = await FileTransfer.start('k', 'nohash.bin', 2, tmp.path, 'bob', {}, null);
+    final transfer = await FileTransfer.start(
+        sourceIp: 'k', originalFilename: 'nohash.bin', size: 2, downloadPath: tmp.path, senderUsername: 'bob', metadata: {});
     await transfer!.write([1, 2]);
     expect(await transfer.end(), isTrue);
   });

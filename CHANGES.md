@@ -1,5 +1,18 @@
 # Changes Log
 
+## Use named parameters in FileTransfer.start
+
+FileTransfer.start takes named parameters and no longer has the redundant key (sourceIp is required). FileTransferManager.add and the tests were updated; behavior is unchanged, the existing md5, filename and manager tests cover it.
+
+### Files
+- `lib/models/file_transfer.dart`
+- `lib/models/file_transfer_manager.dart`
+- `test/filename_test.dart`
+- `test/file_transfer_md5_test.dart`
+- `test/hashing_test.dart`
+
+---
+
 ## Use formatBytes for every displayed size
 
 HistoryScreen, the send success message and the avatar log lines use formatBytes instead of their own divisions by 1024 / BYTES_PER_MB. The send message now shows the speed as MB/s like the rest of the app. Tests assert the formatted sizes.

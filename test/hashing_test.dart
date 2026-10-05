@@ -25,7 +25,14 @@ void main() {
 
   test('a receiver skips verification when the checksum is null or the legacy sentinel', () async {
     for (final expected in [null, '', LEGACY_CHECKSUM_ERROR]) {
-      final transfer = (await FileTransfer.start('k', 'f_${expected ?? 'null'}.bin', 3, tmp.path, 'bob', {}, expected))!;
+      final transfer = (await FileTransfer.start(
+          sourceIp: 'k',
+          originalFilename: 'f_${expected ?? 'null'}.bin',
+          size: 3,
+          downloadPath: tmp.path,
+          senderUsername: 'bob',
+          metadata: {},
+          expectedMd5: expected))!;
       await transfer.write([1, 2, 3]);
 
       expect(await transfer.end(), isTrue, reason: 'checksum $expected');

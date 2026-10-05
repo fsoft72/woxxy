@@ -35,14 +35,13 @@ class FileTransferManager {
       final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
 
       FileTransfer? transfer = await FileTransfer.start(
-        key,
-        originalFilename,
-        size,
-        directory ?? downloadPath,
-        senderUsername, // Corrected parameter name if it was mismatched
-        metadata, // Pass metadata to FileTransfer.start
-        effectiveMd5, // Pass the derived/provided checksum
-        sourceIp: sourceIp,
+        sourceIp: sourceIp ?? key,
+        originalFilename: originalFilename,
+        size: size,
+        downloadPath: directory ?? downloadPath,
+        senderUsername: senderUsername,
+        metadata: metadata,
+        expectedMd5: effectiveMd5,
       );
 
       if (transfer != null) {

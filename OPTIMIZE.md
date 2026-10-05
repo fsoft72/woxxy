@@ -55,7 +55,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/funcs/utils.dart`, `lib/models/notification_manager.dart`
 - [x] **Size formatting is inconsistent** - `formatBytes` exists, but `HistoryScreen` and `SendQueueController._onSuccess` do their own `/ 1024 / 1024` and `toStringAsFixed`, and `send_service.dart` uses a raw `1024`. Reuse `formatBytes` and `BYTES_PER_MB`.
   - File(s): `lib/screens/history.dart`, `lib/services/send_queue_controller.dart`, `lib/services/network/send_service.dart`
-- [ ] **`FileTransfer.start` has eight positional parameters** - `key` and `sourceIp` overlap and the order is easy to get wrong. Switch to named parameters and drop the redundant `key`.
+- [x] **`FileTransfer.start` has eight positional parameters** - `key` and `sourceIp` overlap and the order is easy to get wrong. Switch to named parameters and drop the redundant `key`.
   - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
 - [ ] **Outdated and noisy comments** - Leftovers such as "Removed userId", "Removed _loadSettings method", "FIX: Add '!'", "// End of FileTransferManager class" and the "Consider how to handle..." notes describe history, not the code. Delete them or turn them into real decisions.
   - File(s): `lib/services/settings_service.dart`, `lib/screens/home_page.dart`, `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`

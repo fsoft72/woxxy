@@ -35,7 +35,8 @@ void main() {
     final root = await Directory.systemTemp.createTemp('woxxy_traversal_');
     final downloads = Directory(path.join(root.path, 'downloads'));
     try {
-      final transfer = await FileTransfer.start('k', '../escaped.txt', 1, downloads.path, 'bob', {}, null);
+      final transfer = await FileTransfer.start(
+          sourceIp: 'k', originalFilename: '../escaped.txt', size: 1, downloadPath: downloads.path, senderUsername: 'bob', metadata: {});
       expect(transfer, isNotNull);
       expect(path.dirname(transfer!.destinationFilename), downloads.path);
       await transfer.fileSink.close();

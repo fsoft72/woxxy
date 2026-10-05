@@ -70,18 +70,18 @@ class FileTransfer {
 
   /// Creates a new FileTransfer instance and prepares the file for writing.
   /// Returns null if the file cannot be created.
-  /// `key` (sourceIp) is the identifier used in FileTransferManager.
-  static Future<FileTransfer?> start(
-      String key, // Typically source IP
-      String originalFilename,
-      int size,
-      String downloadPath,
-      String senderUsername,
-      Map<String, dynamic> metadata, // Accept metadata map
-      String? expectedMd5, // Accept expected checksum
-      {String? sourceIp}) async {
+  /// [sourceIp] is the address of the sender; [originalFilename] is sanitized and made unique inside [downloadPath].
+  static Future<FileTransfer?> start({
+    required String sourceIp,
+    required String originalFilename,
+    required int size,
+    required String downloadPath,
+    required String senderUsername,
+    required Map<String, dynamic> metadata,
+    String? expectedMd5,
+  }) async {
     try {
-      zprint("🏁 Starting new file transfer preparation for '$originalFilename' from '$key'");
+      zprint("🏁 Starting new file transfer preparation for '$originalFilename' from '$sourceIp'");
       zprint("   Download Path: $downloadPath");
       zprint("   Size: $size bytes");
       zprint("   Sender: $senderUsername");
@@ -118,7 +118,7 @@ class FileTransfer {
       zprint("   Stopwatch started.");
 
       return FileTransfer._internal(
-        sourceIp: sourceIp ?? key,
+        sourceIp: sourceIp,
         destinationFilename: finalPath,
         size: size,
         fileSink: sink,
@@ -128,7 +128,7 @@ class FileTransfer {
         expectedMd5: expectedMd5,
       );
     } catch (e, s) {
-      zprint('❌ Error creating FileTransfer for key $key: $e\n$s');
+      zprint('❌ Error creating FileTransfer for $originalFilename from $sourceIp: $e\n$s');
       return null;
     }
   }
