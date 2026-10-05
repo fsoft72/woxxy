@@ -1,5 +1,15 @@
 # Changes Log
 
+## Release avatar notifiers of removed peers
+
+removeAvatar disposes and forgets the notifier of a peer when no widget listens to it (a watched notifier is kept so the widget still receives later updates). The unused getKeys debug method was removed. Added a test.
+
+### Files
+- `lib/models/avatars.dart`
+- `test/avatar_store_test.dart`
+
+---
+
 ## Use a stable hash for avatar colors
 
 getAvatarColorForPeer uses an FNV-1a hash instead of String.hashCode, so a peer has the same color on every platform. Added a test with fixed expected colors.

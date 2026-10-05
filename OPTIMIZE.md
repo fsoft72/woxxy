@@ -65,7 +65,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/screens/home.dart`
 - [x] **Avatar color depends on `String.hashCode`** - The same peer can get a different color on different platforms because the hash is not guaranteed to be stable. Use a simple deterministic hash (for example sum of code units).
   - File(s): `lib/widgets/peer_avatar.dart`
-- [ ] **`AvatarStore` never releases notifiers and has an unused debug getter** - `_notifiers` grows with every peer id ever seen and `getKeys()` is not used. Dispose the notifier in `removeAvatar` when it has no listeners and remove `getKeys`.
+- [x] **`AvatarStore` never releases notifiers and has an unused debug getter** - `_notifiers` grows with every peer id ever seen and `getKeys()` is not used. Dispose the notifier in `removeAvatar` when it has no listeners and remove `getKeys`.
   - File(s): `lib/models/avatars.dart`
 - [ ] **Version is defined twice and `env.dart` is a dangling symlink** - `APP_VERSION` in `version.dart` must be kept in sync with `pubspec.yaml` by hand, and `lib/config/env.dart` is tracked in git as a symlink to a file that does not exist (`git ls-files | xargs wc` fails on it). Generate the version from `pubspec.yaml` (or read it with `package_info_plus`) and remove or fix the symlink.
   - File(s): `lib/config/version.dart`, `lib/config/env.dart`, `pubspec.yaml`

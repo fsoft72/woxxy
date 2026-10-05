@@ -38,6 +38,27 @@ void main() {
   });
 
   group('AvatarStore', () {
+    testWidgets('a removed avatar frees its notifier unless a widget still listens to it', (tester) async {
+      final store = AvatarStore();
+      await tester.runAsync(() async {
+        await store.setAvatar('free', _png);
+        await store.setAvatar('watched', _png);
+      });
+      final freeBefore = store.listenableFor('free');
+      final watchedBefore = store.listenableFor('watched');
+      void onChange() {}
+      watchedBefore.addListener(onChange);
+
+      store.removeAvatar('free');
+      store.removeAvatar('watched');
+
+      expect(store.listenableFor('watched'), same(watchedBefore), reason: 'a listening widget must keep getting updates');
+      expect(store.listenableFor('free'), isNot(same(freeBefore)));
+      watchedBefore.removeListener(onChange);
+      store.clear();
+      await tester.pump(const Duration(seconds: 3));
+    });
+
     testWidgets('a big avatar is scaled down while decoding', (tester) async {
       final store = AvatarStore();
       final png = await tester.runAsync(() => _makePng(1000, 400));

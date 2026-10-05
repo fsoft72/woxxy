@@ -19,15 +19,12 @@ class AvatarStore {
   final Duration _disposeDelay;
   final Map<String, ui.Image> _avatars = {};
   final Map<String, String?> _hashes = {};
-  final Map<String, ValueNotifier<ui.Image?>> _notifiers = {};
-
-  /// Returns all cached avatar peer IDs for debugging
-  List<String> getKeys() => _avatars.keys.toList();
+  final Map<String, _AvatarNotifier> _notifiers = {};
 
   /// Listenable that changes only when the avatar of [peerId] changes. Widgets use it
   /// so one avatar update rebuilds one avatar instead of every avatar on screen.
   ValueListenable<ui.Image?> listenableFor(String peerId) =>
-      _notifiers.putIfAbsent(peerId, () => ValueNotifier<ui.Image?>(_avatars[peerId]));
+      _notifiers.putIfAbsent(peerId, () => _AvatarNotifier(_avatars[peerId]));
 
   /// Stores an avatar image in memory for the given peer ID.
   /// [hash] identifies the image content (MD5 of the file) so a changed avatar can be detected.
@@ -106,7 +103,15 @@ class AvatarStore {
 
     final previous = _avatars.remove(peerId);
     _hashes.remove(peerId);
-    _notifiers[peerId]?.value = null;
+    final notifier = _notifiers[peerId];
+    if (notifier != null) {
+      notifier.value = null;
+      // Nobody watches it: drop it, so the map does not grow with every peer ever seen
+      if (!notifier.isWatched) {
+        _notifiers.remove(peerId);
+        notifier.dispose();
+      }
+    }
     _disposeLater(previous);
   }
 
@@ -119,4 +124,11 @@ class AvatarStore {
       removeAvatar(id);
     }
   }
+}
+
+/// Notifier of one peer avatar that can tell whether a widget still listens to it.
+class _AvatarNotifier extends ValueNotifier<ui.Image?> {
+  _AvatarNotifier(super.value);
+
+  bool get isWatched => hasListeners;
 }
