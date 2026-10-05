@@ -13,3 +13,6 @@ const int MAX_METADATA_LENGTH = 1024 * 1024;
 
 /// Number of bytes used by the metadata length prefix
 const int METADATA_LENGTH_PREFIX_BYTES = 4;
+
+/// Highest notification id before the counter wraps (platforms use signed 32 bit ids)
+const int MAX_NOTIFICATION_ID = 2147483647;

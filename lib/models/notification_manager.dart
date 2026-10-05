@@ -1,10 +1,12 @@
 // ignore_for_file: avoid_print
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:path/path.dart' as path;
 import 'dart:io';
 
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 class NotificationManager {
@@ -16,9 +18,27 @@ class NotificationManager {
     return _instance;
   }
 
-  NotificationManager._internal() {
+  NotificationManager._internal() : _directoryOpener = null {
     zprint('🏗️ NotificationManager._internal() constructor called');
     zprint('📱 Creating FlutterLocalNotificationsPlugin instance');
+  }
+
+  /// Creates an isolated manager whose directory opener is replaced (used by tests).
+  @visibleForTesting
+  NotificationManager.forTesting({required Future<void> Function(String dirPath) directoryOpener})
+      : _directoryOpener = directoryOpener;
+
+  /// Overrides how a directory is opened; null means the platform file manager.
+  final Future<void> Function(String dirPath)? _directoryOpener;
+
+  int _nextNotificationId = 1;
+
+  /// Returns a fresh notification id so a new notification does not replace the previous one.
+  @visibleForTesting
+  int nextNotificationId() {
+    final id = _nextNotificationId;
+    _nextNotificationId = _nextNotificationId >= MAX_NOTIFICATION_ID ? 1 : _nextNotificationId + 1;
+    return id;
   }
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
@@ -49,12 +69,20 @@ class NotificationManager {
     }
   }
 
-  /// Callback for flutter_local_notifications click on desktop.
-  void _onNotificationResponse(NotificationResponse details) {
+  /// Last directory path from a file received notification, used on Linux
+  /// where passing a payload to .show() breaks some notification daemons.
+  String? _lastNotificationDirPath;
+
+  /// Callback for flutter_local_notifications clicks (all platforms, including Linux).
+  /// Opens the folder from the payload, or the last remembered one when the platform
+  /// delivered no payload.
+  @visibleForTesting
+  void handleNotificationResponse(NotificationResponse details) {
     zprint('🔔 Notification clicked, payload: ${details.payload}');
     final payload = details.payload;
-    if (payload != null && payload.isNotEmpty) {
-      _openDirectory(payload);
+    final dirPath = (payload != null && payload.isNotEmpty) ? payload : _lastNotificationDirPath;
+    if (dirPath != null && dirPath.isNotEmpty) {
+      (_directoryOpener ?? _openDirectory)(dirPath);
     }
   }
 
@@ -99,7 +127,7 @@ class NotificationManager {
         // Initialize the plugin with permission requests
         final initSuccess = await _notifications.initialize(
           initializationSettings,
-          onDidReceiveNotificationResponse: _onNotificationResponse,
+          onDidReceiveNotificationResponse: handleNotificationResponse,
         );
         if (initSuccess ?? false) {
           _isInitialized = true;
@@ -150,7 +178,7 @@ class NotificationManager {
       // Initialize notifications
       final success = await _notifications.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: _onNotificationResponse,
+        onDidReceiveNotificationResponse: handleNotificationResponse,
       );
 
       if (success ?? false) {
@@ -213,7 +241,7 @@ class NotificationManager {
     // Initialize notifications for Linux
     final success = await _notifications.initialize(
       initializationSettings,
-      onDidReceiveNotificationResponse: _onNotificationResponse,
+      onDidReceiveNotificationResponse: handleNotificationResponse,
     );
 
     if (success ?? false) {
@@ -285,7 +313,7 @@ class NotificationManager {
         );
 
         await _notifications.show(
-          0,
+          nextNotificationId(),
           title,
           body,
           const NotificationDetails(android: androidDetails),
@@ -299,37 +327,40 @@ class NotificationManager {
           body: body,
         );
         if (payload != null && payload.isNotEmpty) {
-          notification.onClick = () => _openDirectory(payload);
+          notification.onClick = () => (_directoryOpener ?? _openDirectory)(payload);
         }
         await notification.show();
       }
 
       if (Platform.isLinux) {
+        print("DEBUG LINUX: showing notification, payload=$payload");
         final iconPath = await _getAbsoluteIconPath();
         final linuxDetails = LinuxNotificationDetails(
           category: LinuxNotificationCategory.presence,
           urgency: LinuxNotificationUrgency.critical,
-          /*
-          actions: [
-            const LinuxNotificationAction(
-              key: 'test',
-              label: 'Test',
-            ),
-          ],
-					*/
           sound: null,
           suppressSound: false,
           resident: true,
           defaultActionName: 'Open',
           icon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
         );
-        await _notifications.show(
-          0,
-          title,
-          body,
-          NotificationDetails(linux: linuxDetails),
-          payload: payload,
-        );
+        // On Linux, passing a payload adds a D-Bus action that some
+        // notification daemons do not support, causing the notification
+        // to silently not appear. Store the path separately instead.
+        if (payload != null) {
+          _lastNotificationDirPath = payload;
+        }
+        try {
+          await _notifications.show(
+            nextNotificationId(),
+            title,
+            body,
+            NotificationDetails(linux: linuxDetails),
+          );
+          print("DEBUG LINUX: show() completed OK");
+        } catch (e, s) {
+          print("DEBUG LINUX: show() FAILED: $e\n$s");
+        }
       }
 
       if (Platform.isMacOS) {
@@ -342,7 +373,7 @@ class NotificationManager {
             interruptionLevel: InterruptionLevel.active // Add this to ensure notification is shown
             );
         await _notifications.show(
-          0,
+          nextNotificationId(),
           title,
           body,
           const NotificationDetails(macOS: darwinDetails),

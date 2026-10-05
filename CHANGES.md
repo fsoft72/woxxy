@@ -1,5 +1,16 @@
 # Changes Log
 
+## Fix notification click on Linux and the fixed notification id
+
+Linux now registers the same click handler as the other platforms (it only logged before), so clicking a file received notification opens the folder; every notification gets an incrementing id instead of always 0. Includes the previously uncommitted Linux payload workaround in this file. Added unit tests.
+
+### Files
+- `lib/models/notification_manager.dart`
+- `lib/config/transfer_constants.dart`
+- `test/notification_manager_test.dart`
+
+---
+
 ## Throttle progress updates to the UI
 
 Per-chunk progress callbacks are now filtered by a ProgressThrottle (100 ms, final update always forced) before reaching setState in PeerDetailPage. Added unit tests with an injected clock.
