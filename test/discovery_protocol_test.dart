@@ -62,7 +62,7 @@ void main() {
       mainServerPort: 8090,
       peerManager: peers,
       avatarStore: AvatarStore(),
-      sendAvatarCallback: (_) async {},
+      sendAvatarCallback: (_) async => true,
       identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       restartDelay: const Duration(milliseconds: 50),
     );
@@ -94,7 +94,7 @@ void main() {
       mainServerPort: 8090,
       peerManager: PeerManager(avatarStore: AvatarStore()),
       avatarStore: AvatarStore(),
-      sendAvatarCallback: (_) async {},
+      sendAvatarCallback: (_) async => true,
       identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       restartDelay: const Duration(milliseconds: 20),
     );
@@ -113,14 +113,13 @@ void main() {
     final port = probe.port;
     probe.close();
 
-    final peers = PeerManager(avatarStore: AvatarStore());
-    peers.setRequestAvatarCallback((_) {});
+    final peers = PeerManager(avatarStore: AvatarStore(), requestAvatar: (_) {});
     final service = DiscoveryService(
       discoveryPort: port,
       mainServerPort: 8090,
       peerManager: peers,
       avatarStore: AvatarStore(),
-      sendAvatarCallback: (_) async {},
+      sendAvatarCallback: (_) async => true,
       identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
     );
     await service.start();
@@ -152,7 +151,10 @@ void main() {
       mainServerPort: 8090,
       peerManager: PeerManager(avatarStore: AvatarStore()),
       avatarStore: AvatarStore(),
-      sendAvatarCallback: (peer) async => answered.add(peer.id),
+      sendAvatarCallback: (peer) async {
+        answered.add(peer.id);
+        return true;
+      },
       identity: LocalIdentity(ipAddress: '10.255.255.1', username: 'me'),
       clock: () => now,
     );

@@ -1,5 +1,19 @@
 # Changes Log
 
+## Pass the avatar request function to PeerManager at construction
+
+PeerManager takes requestAvatar in its constructor, so the setRequestAvatarCallback setter and the construction order dependency are gone (NetworkService passes a late bound lambda). SendAvatarCallback now matches SendService.sendAvatar (Future<bool>). Existing tests moved to the constructor argument.
+
+### Files
+- `lib/models/peer_manager.dart`
+- `lib/services/network_service.dart`
+- `lib/services/network/discovery_service.dart`
+- `test/discovery_protocol_test.dart`
+- `test/peer_manager_test.dart`
+- `test/avatar_store_test.dart`
+
+---
+
 ## Serialize history saves and log failures
 
 HistoryRepository.autoSave runs one write at a time, merges changes made during a write into one more write with the latest state, and logs failures instead of leaving unhandled async errors. Added tests.

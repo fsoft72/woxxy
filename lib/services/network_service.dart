@@ -41,7 +41,7 @@ class NetworkService {
   // --- Constants ---
 
   // --- Dependencies & State ---
-  final PeerManager _peerManager;
+  late final PeerManager _peerManager;
   final AvatarStore _avatarStore;
   final FileTransferManager _fileTransferManager;
   final SettingsService _settingsService;
@@ -85,8 +85,10 @@ class NetworkService {
   })  : _fileTransferManager = fileTransferManager,
         _avatarStore = avatarStore,
         _settingsService = settingsService,
-        _peerManager = PeerManager(avatarStore: avatarStore),
         _ipResolver = ipResolver {
+    // The discovery service is created below; the lambda reads it only when a peer shows up
+    _peerManager = PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
+
     // Instantiate internal services, passing dependencies and callbacks
     _sendService = SendService(identity: _identity);
 
@@ -115,9 +117,6 @@ class NetworkService {
       sendAvatarCallback: _sendService.sendAvatar, // Wire Discovery to SendService for avatar sending
       identity: _identity,
     );
-
-    // Set the callback in PeerManager for requesting avatars
-    _peerManager.setRequestAvatarCallback(_discoveryService.requestAvatar);
   }
 
   Future<void> start() async {

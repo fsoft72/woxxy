@@ -16,9 +16,13 @@ void main() {
 
   setUp(() {
     now = DateTime(2026, 1, 1, 12);
-    manager = PeerManager(avatarStore: AvatarStore(), clock: () => now, peerTimeout: const Duration(seconds: 30));
+    manager = PeerManager(
+      avatarStore: AvatarStore(),
+      clock: () => now,
+      peerTimeout: const Duration(seconds: 30),
+      requestAvatar: (p) => avatarRequests.add(p.id),
+    );
     avatarRequests = [];
-    manager.setRequestAvatarCallback((p) => avatarRequests.add(p.id));
   });
 
   tearDown(() => manager.dispose());

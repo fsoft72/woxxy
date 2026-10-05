@@ -29,9 +29,15 @@ class PeerManager {
   final DateTime Function() _now;
   final Duration _peerTimeout;
 
-  /// Creates a manager. [clock] and [peerTimeout] are injectable for tests.
-  PeerManager({required AvatarStore avatarStore, DateTime Function()? clock, Duration peerTimeout = DEFAULT_PEER_TIMEOUT})
-      : _avatarStore = avatarStore,
+  /// Creates a manager. [requestAvatar] asks a peer for its avatar (avatars are not requested
+  /// when it is null). [clock] and [peerTimeout] are injectable for tests.
+  PeerManager({
+    required AvatarStore avatarStore,
+    RequestAvatarCallback? requestAvatar,
+    DateTime Function()? clock,
+    Duration peerTimeout = DEFAULT_PEER_TIMEOUT,
+  })  : _avatarStore = avatarStore,
+        _requestAvatarCallback = requestAvatar,
         _now = clock ?? DateTime.now,
         _peerTimeout = peerTimeout {
     // Ensure stream starts with an empty list
@@ -39,8 +45,7 @@ class PeerManager {
     zprint('🔄 PeerManager initialized with empty peer list');
   }
 
-  // Set by NetworkService once the discovery service exists; avatars are skipped until then
-  RequestAvatarCallback? _requestAvatarCallback;
+  final RequestAvatarCallback? _requestAvatarCallback;
 
   final Map<String, _PeerStatus> _peers = {};
   final Map<String, DateTime> _lastAvatarRequestAt = {};
@@ -56,12 +61,6 @@ class PeerManager {
   List<Peer> get currentPeers {
     // Return a new list to prevent external modification
     return _peers.values.map((status) => status.peer).toList();
-  }
-
-  // Method for NetworkService to set the callback after PeerManager is created
-  void setRequestAvatarCallback(RequestAvatarCallback callback) {
-    _requestAvatarCallback = callback;
-    zprint("✅ Avatar request callback set in PeerManager.");
   }
 
   void startPeerCleanup() {

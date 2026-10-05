@@ -11,7 +11,7 @@ import 'discovery_protocol.dart';
 import '../../config/network_constants.dart';
 
 // Define a type for the sendAvatar callback
-typedef SendAvatarCallback = Future<void> Function(Peer receiver);
+typedef SendAvatarCallback = Future<bool> Function(Peer receiver);
 
 class DiscoveryService {
   final int discoveryPort;

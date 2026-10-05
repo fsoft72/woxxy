@@ -111,9 +111,8 @@ void main() {
     setUp(() {
       now = DateTime(2026, 1, 1, 12);
       store = AvatarStore(disposeDelay: Duration.zero);
-      manager = PeerManager(avatarStore: store, clock: () => now);
+      manager = PeerManager(avatarStore: store, clock: () => now, requestAvatar: (p) => requests.add('${p.id}:${p.avatarHash}'));
       requests = [];
-      manager.setRequestAvatarCallback((p) => requests.add('${p.id}:${p.avatarHash}'));
     });
 
     tearDown(() => manager.dispose());
