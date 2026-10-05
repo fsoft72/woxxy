@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
@@ -27,7 +24,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
+class _HomePageState extends State<HomePage> {
   late final NetworkService _networkService = widget.services.networkService;
   late final UserUpdater _userUpdater = UserUpdater(
     settings: widget.services.settingsService,
@@ -38,7 +35,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   late User _currentUser = widget.initialUser;
   bool _isLoading = true;
   String? _startupError;
-  final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
   void initState() {
@@ -56,10 +52,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   }
 
   Future<void> _initializeApp() async {
-    if (_isDesktop) {
-      trayManager.addListener(this);
-      windowManager.addListener(this);
-    }
     await _startNetwork();
   }
 
@@ -86,44 +78,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
 
   @override
   void dispose() {
-    zprint("👋 HomePage disposing...");
-    if (_isDesktop) {
-      trayManager.removeListener(this);
-      windowManager.removeListener(this);
-    }
-    zprint("✅ HomePage disposed.");
     super.dispose();
-  }
-
-  @override
-  void onWindowClose() async {
-    // Just hide the window instead of closing the app
-    zprint("🔒 Window close requested, hiding window.");
-    await windowManager.hide();
-  }
-
-  @override
-  void onTrayIconMouseDown() async {
-    zprint("🖱️ Tray icon clicked (left).");
-    // Show and focus window when tray icon is clicked
-    final isVisible = await windowManager.isVisible();
-    if (!isVisible) {
-      zprint(" M-> Showing window.");
-      await windowManager.show();
-      await windowManager.focus();
-    } else {
-      // Optionally, bring to front if already visible but not focused
-      zprint(" M-> Window already visible, focusing.");
-      await windowManager.focus();
-    }
-  }
-
-  // Right-click must open the menu explicitly (needed on Windows and Linux)
-  @override
-  void onTrayIconRightMouseDown() {
-    zprint("🖱️ Tray icon clicked (right).");
-    // Explicitly show the context menu on right-click
-    trayManager.popUpContextMenu();
   }
 
   /// Applies the new settings and saves them. Returns an error message when it was refused.

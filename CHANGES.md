@@ -1,5 +1,9 @@
 # Changes Log
 
+## Move tray and window handling out of HomePage
+
+New `DesktopWindowController` (created once in `main()`) hides the window on close and shows or focuses it on tray clicks; `HomePage` is a plain widget again with no `Platform` check. Tests: `test/desktop_window_controller_test.dart`.
+
 ## Remove dead branches in the home, history and settings screens
 
 Removed the unreachable "no data" branch of the peer list, made `HistoryScreen` stateless, dropped the SVG branch of the settings picture, and gave `User.copyWith` a `clearProfileImage` flag so the stored-picture removal in `SettingsService` can be reached. Tests in `test/settings_service_test.dart` and `test/home_content_test.dart`.

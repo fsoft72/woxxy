@@ -4,6 +4,7 @@ import 'package:woxxy/funcs/debug.dart';
 import 'app.dart';
 import 'app_services.dart';
 import 'bootstrap/desktop_shell.dart';
+import 'bootstrap/desktop_window_controller.dart';
 import 'bootstrap/download_path.dart';
 import 'services/history_repository.dart';
 import 'services/settings_service.dart';
@@ -33,6 +34,7 @@ void main() async {
 
     // Window and tray exist only on desktop platforms
     await DesktopShell.init(onQuit: services.dispose);
+    DesktopWindowController().attach(); // Close hides the window, tray clicks show it
 
     zprint('🔔 Starting notification manager initialization...');
     await services.notificationManager.init();
