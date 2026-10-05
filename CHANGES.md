@@ -1,5 +1,20 @@
 # Changes Log
 
+## Break up `peer_details.dart`
+
+The 635 line page is now 174 lines. Queue and transfer state moved to SendQueueController (a ChangeNotifier with injectable send/cancel functions, throttled progress, cancel and failure handling), the UI to TransferProgressCard, QueueSummary and SendDropZone widgets, and size formatting to a shared formatBytes (now with GB). The unused _progressSubscription and newFiles are gone. Added controller and widget tests.
+
+### Files
+- `lib/screens/peer_details.dart`
+- `lib/services/send_queue_controller.dart`
+- `lib/widgets/send/transfer_progress_card.dart`
+- `lib/widgets/send/queue_summary.dart`
+- `lib/widgets/send/send_drop_zone.dart`
+- `lib/funcs/utils.dart`
+- `test/send_queue_controller_test.dart`
+
+---
+
 ## Split `main()` and fix the fatal error screen
 
 main() shrank from ~190 to ~50 lines: window/tray setup moved to bootstrap/desktop_shell.dart (split into small methods), download folder resolution to bootstrap/download_path.dart (with fallback), MyApp to app.dart and HomePage to screens/home_page.dart. The fatal error handler now always calls runApp(InitErrorApp) (the old isRootWidgetAttached check was always false, so no error screen was ever shown). Added tests.
