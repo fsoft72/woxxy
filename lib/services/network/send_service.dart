@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/hashing.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/local_identity.dart';
 import '../../models/peer.dart';
@@ -231,29 +231,17 @@ class SendService {
     }
   }
 
-  // Helper to create metadata map
+  /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
+  /// cannot be hashed, and the receiver then skips verification.
   Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId) async {
     final fileSize = await file.length();
     final filename = path.basename(file.path);
-    final hashCompleter = Completer<Digest>();
 
+    String? checksum;
     try {
-      file.openRead().transform(md5).listen((digest) {
-        if (!hashCompleter.isCompleted) hashCompleter.complete(digest);
-      }, onError: (e) {
-        if (!hashCompleter.isCompleted) hashCompleter.completeError(e);
-      }, cancelOnError: true);
-    } catch (e) {
-      if (!hashCompleter.isCompleted) hashCompleter.completeError(e);
-    }
-
-    String checksum;
-    try {
-      final hash = await hashCompleter.future;
-      checksum = hash.toString();
+      checksum = await md5OfFile(file);
     } catch (e) {
       zprint("⚠️ Error calculating MD5 checksum for ${file.path}: $e. Sending without checksum.");
-      checksum = "CHECKSUM_ERROR";
     }
 
     return {

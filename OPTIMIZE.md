@@ -30,7 +30,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
 
 - [x] **Whole file is hashed before the first byte is sent** - `_createFileMetadata` reads the file once for MD5 and then again to send, so big files wait a long time with no progress. Show a "preparing" state in `SendQueueController` or compute the checksum while streaming and send it in a trailer.
   - File(s): `lib/services/network/send_service.dart`, `lib/services/send_queue_controller.dart`
-- [ ] **Hashing code is duplicated and verbose** - `_createFileMetadata` builds a `Completer` around `openRead().transform(md5).listen`, while `NetworkService._avatarHashFor` does the same with `md5.bind(...).first` in one line. Extract one `md5OfFile(File)` helper in `lib/funcs/` and use it in both places. Also replace the `"CHECKSUM_ERROR"` magic string with a nullable checksum.
+- [x] **Hashing code is duplicated and verbose** - `_createFileMetadata` builds a `Completer` around `openRead().transform(md5).listen`, while `NetworkService._avatarHashFor` does the same with `md5.bind(...).first` in one line. Extract one `md5OfFile(File)` helper in `lib/funcs/` and use it in both places. Also replace the `"CHECKSUM_ERROR"` magic string with a nullable checksum.
   - File(s): `lib/services/network/send_service.dart`, `lib/services/network_service.dart`, `lib/models/file_transfer.dart`
 - [ ] **Timing-based heuristic for premature closure** - `_onConnectionClosed` treats "0 bytes in less than 100 ms" as a special Windows case, but the next branch (`receivedBytes < dataExpected`) already handles it identically. Remove the branch and the magic `100`.
   - File(s): `lib/services/network/receive_service.dart`

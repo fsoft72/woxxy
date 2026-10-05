@@ -1,5 +1,19 @@
 # Changes Log
 
+## Share one md5OfFile helper and drop the checksum sentinel
+
+New funcs/hashing.dart md5OfFile replaces the Completer based hashing in SendService and the inline hashing in NetworkService. A file that cannot be hashed is now announced with a null checksum; the receiver still accepts the legacy 'CHECKSUM_ERROR' value (LEGACY_CHECKSUM_ERROR). Added tests.
+
+### Files
+- `lib/funcs/hashing.dart`
+- `lib/services/network/send_service.dart`
+- `lib/services/network_service.dart`
+- `lib/models/file_transfer.dart`
+- `lib/config/transfer_constants.dart`
+- `test/hashing_test.dart`
+
+---
+
 ## Show a Preparing state while the file is hashed
 
 The protocol keeps the checksum in the header (compatible with older peers), so instead of a trailer the queue now reports isPreparing until the first progress report and TransferProgressCard shows an indeterminate bar with 'Preparing...'. Added tests.

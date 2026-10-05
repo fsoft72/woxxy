@@ -59,9 +59,9 @@ class FileTransfer {
     required this.metadata, // Initialize metadata
     required this.expectedMd5,
   }) {
-    // Decide if we need to buffer data for MD5 check
-    // FIX: Add '!' after expectedMd5 when accessing isNotEmpty
-    _calculatingMd5 = expectedMd5 != null && expectedMd5!.isNotEmpty && expectedMd5 != "CHECKSUM_ERROR";
+    // Without an announced checksum there is nothing to verify (older senders sent a sentinel)
+    final expected = expectedMd5;
+    _calculatingMd5 = expected != null && expected.isNotEmpty && expected != LEGACY_CHECKSUM_ERROR;
     if (_calculatingMd5) {
       _md5Input = md5.startChunkedConversion(_md5Sink);
       zprint(" M-> MD5 check required for $destinationFilename. Incremental hashing enabled.");

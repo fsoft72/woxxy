@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:crypto/crypto.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/hashing.dart';
 import 'package:woxxy/services/settings_service.dart';
 
 import '../models/avatars.dart';
@@ -191,7 +191,7 @@ class NetworkService {
     try {
       final file = File(imagePath);
       if (!await file.exists()) return null;
-      return (await md5.bind(file.openRead()).first).toString();
+      return await md5OfFile(file);
     } catch (e) {
       zprint('⚠️ Could not hash avatar $imagePath: $e');
       return null;

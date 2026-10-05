@@ -28,3 +28,7 @@ const int BYTES_PER_MB = 1024 * 1024;
 
 /// Received bytes buffered in memory before the writer waits for the disk to catch up (4 MiB)
 const int WRITE_FLUSH_THRESHOLD_BYTES = 4 * 1024 * 1024;
+
+/// Placeholder older senders put in the checksum field when they could not hash the file.
+/// Receivers still treat it as "no checksum"; current senders send null instead.
+const String LEGACY_CHECKSUM_ERROR = 'CHECKSUM_ERROR';
