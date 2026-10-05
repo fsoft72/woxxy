@@ -1,5 +1,9 @@
 # Changes Log
 
+## Route settings changes through UserUpdater
+
+New `UserUpdater` validates the download folder, saves the settings and then tells the network layer; it returns a message when a change is refused, and the screen shows it and goes back to the values in use. `SettingsScreen` lost its `FileTransferManager`, the callback is the typed `UserUpdateHandler`, and a failing picture import is reported. Tests: `test/user_updater_test.dart`, `test/settings_test.dart`.
+
 ## Find icons from the app bundle, not from the working directory
 
 New `bundledAssetPath` locates Flutter assets from `Platform.resolvedExecutable` (Linux, Windows and macOS layouts); the Linux notification icon and the Windows tray and window icon fallbacks use it instead of `Directory.current`. Tests: `test/bundled_assets_test.dart`.

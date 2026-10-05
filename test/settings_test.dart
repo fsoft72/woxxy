@@ -14,8 +14,10 @@ void main() {
   Widget host() => MaterialApp(
         home: SettingsScreen(
           user: User(username: 'alice', defaultDownloadDirectory: ''),
-          onUserUpdated: saved.add,
-          fileTransferManager: FileTransferManager(downloadPath: Directory.systemTemp.path),
+          onUserUpdated: (user) async {
+            saved.add(user);
+            return null;
+          },
         ),
       );
 
@@ -74,14 +76,23 @@ void main() {
       }
     }
 
-    Widget hostWith(String? picked) => MaterialApp(
-          home: SettingsScreen(
-            user: User(username: 'alice', defaultDownloadDirectory: ''),
-            onUserUpdated: saved.add,
-            fileTransferManager: FileTransferManager(downloadPath: tmp.path),
-            directoryPicker: () async => picked,
-          ),
-        );
+    /// The owner of the settings in these tests refuses a folder that cannot be created.
+    Widget hostWith(String? picked) {
+      final files = FileTransferManager(downloadPath: tmp.path);
+      return MaterialApp(
+        home: SettingsScreen(
+          user: User(username: 'alice', defaultDownloadDirectory: ''),
+          onUserUpdated: (user) async {
+            if (!await files.updateDownloadPath(user.defaultDownloadDirectory)) {
+              return 'Cannot use this folder for downloads: ${user.defaultDownloadDirectory}';
+            }
+            saved.add(user);
+            return null;
+          },
+          directoryPicker: () async => picked,
+        ),
+      );
+    }
 
     testWidgets('a valid folder is shown and saved', (tester) async {
       final folder = '${tmp.path}/inbox';

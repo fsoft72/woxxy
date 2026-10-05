@@ -8,16 +8,18 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
 import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
-import '../models/file_transfer_manager.dart';
 import '../services/profile_image_store.dart';
 
 /// Pause after the last keystroke before the new username is saved and announced.
 const Duration USERNAME_SAVE_DELAY = Duration(milliseconds: 600);
 
+/// Applies and stores a changed user. Returns null on success, or a message that is shown to the
+/// user when the change was refused (the screen then goes back to the previous values).
+typedef UserUpdateHandler = Future<String?> Function(User updated);
+
 class SettingsScreen extends StatefulWidget {
   final User user;
-  final Function(User) onUserUpdated;
-  final FileTransferManager fileTransferManager;
+  final UserUpdateHandler onUserUpdated;
   final ProfileImageStore? profileImageStore;
 
   /// Lets the user choose a folder; defaults to the system dialog and is injectable for tests.
@@ -27,7 +29,6 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.user,
     required this.onUserUpdated,
-    required this.fileTransferManager,
     this.profileImageStore,
     this.directoryPicker,
   });
@@ -84,25 +85,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _selectedImagePath = storedPath;
     });
-    _updateUser();
+    await _updateUser();
   }
 
   Future<void> _pickDirectory() async {
     final selectedDirectory = await (widget.directoryPicker ?? FilePicker.platform.getDirectoryPath)();
-    if (selectedDirectory == null) return;
-
-    // Update FileTransferManager download path
-    final updated = await widget.fileTransferManager.updateDownloadPath(selectedDirectory);
-    if (!mounted) return;
-    if (!updated) {
-      showSnackbar(context, 'Cannot use this folder for downloads: $selectedDirectory');
-      return;
-    }
+    if (selectedDirectory == null || !mounted) return;
 
     setState(() {
       _selectedDirectory = selectedDirectory;
     });
-    _updateUser();
+    await _updateUser();
   }
 
   /// Called on every keystroke: validates immediately but saves only after a short pause.
@@ -120,7 +113,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _updateUser();
   }
 
-  void _updateUser() {
+  /// Sends the current values to the owner of the settings; if they are refused, shows why and
+  /// puts the screen back to the values that are really in use.
+  Future<void> _updateUser() async {
     // An empty username would be announced as an anonymous peer, keep the last valid one
     final username = _usernameController.text.trim().isEmpty ? widget.user.username : _usernameController.text.trim();
     final updatedUser = widget.user.copyWith(
@@ -128,7 +123,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       profileImage: _selectedImagePath,
       defaultDownloadDirectory: _selectedDirectory,
     );
-    widget.onUserUpdated(updatedUser);
+    final error = await widget.onUserUpdated(updatedUser);
+    if (error == null || !mounted) return;
+
+    showSnackbar(context, error);
+    setState(() {
+      _selectedImagePath = widget.user.profileImage;
+      _selectedDirectory = widget.user.defaultDownloadDirectory;
+    });
   }
 
   Widget _buildProfileImage() {

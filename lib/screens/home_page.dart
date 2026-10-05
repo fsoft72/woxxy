@@ -9,10 +9,9 @@ import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 import '../app_services.dart';
-import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
 import '../services/network_service.dart';
-import '../services/settings_service.dart';
+import '../services/user_updater.dart';
 import '../widgets/persistent_tabs.dart';
 import '../widgets/startup_error_view.dart';
 import 'history.dart';
@@ -30,7 +29,11 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   late final NetworkService _networkService = widget.services.networkService;
-  late final SettingsService _settingsService = widget.services.settingsService;
+  late final UserUpdater _userUpdater = UserUpdater(
+    settings: widget.services.settingsService,
+    files: widget.services.fileTransferManager,
+    network: _networkService,
+  );
   int _selectedIndex = 1; // Default to home screen
   late User _currentUser = widget.initialUser;
   bool _isLoading = true;
@@ -123,21 +126,15 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     trayManager.popUpContextMenu();
   }
 
-  /// Applies the new settings at once and saves them; a failed save is reported to the user.
-  Future<void> _updateUser(User updatedUser) async {
-    if (!mounted) return;
-    setState(() {
-      _currentUser = updatedUser;
-    });
-    _networkService.setUsername(updatedUser.username);
-    _networkService.setProfileImagePath(updatedUser.profileImage);
-
-    try {
-      await _settingsService.saveSettings(updatedUser);
-    } catch (e, s) {
-      zprint('❌ Could not save the settings: $e\n$s');
-      if (mounted) showSnackbar(context, 'Could not save the settings: $e');
+  /// Applies the new settings and saves them. Returns an error message when it was refused.
+  Future<String?> _updateUser(User updatedUser) async {
+    final error = await _userUpdater.apply(_currentUser, updatedUser);
+    if (error == null && mounted) {
+      setState(() {
+        _currentUser = updatedUser;
+      });
     }
+    return error;
   }
 
   List<Widget> _getScreens() {
@@ -147,7 +144,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       SettingsScreen(
         user: _currentUser,
         onUserUpdated: _updateUser,
-        fileTransferManager: widget.services.fileTransferManager,
       )
     ];
   }
