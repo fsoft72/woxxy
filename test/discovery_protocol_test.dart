@@ -44,6 +44,66 @@ void main() {
     });
   });
 
+  test('broadcast targets include the global and the /24 directed address', () {
+    expect(broadcastAddressesFor('192.168.7.42'), ['255.255.255.255', '192.168.7.255']);
+    expect(broadcastAddressesFor('not-an-ip'), ['255.255.255.255']);
+  });
+
+  test('DiscoveryService re-binds after the socket is lost and keeps receiving', () async {
+    final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    probe.close();
+
+    final peers = PeerManager(avatarStore: AvatarStore());
+    final service = DiscoveryService(
+      discoveryPort: port,
+      mainServerPort: 8090,
+      peerManager: peers,
+      avatarStore: AvatarStore(),
+      sendAvatarCallback: (_) async {},
+      restartDelay: const Duration(milliseconds: 50),
+    );
+    await service.start('10.255.255.1', 'me');
+    service.simulateSocketLoss();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    final sender = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    sender.send(encodeAnnounce(name: 'after-loss', ip: '127.0.0.1', port: 1), InternetAddress.loopbackIPv4, port);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (peers.currentPeers.isEmpty && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    sender.close();
+    await service.dispose();
+    peers.dispose();
+
+    expect(peers.currentPeers.single.name, 'after-loss');
+  });
+
+  test('DiscoveryService does not restart after dispose', () async {
+    final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = probe.port;
+    probe.close();
+
+    final service = DiscoveryService(
+      discoveryPort: port,
+      mainServerPort: 8090,
+      peerManager: PeerManager(avatarStore: AvatarStore()),
+      avatarStore: AvatarStore(),
+      sendAvatarCallback: (_) async {},
+      restartDelay: const Duration(milliseconds: 20),
+    );
+    await service.start('10.255.255.1', 'me');
+    service.simulateSocketLoss();
+    await service.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    // The port is free again, so nothing re-bound it behind our back
+    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
+    socket.close();
+  });
+
   test('DiscoveryService registers a peer whose name contains a colon and non-ASCII characters', () async {
     final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = probe.port;

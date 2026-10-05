@@ -15,6 +15,7 @@ import '../models/peer_manager.dart';
 
 // Import the new service modules
 import 'network/discovery_service.dart';
+import 'network/ip_monitor.dart';
 import 'network/receive_service.dart';
 import 'network/send_service.dart';
 import 'network/server_service.dart';
@@ -51,6 +52,7 @@ class NetworkService {
   late final SendService _sendService;
 
   final IpResolver? _ipResolver;
+  late final IpMonitor _ipMonitor;
 
   // State managed by the facade
   String? _currentIpAddress;
@@ -91,6 +93,11 @@ class NetworkService {
       connectionHandler: _receiveService.handleNewConnection, // Wire Server to ReceiveService
     );
 
+    _ipMonitor = IpMonitor(
+      resolver: () => (_ipResolver ?? _getIpAddress)(),
+      onChanged: _handleIpChanged,
+    );
+
     _discoveryService = DiscoveryService(
       discoveryPort: _discoveryPort,
       mainServerPort: _port,
@@ -125,6 +132,7 @@ class NetworkService {
       await _serverService.start();
       await _discoveryService.start(_currentIpAddress!, _currentUsername); // Pass initial details
       _peerManager.startPeerCleanup(); // Start peer cleanup timer
+      _ipMonitor.start(_currentIpAddress);
 
       zprint('✅ NetworkService Facade started successfully.');
     } on NetworkStartException {
@@ -132,6 +140,7 @@ class NetworkService {
     } catch (e, s) {
       zprint('❌ Error starting NetworkService Facade: $e\n$s');
       // Stop only what start() opened so a retry is possible (dispose() is final)
+      _ipMonitor.stop();
       await _discoveryService.dispose();
       await _serverService.dispose();
       throw NetworkStartException('Could not start the network service: $e');
@@ -141,6 +150,7 @@ class NetworkService {
   Future<void> dispose() async {
     zprint('🛑 Disposing NetworkService Facade...');
     // Dispose in reverse order of dependency/start
+    _ipMonitor.stop();
     _peerManager.dispose();
     await _discoveryService.dispose();
     await _serverService.dispose();
@@ -204,6 +214,19 @@ class NetworkService {
   }
 
   // --- Internal Helper Methods ---
+
+  /// Reacts to a changed local IP: announce the new address and re-bind discovery.
+  /// Losing the network entirely (null) keeps the old services; they resume on the next change.
+  void _handleIpChanged(String? oldIp, String? newIp) {
+    if (newIp == null) {
+      zprint('⚠️ Network lost. Waiting for a new address.');
+      return;
+    }
+    _currentIpAddress = newIp;
+    _sendService.updateUserDetails(newIp, _currentUsername, _profileImagePath);
+    _discoveryService.updateUserDetails(newIp, _currentUsername, avatarHash: _avatarHash);
+    _discoveryService.restart().catchError((Object e) => zprint('❌ Could not restart discovery after IP change: $e'));
+  }
 
   // Callback for ReceiveService to notify the facade when a file is fully received
   @visibleForTesting

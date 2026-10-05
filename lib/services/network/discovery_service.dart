@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:woxxy/funcs/debug.dart';
 import '../../models/peer.dart';
 import '../../models/peer_manager.dart'; // Import PeerManager
@@ -18,8 +18,13 @@ class DiscoveryService {
   final AvatarStore avatarStore;
   final SendAvatarCallback sendAvatarCallback; // Callback to trigger sending avatar
 
+  /// Delay before the socket is re-bound after it was lost unexpectedly.
+  final Duration restartDelay;
+
   RawDatagramSocket? _discoverySocket;
   Timer? _discoveryTimer;
+  Timer? _restartTimer;
+  bool _disposed = true; // True until start() is called and again after dispose()
   String? _currentIpAddress; // Local IP address
   String _currentUsername = 'WoxxyUser'; // Local username
   String? _avatarHash; // MD5 of the local avatar, announced so peers can refresh their cache
@@ -32,24 +37,17 @@ class DiscoveryService {
     required this.peerManager,
     required this.avatarStore,
     required this.sendAvatarCallback,
+    this.restartDelay = const Duration(seconds: 3),
   });
 
+  /// Binds the discovery socket and starts announcing this device.
   Future<void> start(String currentIpAddress, String currentUsername) async {
     _currentIpAddress = currentIpAddress;
     _currentUsername = currentUsername;
+    _disposed = false;
 
     try {
-      _discoverySocket = await RawDatagramSocket.bind(
-        InternetAddress.anyIPv4,
-        discoveryPort,
-        reuseAddress: true,
-        reusePort: true,
-      );
-      _discoverySocket!.broadcastEnabled = true;
-      zprint('📡 Discovery socket bound to port $discoveryPort');
-
-      _startDiscoveryListener();
-      _startDiscoveryBroadcaster();
+      await _bindAndRun();
     } catch (e, s) {
       zprint('❌ Error starting discovery service: $e\n$s');
       await dispose(); // Clean up if start fails
@@ -57,13 +55,78 @@ class DiscoveryService {
     }
   }
 
+  /// Re-binds the socket and restarts announcing, for example after the local IP changed.
+  Future<void> restart() async {
+    if (_disposed) return;
+    zprint('🔁 Restarting discovery service...');
+    _closeSocket();
+    await _bindAndRun();
+  }
+
+  Future<void> _bindAndRun() async {
+    final socket = await RawDatagramSocket.bind(
+      InternetAddress.anyIPv4,
+      discoveryPort,
+      reuseAddress: true,
+      reusePort: true,
+    );
+    socket.broadcastEnabled = true;
+    _discoverySocket = socket;
+    zprint('📡 Discovery socket bound to port $discoveryPort');
+
+    _startDiscoveryListener(socket);
+    _startDiscoveryBroadcaster();
+    _broadcastAnnouncement(); // Do not wait a full interval to become visible
+  }
+
   Future<void> dispose() async {
     zprint('🛑 Disposing DiscoveryService...');
-    _discoveryTimer?.cancel();
-    _discoverySocket?.close();
-    _discoverySocket = null;
-    _discoveryTimer = null;
+    _disposed = true;
+    _restartTimer?.cancel();
+    _restartTimer = null;
+    _closeSocket();
     zprint('✅ DiscoveryService disposed');
+  }
+
+  /// Stops the broadcast timer and closes the socket without scheduling a restart.
+  void _closeSocket() {
+    _discoveryTimer?.cancel();
+    _discoveryTimer = null;
+    final socket = _discoverySocket;
+    _discoverySocket = null; // Cleared first so the close event of this socket is ignored
+    socket?.close();
+  }
+
+  /// Called when a socket that is still the current one was lost: re-bind after a delay.
+  void _onSocketLost(RawDatagramSocket socket, String reason) {
+    if (_disposed || !identical(socket, _discoverySocket)) return;
+    zprint('⚠️ Discovery socket lost ($reason). Re-binding in ${restartDelay.inSeconds}s.');
+
+    _closeSocket();
+    _scheduleRestart();
+  }
+
+  /// Tries to re-bind after [restartDelay]; keeps retrying until it works or the service is disposed.
+  void _scheduleRestart() {
+    _restartTimer?.cancel();
+    _restartTimer = Timer(restartDelay, () async {
+      if (_disposed) return;
+      try {
+        await _bindAndRun();
+      } catch (e) {
+        zprint('❌ Discovery re-bind failed: $e');
+        _scheduleRestart();
+      }
+    });
+  }
+
+  /// Simulates an unexpected socket loss (used by tests).
+  @visibleForTesting
+  void simulateSocketLoss() {
+    final socket = _discoverySocket;
+    if (socket == null) return;
+    socket.close();
+    _onSocketLost(socket, 'simulated');
   }
 
   void updateUserDetails(String? ipAddress, String username, {String? avatarHash}) {
@@ -78,44 +141,37 @@ class DiscoveryService {
   void _startDiscoveryBroadcaster() {
     zprint('🔍 Starting peer discovery broadcast service...');
     _discoveryTimer?.cancel(); // Cancel existing timer if any
-    _discoveryTimer = Timer.periodic(_pingInterval, (timer) {
-      // Ensure IP is available before broadcasting
-      if (_currentIpAddress == null) {
-        zprint("⚠️ Skipping discovery broadcast: IP address unknown.");
-        return;
-      }
-      if (_discoverySocket == null) {
-        zprint("⚠️ Skipping discovery broadcast: Socket is null.");
-        // Attempt to restart? For now, just skip.
-        return;
-      }
+    _discoveryTimer = Timer.periodic(_pingInterval, (_) => _broadcastAnnouncement());
+  }
 
+  /// Sends one announcement to the global broadcast address and to the local /24 broadcast address.
+  void _broadcastAnnouncement() {
+    final ip = _currentIpAddress;
+    final socket = _discoverySocket;
+    if (ip == null || socket == null) {
+      zprint("⚠️ Skipping discovery broadcast: IP address or socket unavailable.");
+      return;
+    }
+
+    final message = _buildDiscoveryMessage();
+    for (final target in broadcastAddressesFor(ip)) {
       try {
-        _discoverySocket?.send(
-          _buildDiscoveryMessage(),
-          InternetAddress('255.255.255.255'), // Standard broadcast address
-          discoveryPort,
-        );
-      } catch (e, s) {
-        // Handle potential socket errors (e.g., if socket gets closed unexpectedly)
-        zprint('❌ Error broadcasting discovery message: $e\n$s');
-        // Consider stopping the timer or attempting recovery
-        // _discoveryTimer?.cancel();
-        // _discoverySocket?.close();
-        // _discoverySocket = null;
+        socket.send(message, InternetAddress(target), discoveryPort);
+      } catch (e) {
+        // A network that disappeared makes send fail; the IP monitor and re-bind logic recover
+        zprint('❌ Error broadcasting discovery message to $target: $e');
       }
-    });
-    zprint('✅ Discovery broadcast timer started.');
+    }
   }
 
   Uint8List _buildDiscoveryMessage() =>
       encodeAnnounce(name: _currentUsername, ip: _currentIpAddress ?? 'NO_IP', port: mainServerPort, avatarHash: _avatarHash);
 
-  void _startDiscoveryListener() {
+  void _startDiscoveryListener(RawDatagramSocket socket) {
     zprint('👂 Starting discovery listener on port $discoveryPort...');
-    _discoverySocket?.listen((RawSocketEvent event) {
+    socket.listen((RawSocketEvent event) {
       if (event == RawSocketEvent.read) {
-        final datagram = _discoverySocket?.receive();
+        final datagram = socket.receive();
         if (datagram != null) {
           try {
             final message = decodeDiscoveryMessage(datagram.data);
@@ -134,18 +190,13 @@ class DiscoveryService {
           }
         }
       } else if (event == RawSocketEvent.closed) {
-        zprint("⚠️ Discovery socket closed event received.");
-        _discoverySocket = null;
-        _discoveryTimer?.cancel();
+        _onSocketLost(socket, 'closed event');
       }
     }, onError: (error, stackTrace) {
       zprint('❌ Critical error in discovery listener socket: $error\n$stackTrace');
-      _discoverySocket = null;
-      _discoveryTimer?.cancel();
+      _onSocketLost(socket, 'error');
     }, onDone: () {
-      zprint("✅ Discovery listener socket closed (onDone).");
-      _discoverySocket = null;
-      _discoveryTimer?.cancel();
+      _onSocketLost(socket, 'done');
     });
     zprint("✅ Discovery listener started.");
   }

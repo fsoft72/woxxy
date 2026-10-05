@@ -1,5 +1,19 @@
 # Changes Log
 
+## Recover from discovery socket loss and IP changes
+
+DiscoveryService re-binds automatically (with retries) when its socket closes or errors, can be restarted explicitly, announces immediately on start and broadcasts to both 255.255.255.255 and the local /24 address. A new IpMonitor re-resolves the local IP every 15 s; on change NetworkService updates the send/discovery services and restarts discovery. Added fake_async and loopback tests.
+
+### Files
+- `lib/services/network/discovery_service.dart`
+- `lib/services/network/discovery_protocol.dart`
+- `lib/services/network/ip_monitor.dart`
+- `lib/services/network_service.dart`
+- `test/ip_monitor_test.dart`
+- `test/discovery_protocol_test.dart`
+
+---
+
 ## Fix avatar cache correctness and rebuild cost
 
 Peers now announce the MD5 of their avatar; PeerManager re-requests it when the cached hash differs (throttled to once per 30 s) and evicts it when the peer has none or leaves. AvatarStore disposes replaced images after a grace delay (no disposed-image crash), exposes a per-peer ValueListenable, and no longer logs on every miss. PeerAvatarWidget listens only to its own peer, so an update rebuilds one avatar instead of all.

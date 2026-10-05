@@ -74,3 +74,13 @@ DiscoveryMessage? decodeDiscoveryMessage(List<int> data) {
       return null;
   }
 }
+
+/// Addresses an announcement is broadcast to for a device with [localIp]: the global broadcast
+/// address plus the directed broadcast of its /24 network (some routers and OS network stacks
+/// drop 255.255.255.255 on multi-interface machines). Dart cannot read netmasks, so /24 is assumed.
+List<String> broadcastAddressesFor(String localIp) {
+  const global = '255.255.255.255';
+  final octets = localIp.split('.');
+  if (octets.length != 4 || octets.any((o) => int.tryParse(o) == null)) return [global];
+  return [global, '${octets[0]}.${octets[1]}.${octets[2]}.255'];
+}
