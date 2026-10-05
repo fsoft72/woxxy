@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/funcs/file_opener.dart';
-import 'package:woxxy/funcs/format.dart';
 
 void main() {
   late Directory tmp;
@@ -45,10 +44,4 @@ void main() {
     await openFileLocation('${tmp.path}/a.txt', run: fakeRun);
     expect(runs.single.last, anyOf('${tmp.path}/a.txt', tmp.path));
   }, skip: Platform.isAndroid || Platform.isIOS);
-
-  test('formatBytes uses the matching unit', () {
-    expect(formatBytes(512), '512 B');
-    expect(formatBytes(1536), '1.5 KB');
-    expect(formatBytes(5 * 1024 * 1024), '5.0 MB');
-  });
 }

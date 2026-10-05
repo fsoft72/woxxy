@@ -1,5 +1,19 @@
 # Changes Log
 
+## Use formatBytes for every displayed size
+
+HistoryScreen, the send success message and the avatar log lines use formatBytes instead of their own divisions by 1024 / BYTES_PER_MB. The send message now shows the speed as MB/s like the rest of the app. Tests assert the formatted sizes.
+
+### Files
+- `lib/screens/history.dart`
+- `lib/services/send_queue_controller.dart`
+- `lib/services/network/send_service.dart`
+- `test/send_queue_controller_test.dart`
+- `test/history_persistence_test.dart`
+- `test/file_opener_test.dart`
+
+---
+
 ## Split utils.dart and share the folder opener
 
 utils.dart is split into ui_helpers (showSnackbar), file_opener (openFileLocation and the new shared openDirectory), format (formatBytes) and transfer_id (generateTransferId). NotificationManager no longer repeats the platform switch. The opener takes an injectable process runner. Added file_opener_test.

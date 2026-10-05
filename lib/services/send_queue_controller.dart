@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/format.dart';
 import 'package:woxxy/funcs/throttle.dart';
 import 'package:woxxy/funcs/transfer_id.dart';
 
@@ -197,8 +198,8 @@ class SendQueueController extends ChangeNotifier {
     _completed.add(item);
     _notify();
 
-    final sizeMiB = (item.size / 1024 / 1024).toStringAsFixed(2);
-    onMessage?.call('File sent successfully ($sizeMiB MiB in ${seconds.toStringAsFixed(1)}s, ${speed.toStringAsFixed(2)} MiB/s)');
+    onMessage?.call(
+        'File sent successfully (${formatBytes(item.size)} in ${seconds.toStringAsFixed(1)}s, ${speed.toStringAsFixed(2)} MB/s)');
   }
 
   void _onFailure(QueuedFile item, Object error) {

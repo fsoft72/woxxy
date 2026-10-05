@@ -64,6 +64,7 @@ void main() {
     expect(c.completed.map((f) => f.isCompleted), [true, true, true]);
     expect(c.isTransferring, isFalse);
     expect(messages.where((m) => m.startsWith('File sent successfully')), hasLength(3));
+    expect(messages.first, contains('(10 B in'), reason: 'sizes use the shared formatBytes');
   });
 
   test('a failure is recorded and the next file is still sent', () async {

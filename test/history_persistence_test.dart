@@ -52,6 +52,7 @@ void main() {
     history.addEntry(_entry('/d/report.pdf', DateTime(2026, 1, 1)));
     await tester.pump();
     expect(find.text('report.pdf'), findsOneWidget);
+    expect(find.text('1.0 MB'), findsOneWidget, reason: 'sizes use the shared formatBytes');
 
     await tester.drag(find.text('report.pdf'), const Offset(-600, 0));
     await tester.pumpAndSettle();

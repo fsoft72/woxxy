@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/format.dart';
 import 'package:woxxy/funcs/hashing.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/local_identity.dart';
@@ -150,11 +151,11 @@ class SendService {
       
       // Check reasonable file size limits (e.g., max 10MB for avatar)
       if (fileSize > MAX_AVATAR_SIZE_BYTES) {
-        zprint('🚫 Cannot send avatar: File too large (${fileSize ~/ BYTES_PER_MB}MB > ${MAX_AVATAR_SIZE_BYTES ~/ BYTES_PER_MB}MB)');
+        zprint('🚫 Cannot send avatar: File too large (${formatBytes(fileSize)} > ${formatBytes(MAX_AVATAR_SIZE_BYTES)})');
         return false;
       }
       
-      zprint('✅ Avatar file validated: ${fileSize ~/ 1024}KB');
+      zprint('✅ Avatar file validated: ${formatBytes(fileSize)}');
       return true;
       
     } catch (e) {
