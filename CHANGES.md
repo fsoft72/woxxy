@@ -1,5 +1,9 @@
 # Changes Log
 
+## Flush the history before the app exits
+
+`HistoryRepository` keeps its pending write loop and offers `flush()`; `AppServices.dispose` (run by the tray Quit before `exit(0)`) awaits it, so a file received just before quitting is saved. Tests in `test/history_persistence_test.dart` and `test/app_services_test.dart`.
+
 ## Drop the fixed pauses and the two flags of the send queue
 
 `SendQueueController` no longer waits 500 ms after every file and 1 s after a failure (the receiver's ready signal made them unnecessary), and `QueuedFile` has a `QueuedFileStatus` enum behind its `isCompleted` and `isFailed` getters. Tests in `test/send_queue_controller_test.dart`.

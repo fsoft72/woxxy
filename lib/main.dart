@@ -30,7 +30,7 @@ void main() async {
     final history = await historyRepository.load();
     historyRepository.autoSave(history);
 
-    final services = AppServices.create(downloadPath: downloadPath, history: history);
+    final services = AppServices.create(downloadPath: downloadPath, history: history, historyRepository: historyRepository);
 
     // Window and tray exist only on desktop platforms
     await DesktopShell.init(onQuit: services.dispose);

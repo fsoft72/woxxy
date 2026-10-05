@@ -2,6 +2,7 @@ import 'models/avatars.dart';
 import 'models/file_transfer_manager.dart';
 import 'models/history.dart';
 import 'models/notification_manager.dart';
+import 'services/history_repository.dart';
 import 'services/network_service.dart';
 import 'services/received_files_handler.dart';
 import 'services/settings_service.dart';
@@ -15,6 +16,9 @@ class AppServices {
   final NetworkService networkService;
   final FileHistory history;
 
+  /// Writes the history; flushed on dispose so the last received file is not lost at exit
+  final HistoryRepository historyRepository;
+
   /// Records received files in the history and notifies the user, for the whole app lifetime
   final ReceivedFilesHandler receivedFiles;
 
@@ -25,6 +29,7 @@ class AppServices {
     required this.notificationManager,
     required this.networkService,
     required this.history,
+    required this.historyRepository,
     required this.receivedFiles,
   });
 
@@ -32,10 +37,15 @@ class AppServices {
   Future<void> dispose() async {
     await receivedFiles.dispose();
     await networkService.dispose();
+    await historyRepository.flush();
   }
 
   /// Creates the real services wired together. This is the only place that builds them.
-  factory AppServices.create({required String downloadPath, required FileHistory history}) {
+  factory AppServices.create({
+    required String downloadPath,
+    required FileHistory history,
+    HistoryRepository? historyRepository,
+  }) {
     final settingsService = SettingsService();
     final fileTransferManager = FileTransferManager(downloadPath: downloadPath);
     final avatarStore = AvatarStore();
@@ -52,6 +62,7 @@ class AppServices {
       notificationManager: notificationManager,
       networkService: networkService,
       history: history,
+      historyRepository: historyRepository ?? HistoryRepository(),
       receivedFiles: ReceivedFilesHandler(
         events: networkService.onFileReceived,
         history: history,

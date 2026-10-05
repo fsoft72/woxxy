@@ -98,6 +98,21 @@ void _slowSaveTests() {
     expect(repo.calls, lessThan(5), reason: 'changes during a write are merged into one more write');
   });
 
+  test('flush waits for the pending writes, so nothing is lost when the app exits', () async {
+    final repo = _SlowRepository();
+    final history = FileHistory();
+    repo.autoSave(history);
+
+    history.addEntry(_entry('/a', DateTime(2026, 1, 1)));
+    history.addEntry(_entry('/b', DateTime(2026, 1, 2)));
+    expect(repo.savedLengths, isEmpty);
+
+    await repo.flush();
+
+    expect(repo.savedLengths.last, 2);
+    await repo.flush(); // Nothing pending: returns at once
+  });
+
   test('a failing save is logged and later changes are still saved', () async {
     final repo = _SlowRepository()..failFirst = true;
     final history = FileHistory();
