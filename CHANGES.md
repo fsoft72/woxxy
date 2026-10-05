@@ -1,5 +1,9 @@
 # Changes Log
 
+## Remove unused dependencies and the dead vendored plugin
+
+Dropped `filesize` and `cupertino_icons` (no import anywhere), the `packages/flutter_local_notifications` copy (v15.1.1, while the hosted 18.0.1 is the one in use, and nothing referenced it), and raised the SDK lower bound to 3.6 for `Color.withValues`. Tests: `test/pubspec_test.dart`.
+
 ## Route settings changes through UserUpdater
 
 New `UserUpdater` validates the download folder, saves the settings and then tells the network layer; it returns a message when a change is refused, and the screen shows it and goes back to the values in use. `SettingsScreen` lost its `FileTransferManager`, the callback is the typed `UserUpdateHandler`, and a failing picture import is reported. Tests: `test/user_updater_test.dart`, `test/settings_test.dart`.
