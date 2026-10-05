@@ -1,5 +1,9 @@
 # Changes Log
 
+## Honor cancel while a send is being prepared
+
+SendService tracks every transfer from the start of sendFile, so a cancel during hashing or connecting stops the send before any byte leaves. Test: `test/send_cancel_test.dart`.
+
 ## Regenerate OPTIMIZE.md with a new code analysis
 
 All items of the previous list were done, so `OPTIMIZE.md` was rewritten from a fresh read of `lib/`. It has 4 High, 11 Medium and 8 Low items (the main ones: cancel is ignored while preparing a send, rejected avatars are re-requested forever, no result frame from the receiver, folders dropped on the queue). No code was changed.

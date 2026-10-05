@@ -19,27 +19,35 @@ class SendService {
   /// Local address, name and avatar written into the metadata of every transfer
   final LocalIdentity identity;
 
-  // Active outbound transfers - for cancellation support
+  // Sockets of the outbound transfers that are connected - destroyed on cancellation
   final Map<String, Socket> _activeTransfers = {};
+
+  // Ids of every transfer between the start of sendFile and its end (hashing and connecting
+  // included), so a cancel is honored in every phase
+  final Set<String> _liveTransfers = {};
 
   SendService({LocalIdentity? identity}) : identity = identity ?? LocalIdentity();
 
   /// Cancel an active file transfer
   /// Returns true if transfer was found and canceled, false otherwise
   bool cancelTransfer(String transferId) {
-    if (_activeTransfers.containsKey(transferId)) {
-      zprint('🛑 Cancelling transfer: $transferId');
-      final socket = _activeTransfers.remove(transferId); // Remove first
-      try {
-        socket?.destroy(); // Force close the socket
-        zprint("✅ Socket destroyed for cancelled transfer $transferId.");
-      } catch (e) {
-        zprint("⚠️ Error destroying socket for cancelled transfer $transferId: $e");
-      }
-      return true;
+    if (!_liveTransfers.remove(transferId)) {
+      zprint("⚠️ Attempted to cancel non-existent transfer: $transferId");
+      return false;
     }
-    zprint("⚠️ Attempted to cancel non-existent transfer: $transferId");
-    return false;
+    zprint('🛑 Cancelling transfer: $transferId');
+    final socket = _activeTransfers.remove(transferId); // Null while still hashing or connecting
+    try {
+      socket?.destroy(); // Force close the socket
+    } catch (e) {
+      zprint("⚠️ Error destroying socket for cancelled transfer $transferId: $e");
+    }
+    return true;
+  }
+
+  /// Throws when [transferId] was cancelled (or never started).
+  void _throwIfCancelled(String transferId) {
+    if (!_liveTransfers.contains(transferId)) throw Exception('Transfer cancelled');
   }
 
   /// Send file to a peer with progress tracking and cancellation support
@@ -48,18 +56,20 @@ class SendService {
       {FileTransferProgressCallback? onProgress}) async {
     zprint('📤 Starting file transfer process for $filePath to ${receiver.name} (${receiver.id})');
     final file = File(filePath);
-    if (!await file.exists()) {
-      zprint("❌ File does not exist: $filePath");
-      throw Exception('File does not exist: $filePath');
-    }
-
-    if (identity.ipAddress == null) {
-      zprint("❌ Cannot send file: Local IP address is unknown.");
-      throw Exception('Local IP address is unknown.');
-    }
-
+    _liveTransfers.add(transferId); // From now on the transfer can be cancelled
     try {
+      if (!await file.exists()) {
+        zprint("❌ File does not exist: $filePath");
+        throw Exception('File does not exist: $filePath');
+      }
+
+      if (identity.ipAddress == null) {
+        zprint("❌ Cannot send file: Local IP address is unknown.");
+        throw Exception('Local IP address is unknown.');
+      }
+
       final metadata = await _createFileMetadata(file, transferId);
+      _throwIfCancelled(transferId);
       zprintLazy(() => "  [Send] Generated metadata: ${json.encode(metadata)}");
 
       await _sendFileWithMetadata(transferId, filePath, receiver, metadata, onProgress: onProgress);
@@ -67,14 +77,9 @@ class SendService {
       zprint('✅ File transfer completed successfully: $transferId');
     } catch (e, s) {
       zprint('❌ Error during sendFile process ($transferId): $e\n$s');
-      // Ensure cleanup if _sendFileWithMetadata throws before removing from map
-      if (_activeTransfers.containsKey(transferId)) {
-        final socket = _activeTransfers.remove(transferId);
-        try {
-          socket?.destroy();
-        } catch (_) {}
-      }
       rethrow;
+    } finally {
+      _liveTransfers.remove(transferId);
     }
     return transferId;
   }
@@ -92,6 +97,7 @@ class SendService {
     final avatarFile = File(identity.profileImagePath!);
     final transferId = 'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}';
     
+    _liveTransfers.add(transferId);
     try {
       // Validate avatar file
       if (!await _validateAvatarFile(avatarFile)) {
@@ -112,6 +118,8 @@ class SendService {
       zprint('❌ Failed to send avatar ($transferId) to ${receiver.name}: $e');
       zprint('Stack trace: $stackTrace');
       return false;
+    } finally {
+      _liveTransfers.remove(transferId);
     }
   }
 
@@ -272,6 +280,7 @@ class SendService {
       
       zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
       _activeTransfers[transferId] = socket; // Add BEFORE sending data
+      _throwIfCancelled(transferId); // Cancelled while connecting: the finally block closes the socket
 
       final frame = encodeMetadataFrame(metadata);
       zprint("  [Send Meta] Sending metadata frame (${frame.length} bytes)...");
@@ -288,14 +297,14 @@ class SendService {
 
       // addStream pauses the file reader while the socket buffer is full (backpressure)
       final chunks = file.openRead().map((chunk) {
-        if (!_activeTransfers.containsKey(transferId)) throw Exception('Transfer cancelled');
+        _throwIfCancelled(transferId);
         bytesSent += chunk.length;
         onProgress?.call(fileSize, bytesSent);
         return chunk;
       });
       await socket.addStream(chunks);
       // A cancel destroys the socket, which can end addStream without an error
-      if (!_activeTransfers.containsKey(transferId)) throw Exception('Transfer cancelled');
+      _throwIfCancelled(transferId);
       await socket.flush();
       onProgress?.call(fileSize, fileSize); // Final progress
       zprint("  [Send Data] Stream flushed. Bytes sent: $bytesSent");
@@ -305,10 +314,7 @@ class SendService {
       rethrow;
     } finally {
       zprint("🧼 Final cleanup for $transferId...");
-      if (_activeTransfers.containsKey(transferId)) {
-        _activeTransfers.remove(transferId);
-        zprint("  -> Removed from active transfers.");
-      }
+      _activeTransfers.remove(transferId);
       if (socket != null) {
         try {
           await socket.close();
@@ -327,9 +333,7 @@ class SendService {
   Future<void> dispose() async {
     zprint('🛑 Disposing SendService...');
     // Close any remaining active transfer sockets
-    final transferIds = _activeTransfers.keys.toList(); // Avoid concurrent modification
-    for (final transferId in transferIds) {
-      zprint("  -> Cleaning up pending transfer: $transferId");
+    for (final transferId in _liveTransfers.toList()) {
       cancelTransfer(transferId); // Use cancelTransfer for consistent cleanup
     }
     _activeTransfers.clear(); // Ensure map is empty
