@@ -1,5 +1,15 @@
 # Changes Log
 
+## Use a stable hash for avatar colors
+
+getAvatarColorForPeer uses an FNV-1a hash instead of String.hashCode, so a peer has the same color on every platform. Added a test with fixed expected colors.
+
+### Files
+- `lib/widgets/peer_avatar.dart`
+- `test/avatar_store_test.dart`
+
+---
+
 ## Remove logging from the peer list build
 
 The StreamBuilder of the peer list no longer calls zprint on every rebuild. Added a test that building the list writes nothing to the log.

@@ -30,6 +30,13 @@ Future<Uint8List> _makePng(int width, int height) async {
 }
 
 void main() {
+  test('the avatar color of a peer is the same on every platform and run', () {
+    // Fixed expectations: String.hashCode could not guarantee them
+    expect(getAvatarColorForPeer('192.168.1.5'), const Color(0xFF42A5F5));
+    expect(getAvatarColorForPeer('10.0.0.7'), const Color(0xFFAB47BC));
+    expect(getAvatarColorForPeer('192.168.1.5'), getAvatarColorForPeer('192.168.1.5'));
+  });
+
   group('AvatarStore', () {
     testWidgets('a big avatar is scaled down while decoding', (tester) async {
       final store = AvatarStore();

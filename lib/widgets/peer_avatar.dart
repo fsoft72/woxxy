@@ -17,10 +17,19 @@ const List<Color> _AVATAR_COLORS = [
   Color(0xFFEC407A), // pink.shade400
 ];
 
-/// Returns a consistent color for a peer based on their ID hash
+/// FNV-1a hash of the UTF-16 code units. Unlike [String.hashCode] it gives the same value on
+/// every platform and run, so every device shows the same color for the same peer.
+int _stableHash(String text) {
+  var hash = 0x811c9dc5;
+  for (final unit in text.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xFFFFFFFF;
+  }
+  return hash;
+}
+
+/// Returns a consistent color for a peer based on a stable hash of their ID
 Color getAvatarColorForPeer(String peerId) {
-  final hash = peerId.hashCode;
-  return _AVATAR_COLORS[hash.abs() % _AVATAR_COLORS.length];
+  return _AVATAR_COLORS[_stableHash(peerId) % _AVATAR_COLORS.length];
 }
 
 /// Extracts initials from a name (up to 2 characters)

@@ -63,7 +63,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/screens/home_page.dart`
 - [x] **Logging in the build path of the peer list** - `StreamBuilder` calls `zprint` twice per rebuild; in release builds the strings are still built. Use `zprintLazy` or remove them.
   - File(s): `lib/screens/home.dart`
-- [ ] **Avatar color depends on `String.hashCode`** - The same peer can get a different color on different platforms because the hash is not guaranteed to be stable. Use a simple deterministic hash (for example sum of code units).
+- [x] **Avatar color depends on `String.hashCode`** - The same peer can get a different color on different platforms because the hash is not guaranteed to be stable. Use a simple deterministic hash (for example sum of code units).
   - File(s): `lib/widgets/peer_avatar.dart`
 - [ ] **`AvatarStore` never releases notifiers and has an unused debug getter** - `_notifiers` grows with every peer id ever seen and `getKeys()` is not used. Dispose the notifier in `removeAvatar` when it has no listeners and remove `getKeys`.
   - File(s): `lib/models/avatars.dart`
