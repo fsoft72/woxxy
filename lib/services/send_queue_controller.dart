@@ -54,6 +54,7 @@ class SendQueueController extends ChangeNotifier {
   double _speedMBps = 0;
   bool _transferComplete = false;
   bool _isTransferring = false;
+  bool _preparing = false;
   int _totalCompleted = 0;
 
   SendQueueController({
@@ -83,6 +84,10 @@ class SendQueueController extends ChangeNotifier {
   double get speedMBps => _speedMBps;
   bool get transferComplete => _transferComplete;
   bool get isTransferring => _isTransferring;
+
+  /// True from the start of a file until its first progress report: the file is being hashed
+  /// and the connection opened, so no byte moved yet.
+  bool get isPreparing => _preparing;
   int get totalCompleted => _totalCompleted;
 
   /// True while the controller is sending a file or has files waiting.
@@ -139,6 +144,7 @@ class SendQueueController extends ChangeNotifier {
       _speedMBps = 0;
       _transferComplete = false;
       _isTransferring = true;
+      _preparing = true;
       _notify();
 
       final stopwatch = Stopwatch()..start();
@@ -149,6 +155,7 @@ class SendQueueController extends ChangeNotifier {
       try {
         await _send(transferId, item.path, (totalSize, bytesSent) {
           if (_disposed || _cancelled) return;
+          _preparing = false;
           // Chunks arrive far faster than the UI needs; the final update is always delivered
           if (!_throttle.shouldEmit(force: bytesSent >= totalSize)) return;
           final seconds = stopwatch.elapsedMilliseconds / 1000;
@@ -168,6 +175,7 @@ class SendQueueController extends ChangeNotifier {
         await Future<void>.delayed(_pauseAfterFailure);
       } finally {
         _activeTransferId = null;
+        _preparing = false;
       }
     }
 

@@ -107,6 +107,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             progress: _queue.progress,
             speedMBps: _queue.speedMBps,
             complete: _queue.transferComplete,
+            preparing: _queue.isPreparing,
             onCancel: _queue.cancelAll,
           ),
         if (queue.isNotEmpty || completed.isNotEmpty)

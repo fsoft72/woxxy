@@ -13,6 +13,9 @@ class TransferProgressCard extends StatelessWidget {
   final bool complete;
   final VoidCallback onCancel;
 
+  /// True while the file is hashed and the connection is opened, before any byte is sent
+  final bool preparing;
+
   const TransferProgressCard({
     super.key,
     required this.fileName,
@@ -21,6 +24,7 @@ class TransferProgressCard extends StatelessWidget {
     required this.speedMBps,
     required this.complete,
     required this.onCancel,
+    this.preparing = false,
   });
 
   @override
@@ -73,7 +77,7 @@ class TransferProgressCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           LinearProgressIndicator(
-            value: progress / 100,
+            value: preparing ? null : progress / 100,
             backgroundColor: Colors.grey.shade300,
             color: complete ? Colors.green : Theme.of(context).colorScheme.primary,
           ),
@@ -82,7 +86,7 @@ class TransferProgressCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                complete ? 'Completed' : '${progress.toStringAsFixed(1)}%',
+                complete ? 'Completed' : (preparing ? 'Preparing...' : '${progress.toStringAsFixed(1)}%'),
                 style: TextStyle(
                   color: complete ? Colors.green : null,
                   fontWeight: complete ? FontWeight.bold : null,

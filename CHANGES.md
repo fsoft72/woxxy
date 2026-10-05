@@ -1,5 +1,17 @@
 # Changes Log
 
+## Show a Preparing state while the file is hashed
+
+The protocol keeps the checksum in the header (compatible with older peers), so instead of a trailer the queue now reports isPreparing until the first progress report and TransferProgressCard shows an indeterminate bar with 'Preparing...'. Added tests.
+
+### Files
+- `lib/widgets/send/transfer_progress_card.dart`
+- `lib/services/send_queue_controller.dart`
+- `lib/screens/peer_details.dart`
+- `test/send_queue_controller_test.dart`
+
+---
+
 ## Let the owner of AppServices dispose the network service
 
 HomePage no longer disposes the NetworkService it does not own. AppServices.dispose stops the handler and the network service and runs from the tray Quit action (DesktopShell.init onQuit). Added a test.

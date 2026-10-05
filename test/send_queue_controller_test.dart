@@ -167,6 +167,29 @@ void main() {
     });
   });
 
+  test('a file is "preparing" until its first progress report', () async {
+    final firstReport = Completer<void>();
+    final finish = Completer<void>();
+    final c = controller((id, path, onProgress) async {
+      await firstReport.future;
+      onProgress(10, 0);
+      await finish.future;
+      onProgress(10, 10);
+      return id;
+    });
+
+    await c.addFiles([await makeFile('a.txt')]);
+    expect(c.isPreparing, isTrue);
+
+    firstReport.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(c.isPreparing, isFalse);
+
+    finish.complete();
+    await idle(c);
+    expect(c.isPreparing, isFalse);
+  });
+
   group('widgets', () {
     testWidgets('QueueSummary lists the first files and counts the rest', (tester) async {
       final queue = [for (var i = 1; i <= 5; i++) QueuedFile('/x/f$i', 'f$i.txt', 1024)];
@@ -203,6 +226,25 @@ void main() {
       expect(find.text('12.35 MB/s'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.delete));
       expect(cancelledTaps, 1);
+    });
+
+    testWidgets('TransferProgressCard shows Preparing while the file is hashed', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TransferProgressCard(
+            fileName: 'big.iso',
+            queueLabel: null,
+            progress: 0,
+            speedMBps: 0,
+            complete: false,
+            preparing: true,
+            onCancel: () {},
+          ),
+        ),
+      ));
+
+      expect(find.text('Preparing...'), findsOneWidget);
+      expect(find.text('0.0%'), findsNothing);
     });
   });
 }
