@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +9,7 @@ import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_transfer_manager.dart';
 import '../../models/peer_manager.dart'; // Needed for notifyPeersUpdated
+import 'transfer_protocol.dart';
 
 class ReceiveService {
   final FileTransferManager fileTransferManager;
@@ -26,7 +26,10 @@ class ReceiveService {
     this.onFileReceivedCallback,
   });
 
-  // This method will be passed to ServerService as the connection handler
+  /// Connection handler passed to ServerService.
+  ///
+  /// Chunks are consumed one at a time through a [StreamIterator], so a slow disk write or the
+  /// ready-signal flush applies backpressure instead of letting events interleave.
   Future<void> handleNewConnection(Socket socket) async {
     final sourceIp = socket.remoteAddress.address;
     zprint('📥 New connection from $sourceIp:${socket.remotePort}');
@@ -34,192 +37,153 @@ class ReceiveService {
 
     // Configure socket for better Windows compatibility
     socket.setOption(SocketOption.tcpNoDelay, true);
-    
-    var buffer = <int>[];
-    var metadataReceived = false;
+
+    final decoder = MetadataFrameDecoder();
+    final iterator = StreamIterator<Uint8List>(socket);
     Map<String, dynamic>? receivedInfo;
+    String? fileTransferKey; // Set once metadata is accepted
     var receivedBytes = 0;
     var dataExpected = 0;
 
-    String? transferType; // To track if it's a regular file or avatar
-    var fileTransferKey = sourceIp; // Replaced by the transfer id once metadata is parsed
+    try {
+      while (await iterator.moveNext()) {
+        final data = iterator.current;
 
-    socket.listen(
-      (data) async {
-        try {
-          if (!metadataReceived) {
-            buffer.addAll(data);
-            if (buffer.length < 4) {
-              // zprint("  [Meta] Buffer too small for length (< 4 bytes)");
-              return; // Not enough data for length yet
-            }
-
-            final metadataLength = ByteData.sublistView(Uint8List.fromList(buffer.take(4).toList())).getUint32(0);
-            if (metadataLength > 1024 * 1024) {
-              // Sanity check (1MB limit)
-              zprint("❌ Metadata length ($metadataLength) exceeds limit. Closing connection.");
-              socket.destroy();
-              return;
-            }
-            // zprint("  [Meta] Expecting metadata length: $metadataLength bytes");
-
-            if (buffer.length < 4 + metadataLength) {
-              // zprint("  [Meta] Buffer has ${buffer.length} bytes, need ${4 + metadataLength}. Waiting...");
-              return; // Not enough data for metadata yet
-            }
-
-            final metadataBytes = buffer.sublist(4, 4 + metadataLength);
-            final metadataStr = utf8.decode(metadataBytes, allowMalformed: true);
-            // zprint("  [Meta] Received metadata string: $metadataStr");
-
-            try {
-              receivedInfo = json.decode(metadataStr) as Map<String, dynamic>;
-            } catch (e) {
-              zprint("❌ Error decoding metadata JSON: $e. Closing connection.");
-              socket.destroy();
-              return;
-            }
-
-            transferType = receivedInfo!['type'] as String? ?? TRANSFER_TYPE_FILE;
-            final senderIp = receivedInfo!['senderIp'] as String?; // Sender's IP (ID)
-            final fileName = receivedInfo!['name'] as String? ?? 'unknown_file';
-            final fileSize = receivedInfo!['size'] as int? ?? 0;
-            final senderUsername = receivedInfo!['senderUsername'] as String? ?? 'Unknown';
-            final md5Checksum = receivedInfo!['md5Checksum'] as String?;
-
-            // Key by transfer id so avatars and parallel files from one IP never collide
-            final remoteTransferId = receivedInfo!['transferId'] as String?;
-            fileTransferKey = (remoteTransferId != null && remoteTransferId.isNotEmpty)
-                ? '$sourceIp#$remoteTransferId'
-                : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
-
-            // Store expected data size for tracking
-            dataExpected = fileSize;
-
-            zprint(
-                '📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername ($senderIp)');
-
-            final added = await fileTransferManager.add(
-              fileTransferKey,
-              fileName,
-              fileSize,
-              senderUsername,
-              receivedInfo!,
-              md5Checksum: md5Checksum,
-              sourceIp: sourceIp,
-              directory: transferType == TRANSFER_TYPE_AVATAR ? _avatarTempDirectory() : null,
-            );
-
-            if (!added) {
-              zprint("❌ Failed to add transfer for $fileName from $fileTransferKey. Closing connection.");
-              socket.destroy();
-              return;
-            }
-
-            metadataReceived = true;
-            zprint("✅ Metadata processed. Ready for file data.");
-
-            // Send ready signal to sender for better Windows compatibility
-            try {
-              socket.add(READY_SIGNAL);
-              await socket.flush();
-              zprint("📡 Ready signal sent to sender");
-            } catch (e) {
-              zprint("⚠️ Failed to send ready signal: $e");
-            }
-
-            if (buffer.length > 4 + metadataLength) {
-              final remainingData = buffer.sublist(4 + metadataLength);
-              // zprint("  [Data] Processing ${remainingData.length} bytes remaining in initial buffer.");
-              await fileTransferManager.write(fileTransferKey, remainingData);
-              receivedBytes += remainingData.length;
-            }
-            buffer.clear();
-          } else {
-            // Metadata already received, process incoming file data
-            await fileTransferManager.write(fileTransferKey, data);
-            receivedBytes += data.length;
-          }
-        } catch (e, s) {
-          zprint('❌ Error processing incoming data chunk from $fileTransferKey: $e\n$s');
-          await fileTransferManager.handleSocketClosure(fileTransferKey);
-          socket.destroy();
+        if (fileTransferKey != null) {
+          await fileTransferManager.write(fileTransferKey, data);
+          receivedBytes += data.length;
+          continue;
         }
-      },
-      onDone: () async {
-        stopwatch.stop();
-        final duration = stopwatch.elapsedMilliseconds;
-        zprint('📊 Socket closed (onDone) from $fileTransferKey after ${duration}ms. Received $receivedBytes/$dataExpected bytes.');
-        
-        try {
-          if (metadataReceived && receivedInfo != null) {
-            final fileTransfer = fileTransferManager.files[fileTransferKey];
-            if (fileTransfer != null) {
-              final totalSize = receivedInfo!['size'] as int? ?? 0;
-              
-              // Special handling for zero-byte transfers (Windows timing issue)
-              if (receivedBytes == 0 && totalSize > 0 && duration < 100) {
-                zprint('🐛 WINDOWS BUG: Zero bytes received in ${duration}ms for $totalSize byte file. This suggests premature socket closure.');
-                zprint('   This is likely a Windows networking timing issue. Cleaning up...');
-                await fileTransferManager.handleSocketClosure(fileTransferKey);
-                return;
-              }
-              
-              if (receivedBytes < totalSize) {
-                zprint('⚠️ Transfer incomplete ($receivedBytes/$totalSize). Cleaning up...');
-                await fileTransferManager.handleSocketClosure(fileTransferKey);
-              } else {
-                zprint('✅ Transfer complete ($receivedBytes/$totalSize). Finalizing...');
-                final success = await fileTransferManager.end(fileTransferKey);
-                if (success) {
-                  if (transferType == TRANSFER_TYPE_AVATAR) {
-                    final senderIp = receivedInfo!['senderIp'] as String?;
-                    if (senderIp != null) {
-                      await _processReceivedAvatar(fileTransfer.destination_filename, senderIp);
-                    } else {
-                      zprint("⚠️ Avatar received but sender IP missing in metadata.");
-                    }
-                  } else {
-                    // Regular file
-                    zprint('✅ File transfer finalized successfully.');
-                    onFileReceivedCallback?.call(fileTransfer.destination_filename, fileTransfer.senderUsername);
-                  }
-                } else {
-                  zprint('❌ File transfer finalization failed (end() returned false). Already cleaned up?');
-                }
-              }
-            } else {
-              zprint("ℹ️ Socket closed (onDone), but transfer not found for key $fileTransferKey.");
-            }
-          } else {
-            zprint("ℹ️ Socket closed (onDone) - metadataReceived: $metadataReceived, receivedInfo: ${receivedInfo != null}");
-          }
-        } catch (e, s) {
-          zprint('❌ Error completing transfer (onDone) for key $fileTransferKey: $e\n$s');
-          await fileTransferManager.handleSocketClosure(fileTransferKey);
-        } finally {
-          try {
-            socket.destroy();
-          } catch (_) {}
+
+        final frame = decoder.add(data);
+        if (frame == null) continue; // Header not complete yet
+
+        receivedInfo = frame.metadata;
+        fileTransferKey = await _acceptTransfer(socket, sourceIp, receivedInfo);
+        if (fileTransferKey == null) return; // Rejected, socket already destroyed
+
+        dataExpected = receivedInfo['size'] as int? ?? 0;
+        if (frame.remainingData.isNotEmpty) {
+          await fileTransferManager.write(fileTransferKey, frame.remainingData);
+          receivedBytes += frame.remainingData.length;
         }
-      },
-      onError: (error, stackTrace) async {
-        zprint('❌ Socket error during transfer from $fileTransferKey: $error\n$stackTrace');
-        try {
-          if (metadataReceived) {
-            zprint("🧨 Cleaning up transfer due to socket error...");
-            await fileTransferManager.handleSocketClosure(fileTransferKey);
-          } else {
-            zprint("🧨 Socket error occurred before metadata received for $fileTransferKey.");
-          }
-        } catch (e) {
-          zprint('❌ Error during cleanup after socket error: $e');
-        } finally {
-          socket.destroy();
-        }
-      },
-      cancelOnError: true,
+      }
+
+      await _onConnectionClosed(
+        key: fileTransferKey,
+        info: receivedInfo,
+        receivedBytes: receivedBytes,
+        dataExpected: dataExpected,
+        elapsed: stopwatch.elapsed,
+      );
+    } catch (e, s) {
+      zprint('❌ Error during transfer from $sourceIp: $e\n$s');
+      if (fileTransferKey != null) {
+        zprint("🧨 Cleaning up transfer due to error...");
+        await fileTransferManager.handleSocketClosure(fileTransferKey);
+      }
+    } finally {
+      await iterator.cancel();
+      socket.destroy();
+    }
+  }
+
+  /// Registers the incoming transfer and sends the ready signal.
+  /// Returns the transfer key, or null if the transfer was rejected (socket destroyed).
+  Future<String?> _acceptTransfer(Socket socket, String sourceIp, Map<String, dynamic> info) async {
+    final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
+    final fileName = info['name'] as String? ?? 'unknown_file';
+    final fileSize = info['size'] as int? ?? 0;
+    final senderUsername = info['senderUsername'] as String? ?? 'Unknown';
+    final md5Checksum = info['md5Checksum'] as String?;
+
+    zprint('📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername');
+
+    // Key by transfer id so avatars and parallel files from one IP never collide
+    final remoteTransferId = info['transferId'] as String?;
+    final key = (remoteTransferId != null && remoteTransferId.isNotEmpty)
+        ? '$sourceIp#$remoteTransferId'
+        : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
+
+    final added = await fileTransferManager.add(
+      key,
+      fileName,
+      fileSize,
+      senderUsername,
+      info,
+      md5Checksum: md5Checksum,
+      sourceIp: sourceIp,
+      directory: transferType == TRANSFER_TYPE_AVATAR ? _avatarTempDirectory() : null,
     );
+    if (!added) {
+      zprint("❌ Failed to add transfer for $fileName from $sourceIp. Closing connection.");
+      socket.destroy();
+      return null;
+    }
+
+    // Ready signal for better Windows compatibility
+    try {
+      socket.add(READY_SIGNAL);
+      await socket.flush();
+      zprint("📡 Ready signal sent to sender");
+    } catch (e) {
+      zprint("⚠️ Failed to send ready signal: $e");
+    }
+    return key;
+  }
+
+  /// Runs when the sender closes the connection: finalizes or cleans up the transfer.
+  Future<void> _onConnectionClosed({
+    required String? key,
+    required Map<String, dynamic>? info,
+    required int receivedBytes,
+    required int dataExpected,
+    required Duration elapsed,
+  }) async {
+    zprint('📊 Socket closed after ${elapsed.inMilliseconds}ms. Received $receivedBytes/$dataExpected bytes.');
+    if (key == null || info == null) {
+      zprint("ℹ️ Socket closed before any metadata was accepted.");
+      return;
+    }
+
+    final fileTransfer = fileTransferManager.files[key];
+    if (fileTransfer == null) {
+      zprint("ℹ️ Socket closed, but transfer not found for key $key.");
+      return;
+    }
+
+    // Zero-byte transfers happen on premature socket closure (Windows timing issue)
+    if (receivedBytes == 0 && dataExpected > 0 && elapsed.inMilliseconds < 100) {
+      zprint('🐛 Zero bytes received in ${elapsed.inMilliseconds}ms for $dataExpected byte file. Cleaning up...');
+      await fileTransferManager.handleSocketClosure(key);
+      return;
+    }
+
+    if (receivedBytes < dataExpected) {
+      zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
+      await fileTransferManager.handleSocketClosure(key);
+      return;
+    }
+
+    zprint('✅ Transfer complete ($receivedBytes/$dataExpected). Finalizing...');
+    final success = await fileTransferManager.end(key);
+    if (!success) {
+      zprint('❌ File transfer finalization failed (end() returned false).');
+      return;
+    }
+
+    final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
+    if (transferType == TRANSFER_TYPE_AVATAR) {
+      final senderIp = info['senderIp'] as String?;
+      if (senderIp != null) {
+        await _processReceivedAvatar(fileTransfer.destination_filename, senderIp);
+      } else {
+        zprint("⚠️ Avatar received but sender IP missing in metadata.");
+      }
+    } else {
+      zprint('✅ File transfer finalized successfully.');
+      onFileReceivedCallback?.call(fileTransfer.destination_filename, fileTransfer.senderUsername);
+    }
   }
 
   /// Temporary directory for incoming avatar files (kept out of the user's download folder).

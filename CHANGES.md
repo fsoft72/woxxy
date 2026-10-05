@@ -1,5 +1,18 @@
 # Changes Log
 
+## Serialize the receive handler
+
+ReceiveService now consumes the socket through a StreamIterator, so metadata parsing, transfer registration, the ready signal and data writes run strictly one at a time (no duplicate adds or out-of-order writes). Metadata framing moved to a reusable MetadataFrameDecoder/encodeMetadataFrame in transfer_protocol.dart (BytesBuilder instead of List<int>). Added loopback integration tests.
+
+### Files
+- `lib/config/transfer_constants.dart`
+- `lib/services/network/transfer_protocol.dart`
+- `lib/services/network/receive_service.dart`
+- `lib/services/network/send_service.dart`
+- `test/transfer_loopback_test.dart`
+
+---
+
 ## Stop keying transfers by source IP only
 
 Transfers are now keyed by the sender's transferId (ip#transferId); duplicate keys are rejected instead of overwritten, avatar files are written to a temp directory instead of the download folder, and unique destination paths are reserved atomically with an exclusive create to remove the exists/open race.

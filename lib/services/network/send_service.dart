@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/peer.dart';
+import 'transfer_protocol.dart';
 
 /// Callback function type for file transfer progress updates
 typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
@@ -294,12 +294,9 @@ class SendService {
       zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
       _activeTransfers[transferId] = socket; // Add BEFORE sending data
 
-      final metadataBytes = utf8.encode(json.encode(metadata));
-      final lengthBytes = ByteData(4)..setUint32(0, metadataBytes.length);
-      zprint(
-          "  [Send Meta] Sending length (${lengthBytes.buffer.asUint8List().length} bytes) and metadata (${metadataBytes.length} bytes)...");
-      socket.add(lengthBytes.buffer.asUint8List());
-      socket.add(metadataBytes);
+      final frame = encodeMetadataFrame(metadata);
+      zprint("  [Send Meta] Sending metadata frame (${frame.length} bytes)...");
+      socket.add(frame);
       await socket.flush();
       zprint("  [Send Meta] Metadata sent and flushed.");
 

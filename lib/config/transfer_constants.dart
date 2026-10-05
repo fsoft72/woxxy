@@ -7,3 +7,9 @@ const String TRANSFER_TYPE_AVATAR = 'AVATAR_FILE';
 /// Ready signal bytes ("RDY" in ASCII) used for sender/receiver handshake
 const List<int> READY_SIGNAL = [0x52, 0x44, 0x59];
 const int READY_SIGNAL_LENGTH = 3;
+
+/// Maximum accepted size of the JSON metadata header (1 MB)
+const int MAX_METADATA_LENGTH = 1024 * 1024;
+
+/// Number of bytes used by the metadata length prefix
+const int METADATA_LENGTH_PREFIX_BYTES = 4;
