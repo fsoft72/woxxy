@@ -20,6 +20,7 @@ import 'network/receive_service.dart';
 import 'network/send_service.dart';
 import 'network/server_service.dart';
 import '../config/network_constants.dart';
+import '../config/transfer_constants.dart';
 
 // Consumers of sendFile need the progress callback type
 export 'network/send_service.dart' show FileTransferProgressCallback;
@@ -180,12 +181,17 @@ class NetworkService {
     });
   }
 
-  /// MD5 of the avatar file, or null if there is none or it cannot be read.
+  /// MD5 of the avatar file, or null if there is none, it cannot be read or it is too big to be
+  /// sent (announcing a hash that nobody can fetch would make peers ask for it again and again).
   Future<String?> _avatarHashFor(String? imagePath) async {
     if (imagePath == null || imagePath.isEmpty) return null;
     try {
       final file = File(imagePath);
       if (!await file.exists()) return null;
+      if (await file.length() > MAX_AVATAR_SIZE_BYTES) {
+        zprint('⚠️ Avatar $imagePath is bigger than $MAX_AVATAR_SIZE_BYTES bytes: not announced.');
+        return null;
+      }
       return await md5OfFile(file);
     } catch (e) {
       zprint('⚠️ Could not hash avatar $imagePath: $e');

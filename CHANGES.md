@@ -1,5 +1,9 @@
 # Changes Log
 
+## Validate profile pictures before announcing them
+
+ProfileImageStore.import now rejects pictures above 10 MB or 4096 px, the settings screen reports why, and NetworkService does not announce the hash of an oversized avatar, so peers no longer ask for an image nobody can send. Tests in `test/settings_test.dart`.
+
 ## Honor cancel while a send is being prepared
 
 SendService tracks every transfer from the start of sendFile, so a cancel during hashing or connecting stops the send before any byte leaves. Test: `test/send_cancel_test.dart`.

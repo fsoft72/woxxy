@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/models/user.dart';
 import 'package:woxxy/screens/settings.dart';
@@ -118,10 +119,13 @@ void main() {
   group('ProfileImageStore', () {
     late Directory tmp;
     late ProfileImageStore store;
+    late ImageSizeReader sizeOf;
 
     setUp(() async {
       tmp = await Directory.systemTemp.createTemp('woxxy_profile_');
-      store = ProfileImageStore(directoryProvider: () async => Directory('${tmp.path}/support'));
+      sizeOf = (_) async => (width: 100, height: 100);
+      store = ProfileImageStore(
+          directoryProvider: () async => Directory('${tmp.path}/support'), sizeReader: (bytes) => sizeOf(bytes));
     });
 
     tearDown(() => tmp.delete(recursive: true));
@@ -146,6 +150,27 @@ void main() {
       expect(second, isNot(first));
       expect(File(first).existsSync(), isFalse);
       expect(File(second).readAsBytesSync(), [2]);
+    });
+
+    test('rejects a picture that peers would refuse (too many pixels)', () async {
+      sizeOf = (_) async => (width: MAX_AVATAR_SIDE_PIXELS + 1, height: 10);
+      final big = File('${tmp.path}/big.png')..writeAsBytesSync([1]);
+
+      await expectLater(store.import(big.path), throwsA(isA<InvalidProfileImageException>()));
+      expect(Directory('${tmp.path}/support').existsSync(), isFalse, reason: 'nothing is copied');
+    });
+
+    test('rejects a file that is too big in bytes', () async {
+      final big = File('${tmp.path}/big.png')..writeAsBytesSync(List.filled(MAX_AVATAR_SIZE_BYTES + 1, 0));
+
+      await expectLater(store.import(big.path), throwsA(isA<InvalidProfileImageException>()));
+    });
+
+    test('rejects a file that is not an image', () async {
+      sizeOf = (_) async => throw const FormatException('bad');
+      final bad = File('${tmp.path}/bad.png')..writeAsBytesSync([1]);
+
+      await expectLater(store.import(bad.path), throwsA(isA<InvalidProfileImageException>()));
     });
   });
 }

@@ -73,7 +73,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final pickedPath = result?.files.single.path;
     if (pickedPath == null) return;
 
-    final storedPath = await _profileImageStore.import(pickedPath);
+    final String storedPath;
+    try {
+      storedPath = await _profileImageStore.import(pickedPath);
+    } catch (e) {
+      if (mounted) showSnackbar(context, 'Cannot use this picture: $e');
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _selectedImagePath = storedPath;
