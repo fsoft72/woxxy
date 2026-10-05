@@ -25,3 +25,6 @@ const int MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024;
 
 /// Bytes in one MB, used for sizes and speeds shown to the user
 const int BYTES_PER_MB = 1024 * 1024;
+
+/// Received bytes buffered in memory before the writer waits for the disk to catch up (4 MiB)
+const int WRITE_FLUSH_THRESHOLD_BYTES = 4 * 1024 * 1024;

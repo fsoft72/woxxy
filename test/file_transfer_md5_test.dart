@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/models/file_transfer.dart';
 
 void main() {
@@ -49,5 +50,16 @@ void main() {
     final transfer = await FileTransfer.start('k', 'nohash.bin', 2, tmp.path, 'bob', {}, null);
     await transfer!.write([1, 2]);
     expect(await transfer.end(), isTrue);
+  });
+
+  test('write waits for the disk once the flush threshold is buffered', () async {
+    final transfer = await start('', WRITE_FLUSH_THRESHOLD_BYTES * 2);
+    final chunk = List.filled(WRITE_FLUSH_THRESHOLD_BYTES ~/ 2, 7);
+
+    await transfer.write(chunk);
+    await transfer.write(chunk); // Reaches the threshold: this call returns after the flush
+
+    expect(File(transfer.destinationFilename).lengthSync(), WRITE_FLUSH_THRESHOLD_BYTES);
+    await transfer.end();
   });
 }

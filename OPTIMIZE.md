@@ -15,7 +15,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/network/server_service.dart`, `lib/services/network/receive_service.dart`
 - [x] **Write failures are ignored while receiving** - `FileTransferManager.write` swallows errors and returns `false`, but `handleNewConnection` never checks the result, so a full disk or a revoked folder keeps the transfer "running" until the MD5 check fails at the end. Check the return value and abort the transfer right away.
   - File(s): `lib/services/network/receive_service.dart` (lines 58 and 75), `lib/models/file_transfer_manager.dart`
-- [ ] **No real backpressure on disk writes** - `FileTransfer.write` calls `fileSink.add` without awaiting anything, so if the disk is slower than the network the data piles up in memory. The doc comment of `handleNewConnection` promises backpressure that does not exist. Await `fileSink.flush()` every N bytes (or pipe through `addStream`).
+- [x] **No real backpressure on disk writes** - `FileTransfer.write` calls `fileSink.add` without awaiting anything, so if the disk is slower than the network the data piles up in memory. The doc comment of `handleNewConnection` promises backpressure that does not exist. Await `fileSink.flush()` every N bytes (or pipe through `addStream`).
   - File(s): `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
 - [ ] **Avatar requests have no rate limit** - Every UDP `avatar_request` makes the device hash/read the avatar and open a TCP connection. A single host can flood this path. Limit requests per source IP (for example one per few seconds) and ignore the rest.
   - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network/send_service.dart`

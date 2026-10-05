@@ -46,6 +46,7 @@ class FileTransfer {
   /// Incremental MD5 state, fed chunk by chunk so the file is never held in memory
   final _DigestSink _md5Sink = _DigestSink();
   ByteConversionSink? _md5Input;
+  int _unflushedBytes = 0; // Bytes added to the sink since the last flush
   bool _calculatingMd5 = false; // Flag to indicate if we need to hash incoming data
 
   FileTransfer._internal({
@@ -133,17 +134,18 @@ class FileTransfer {
   }
 
   /// Writes binary data to the file sink and feeds it to the incremental MD5 if needed.
+  /// Once [WRITE_FLUSH_THRESHOLD_BYTES] are buffered the call waits for the disk, so a slow
+  /// disk slows the sender down (through TCP) instead of filling memory.
   Future<void> write(List<int> binaryData) async {
     try {
       _md5Input?.add(binaryData);
-      // Always write to the file sink
       fileSink.add(binaryData);
-      // Avoid awaiting flush here for performance, rely on close() or closeOnSocketClosure()
-      // await fileSink.flush();
+      _unflushedBytes += binaryData.length;
+      if (_unflushedBytes < WRITE_FLUSH_THRESHOLD_BYTES) return;
+      await fileSink.flush();
+      _unflushedBytes = 0;
     } catch (e, s) {
       zprint('❌ Error writing chunk to file sink for $destinationFilename: $e\n$s');
-      // Consider how to handle write errors - maybe close and delete?
-      // For now, rethrow to let the caller (NetworkService) handle it.
       rethrow;
     }
   }

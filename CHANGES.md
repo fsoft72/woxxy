@@ -1,5 +1,16 @@
 # Changes Log
 
+## Apply backpressure on disk writes
+
+FileTransfer.write waits for fileSink.flush() once WRITE_FLUSH_THRESHOLD_BYTES (4 MiB) are buffered, so a slow disk throttles the sender through TCP instead of growing memory. Added a test.
+
+### Files
+- `lib/config/transfer_constants.dart`
+- `lib/models/file_transfer.dart`
+- `test/file_transfer_md5_test.dart`
+
+---
+
 ## Abort receiving when a write fails
 
 ReceiveService now checks the result of FileTransferManager.write and aborts the transfer (partial file removed) instead of waiting for the end to find a corrupt file. Added a test with a failing manager.
