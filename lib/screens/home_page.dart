@@ -61,11 +61,8 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   }
 
   Future<void> _startNetwork() async {
-    _networkService.setUsername(_currentUser.username);
-
-    // Start network service *after* setting username (and potentially IP)
     try {
-      await _networkService.start(); // Start discovers peers, etc.
+      await _networkService.start(_currentUser); // Discovers peers, announcing the current user
     } on NetworkStartException catch (e) {
       zprint('❌ Network start failed: $e');
       if (mounted) {

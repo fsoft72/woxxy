@@ -43,7 +43,6 @@ class AppServices {
     final networkService = NetworkService(
       fileTransferManager: fileTransferManager,
       avatarStore: avatarStore,
-      settingsService: settingsService,
     );
 
     return AppServices(

@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/hashing.dart';
-import 'package:woxxy/services/settings_service.dart';
 
 import '../models/avatars.dart';
 import '../models/file_received_event.dart';
@@ -13,6 +12,7 @@ import '../models/local_identity.dart';
 import '../models/file_transfer_manager.dart';
 import '../models/peer.dart';
 import '../models/peer_manager.dart';
+import '../models/user.dart';
 
 import 'network/discovery_service.dart';
 import 'network/ip_monitor.dart';
@@ -42,7 +42,6 @@ class NetworkService {
   late final PeerManager _peerManager;
   final AvatarStore _avatarStore;
   final FileTransferManager _fileTransferManager;
-  final SettingsService _settingsService;
 
   // Internal Services
   late final DiscoveryService _discoveryService;
@@ -68,6 +67,10 @@ class NetworkService {
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
   // Expose current IP address if needed externally
   String? get currentIpAddress => _identity.ipAddress;
+  /// Name announced to the peers
+  @visibleForTesting
+  String get username => _identity.username;
+
   /// MD5 of the avatar announced to the peers (null when there is none)
   @visibleForTesting
   String? get avatarHash => _identity.avatarHash;
@@ -81,11 +84,9 @@ class NetworkService {
   NetworkService({
     required FileTransferManager fileTransferManager,
     required AvatarStore avatarStore,
-    required SettingsService settingsService,
     IpResolver? ipResolver,
   })  : _fileTransferManager = fileTransferManager,
         _avatarStore = avatarStore,
-        _settingsService = settingsService,
         _ipResolver = ipResolver {
     // The discovery service is created below; the lambda reads it only when a peer shows up
     _peerManager = PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
@@ -120,7 +121,8 @@ class NetworkService {
     );
   }
 
-  Future<void> start() async {
+  /// Starts the network layer announcing [user] (name and profile picture) to the other devices.
+  Future<void> start(User user) async {
     zprint('🚀 Starting NetworkService Facade...');
     try {
       final ipAddress = await (_ipResolver ?? _getIpAddress)();
@@ -131,8 +133,8 @@ class NetworkService {
       zprint('  -> Determined IP: $ipAddress');
       _identity.ipAddress = ipAddress;
 
-      // Load initial user details (username, avatar path)
-      await _loadCurrentUserDetails();
+      // Announce the user's name and avatar
+      _loadCurrentUserDetails(user);
       _identity.avatarHash = await _avatarHashFor(_identity.profileImagePath);
 
       // Start the underlying services
@@ -238,8 +240,7 @@ class NetworkService {
     _fileReceivedController.add(event);
   }
 
-  Future<void> _loadCurrentUserDetails() async {
-    final user = await _settingsService.loadSettings();
+  void _loadCurrentUserDetails(User user) {
     _identity.username = user.username;
     _identity.profileImagePath = user.profileImage;
     zprint('👤 Facade User Details Loaded: Name=${_identity.username}, Avatar=${_identity.profileImagePath}');

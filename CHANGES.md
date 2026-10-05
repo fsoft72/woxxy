@@ -1,5 +1,9 @@
 # Changes Log
 
+## Pass the user to NetworkService.start
+
+`NetworkService.start(user)` takes the current user from the caller, so settings are no longer loaded a second time and `NetworkService` lost its `SettingsService` dependency. `HomePage` passes its current user (also on retry). Test in `test/network_start_test.dart`.
+
 ## Do not hash the avatar again on every send
 
 `sendAvatar` reuses the hash announced in discovery when it belongs to the same file, and `NetworkService.setProfileImagePath` ignores an unchanged path, so saving a new username no longer rehashes the picture. Tests: `test/avatar_hash_reuse_test.dart`.
