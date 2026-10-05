@@ -1,5 +1,15 @@
 # Changes Log
 
+## Remove the 100 ms zero-byte heuristic
+
+The special case for 'zero bytes in under 100 ms' did exactly what the next incomplete-transfer check does, so it was removed together with its magic number. Added a test for a sender that closes right after the header.
+
+### Files
+- `lib/services/network/receive_service.dart`
+- `test/server_limits_test.dart`
+
+---
+
 ## Share one md5OfFile helper and drop the checksum sentinel
 
 New funcs/hashing.dart md5OfFile replaces the Completer based hashing in SendService and the inline hashing in NetworkService. A file that cannot be hashed is now announced with a null checksum; the receiver still accepts the legacy 'CHECKSUM_ERROR' value (LEGACY_CHECKSUM_ERROR). Added tests.

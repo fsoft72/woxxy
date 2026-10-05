@@ -179,13 +179,6 @@ class ReceiveService {
       return;
     }
 
-    // Zero-byte transfers happen on premature socket closure (Windows timing issue)
-    if (receivedBytes == 0 && dataExpected > 0 && elapsed.inMilliseconds < 100) {
-      zprint('🐛 Zero bytes received in ${elapsed.inMilliseconds}ms for $dataExpected byte file. Cleaning up...');
-      await fileTransferManager.handleSocketClosure(key);
-      return;
-    }
-
     if (receivedBytes < dataExpected) {
       zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
       await fileTransferManager.handleSocketClosure(key);

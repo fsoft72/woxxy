@@ -76,6 +76,31 @@ void main() {
     await server.dispose();
   });
 
+  test('a sender that closes right after the header leaves no file and no event', () async {
+    final manager = FileTransferManager(downloadPath: path.join(tmp.path, 'downloads'));
+    final avatars = AvatarStore();
+    var events = 0;
+    final receive = ReceiveService(
+      fileTransferManager: manager,
+      avatarStore: avatars,
+      peerManager: PeerManager(avatarStore: avatars),
+      onFileReceivedCallback: (_) => events++,
+    );
+    final server = ServerService(port: 0, connectionHandler: receive.handleNewConnection);
+    await server.start();
+
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.boundPort!);
+    socket.add(encodeMetadataFrame({'name': 'early.bin', 'size': 1000, 'senderUsername': 'x', 'transferId': 't'}));
+    await socket.flush();
+    await socket.close();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(events, 0);
+    expect(manager.files, isEmpty);
+    expect(Directory(path.join(tmp.path, 'downloads')).listSync(), isEmpty);
+    await server.dispose();
+  });
+
   test('ReceiveService aborts the transfer as soon as a write fails', () async {
     final manager = _FailingWriteManager(path.join(tmp.path, 'downloads'));
     final avatars = AvatarStore();
