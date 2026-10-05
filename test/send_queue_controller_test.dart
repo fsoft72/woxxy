@@ -38,8 +38,6 @@ void main() {
         onMessage: messages.add,
         throttle: throttle,
         idGenerator: (name) => 'id-$name',
-        pauseAfterSuccess: Duration.zero,
-        pauseAfterFailure: Duration.zero,
       );
 
   Future<void> idle(SendQueueController c) async {
@@ -116,6 +114,36 @@ void main() {
     expect(c.completed.map((f) => f.name), ['b.txt', 'c.txt']);
     expect(c.completed.every((f) => f.isCompleted), isTrue);
     expect(messages.where((m) => m.startsWith('Error')), isEmpty);
+  });
+
+  test('there is no fixed pause between files: many small files go out right away', () async {
+    final c = controller((id, path, onProgress) async {
+      sent.add(path);
+      onProgress(10, 10);
+      return id;
+    });
+    final files = [for (var i = 0; i < 40; i++) await makeFile('f$i.txt')];
+
+    final stopwatch = Stopwatch()..start();
+    await c.addFiles(files);
+    await idle(c);
+
+    expect(sent, hasLength(40));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)), reason: 'a 500 ms pause per file would take 20 s');
+  });
+
+  test('a file moves from waiting to completed or failed', () async {
+    final c = controller((id, path, onProgress) async {
+      if (path.endsWith('bad.txt')) throw Exception('nope');
+      return id;
+    });
+    await c.addFiles([await makeFile('ok.txt'), await makeFile('bad.txt')]);
+    expect(c.queue.first.status, anyOf(QueuedFileStatus.waiting, QueuedFileStatus.completed));
+    await idle(c);
+
+    expect(c.completed.map((f) => f.status), [QueuedFileStatus.completed, QueuedFileStatus.failed]);
+    expect(c.completed.first.errorMessage, isNull);
+    expect(c.completed.last.errorMessage, contains('nope'));
   });
 
   test('a failure is recorded and the next file is still sent', () async {

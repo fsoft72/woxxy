@@ -1,5 +1,9 @@
 # Changes Log
 
+## Drop the fixed pauses and the two flags of the send queue
+
+`SendQueueController` no longer waits 500 ms after every file and 1 s after a failure (the receiver's ready signal made them unnecessary), and `QueuedFile` has a `QueuedFileStatus` enum behind its `isCompleted` and `isFailed` getters. Tests in `test/send_queue_controller_test.dart`.
+
 ## Move tray and window handling out of HomePage
 
 New `DesktopWindowController` (created once in `main()`) hides the window on close and shows or focuses it on tray clicks; `HomePage` is a plain widget again with no `Platform` check. Tests: `test/desktop_window_controller_test.dart`.

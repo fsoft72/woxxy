@@ -19,16 +19,25 @@ typedef SendFileFunction = Future<String> Function(
 /// Cancels an active transfer by id.
 typedef CancelTransferFunction = bool Function(String transferId);
 
+/// Where a [QueuedFile] is in its life.
+enum QueuedFileStatus { waiting, completed, failed }
+
 /// A file waiting in, or finished by, the send queue.
 class QueuedFile {
   final String path;
   final String name;
   final int size;
-  bool isCompleted = false;
-  bool isFailed = false;
-  String? errorMessage;
+  QueuedFileStatus _status = QueuedFileStatus.waiting;
+  String? _errorMessage;
 
   QueuedFile(this.path, this.name, this.size);
+
+  QueuedFileStatus get status => _status;
+  bool get isCompleted => _status == QueuedFileStatus.completed;
+  bool get isFailed => _status == QueuedFileStatus.failed;
+
+  /// Why the send failed; null unless [isFailed].
+  String? get errorMessage => _errorMessage;
 }
 
 /// Sends files to one peer one after the other and exposes progress for the UI.
@@ -37,8 +46,6 @@ class SendQueueController extends ChangeNotifier {
   final CancelTransferFunction _cancel;
   final ProgressThrottle _throttle;
   final String Function(String filename) _idGenerator;
-  final Duration _pauseAfterSuccess;
-  final Duration _pauseAfterFailure;
 
   /// Called with a short user facing message (success, failure, cancelled).
   final void Function(String message)? onMessage;
@@ -64,14 +71,10 @@ class SendQueueController extends ChangeNotifier {
     this.onMessage,
     ProgressThrottle? throttle,
     String Function(String filename)? idGenerator,
-    Duration pauseAfterSuccess = const Duration(milliseconds: 500),
-    Duration pauseAfterFailure = const Duration(seconds: 1),
   })  : _send = send,
         _cancel = cancel,
         _throttle = throttle ?? ProgressThrottle(),
-        _idGenerator = idGenerator ?? generateTransferId,
-        _pauseAfterSuccess = pauseAfterSuccess,
-        _pauseAfterFailure = pauseAfterFailure;
+        _idGenerator = idGenerator ?? generateTransferId;
 
   /// Files not sent yet; the first one is being sent while [isTransferring].
   UnmodifiableListView<QueuedFile> get queue => UnmodifiableListView(_queue);
@@ -187,12 +190,10 @@ class SendQueueController extends ChangeNotifier {
 
         if (stale()) break;
         _onSuccess(item, stopwatch.elapsed);
-        await Future<void>.delayed(_pauseAfterSuccess);
       } catch (e, stackTrace) {
         zprint('❌ Error during file transfer: $e\n$stackTrace');
         if (stale()) break;
         _onFailure(item, e);
-        await Future<void>.delayed(_pauseAfterFailure);
       } finally {
         _activeTransferId = null;
         _preparing = false;
@@ -213,7 +214,7 @@ class SendQueueController extends ChangeNotifier {
     _progress = 100;
     _transferComplete = true;
     _speedMBps = speed;
-    item.isCompleted = true;
+    item._status = QueuedFileStatus.completed;
     _totalCompleted++;
     _queue.removeFirst();
     _completed.add(item);
@@ -224,8 +225,8 @@ class SendQueueController extends ChangeNotifier {
   }
 
   void _onFailure(QueuedFile item, Object error) {
-    item.isFailed = true;
-    item.errorMessage = error.toString();
+    item._status = QueuedFileStatus.failed;
+    item._errorMessage = error.toString();
     _queue.removeFirst();
     _completed.add(item);
     _notify();
