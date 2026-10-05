@@ -1,5 +1,16 @@
 # Changes Log
 
+## Sanitize the remote filename
+
+Remote filenames are reduced to a safe last path segment (both separators, control chars, length cap, fallback name) before the destination path is built, so a hostile sender cannot write outside the download folder. Added unit and FileTransfer tests.
+
+### Files
+- `lib/funcs/filename.dart`
+- `lib/models/file_transfer.dart`
+- `test/filename_test.dart`
+
+---
+
 ## Code Optimization Analysis
 
 Added `OPTIMIZE.md`, a prioritized checklist of 25 optimization, security and refactoring items found by reviewing the whole `lib/` tree. No application code was changed.

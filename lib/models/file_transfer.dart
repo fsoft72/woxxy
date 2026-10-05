@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/filename.dart';
 import 'package:woxxy/models/notification_manager.dart';
 
 typedef OnTransferComplete = void Function(FileTransfer);
@@ -87,10 +88,16 @@ class FileTransfer {
         await dir.create(recursive: true);
       }
 
+      // Never trust the remote name: keep only a safe last path segment
+      final safeFilename = sanitizeFilename(original_filename);
+      if (safeFilename != original_filename) {
+        zprint("   ⚠️ Remote filename '$original_filename' sanitized to '$safeFilename'");
+      }
+
       // Generate unique filename to avoid overwriting
       String finalPath = await _generateUniqueFilePath(
         downloadPath,
-        original_filename,
+        safeFilename,
       );
       zprint("   Unique destination path determined: $finalPath");
 

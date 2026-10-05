@@ -4,7 +4,7 @@
 
 ## Critical
 
-- [ ] **Sanitize the remote filename (path traversal)** - The receiver builds the destination with `path.join(downloadPath, metadata['name'])` using an unvalidated name from the network, so a name like `../../.bashrc` writes outside the download folder. Apply `path.basename` plus a reject list (empty, `.`, `..`, separators) before generating the unique path.
+- [x] **Sanitize the remote filename (path traversal)** - The receiver builds the destination with `path.join(downloadPath, metadata['name'])` using an unvalidated name from the network, so a name like `../../.bashrc` writes outside the download folder. Apply `path.basename` plus a reject list (empty, `.`, `..`, separators) before generating the unique path.
   - File(s): `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
 - [ ] **Stop keying transfers by source IP only** - `FileTransferManager.files` is keyed by the sender IP, so an avatar transfer (sent automatically on peer discovery) or a second file from the same peer overwrites and corrupts the active transfer; the avatar is also written into the user's download folder. Key by `transferId` (already in the metadata) and write avatars to a temp directory. The `exists()` check in `_generateUniqueFilePath` followed by `openWrite` is also a race for same-name files.
   - File(s): `lib/models/file_transfer_manager.dart`, `lib/models/file_transfer.dart`, `lib/services/network/receive_service.dart`
