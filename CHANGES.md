@@ -1,5 +1,15 @@
 # Changes Log
 
+## Guard the app version and drop the dangling env.dart symlink
+
+The publish script already writes APP_VERSION from pubspec.yaml, so instead of adding a dependency a test now fails when version.dart and pubspec.yaml differ. The tracked lib/config/env.dart symlink (target missing, already in .gitignore, unused by the code) was removed, with a test that no dangling link lives in lib.
+
+### Files
+- `lib/config/env.dart`
+- `test/version_test.dart`
+
+---
+
 ## Release avatar notifiers of removed peers
 
 removeAvatar disposes and forgets the notifier of a peer when no widget listens to it (a watched notifier is kept so the widget still receives later updates). The unused getKeys debug method was removed. Added a test.
