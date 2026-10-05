@@ -98,7 +98,6 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       trayManager.removeListener(this);
       windowManager.removeListener(this);
     }
-    _networkService.dispose(); // Ensure network service resources are cleaned up
     zprint("✅ HomePage disposed.");
     super.dispose();
   }

@@ -17,14 +17,15 @@ class DesktopShell {
   static bool get isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   /// Configures the window (fixed width, resizable height), the tray icon and its menu, then shows the window.
+  /// [onQuit] runs when the user picks "Quit" in the tray menu, before the process exits.
   /// Does nothing on mobile platforms.
-  static Future<void> init() async {
+  static Future<void> init({Future<void> Function()? onQuit}) async {
     if (!isDesktop) return;
 
     await _setupWindow();
     if (!Platform.isMacOS) await _setWindowIcon();
     await windowManager.waitUntilReadyToShow();
-    await _setupTrayAndShow();
+    await _setupTrayAndShow(onQuit);
   }
 
   /// Size limits, title and close behavior of the main window.
@@ -64,7 +65,7 @@ class DesktopShell {
   }
 
   /// Creates the tray icon and menu, then shows the window (also when the tray fails).
-  static Future<void> _setupTrayAndShow() async {
+  static Future<void> _setupTrayAndShow(Future<void> Function()? onQuit) async {
     try {
       final iconPath = await _resolveTrayIconPath();
       zprint("🔧 Using tray icon path: $iconPath");
@@ -85,6 +86,11 @@ class DesktopShell {
           label: 'Quit',
           onClick: (menuItem) async {
             zprint("🛑 Quit requested from tray menu.");
+            try {
+              await onQuit?.call();
+            } catch (e) {
+              zprint('⚠️ Error while shutting down: $e');
+            }
             await windowManager.destroy(); // Close window properly
             exit(0);
           },

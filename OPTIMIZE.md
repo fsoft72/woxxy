@@ -23,7 +23,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
   - File(s): `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/discovery_service.dart`
 - [x] **Received-file side effects live inside a widget** - `HomePage` listens to `onFileReceived` to write the history and show the notification, and drops the event when `!mounted`. A file received while the window is closed or the tree is rebuilt is missing from the history. Move this wiring to a plain class created in `AppServices` and keep `HomePage` for UI only.
   - File(s): `lib/screens/home_page.dart`, `lib/app_services.dart`
-- [ ] **`HomePage` disposes a service it does not own** - `AppServices` creates `NetworkService` in `main()`, but `_HomePageState.dispose` calls `_networkService.dispose()`. After that the service cannot be started again and any other holder breaks. Let the owner of `AppServices` dispose it.
+- [x] **`HomePage` disposes a service it does not own** - `AppServices` creates `NetworkService` in `main()`, but `_HomePageState.dispose` calls `_networkService.dispose()`. After that the service cannot be started again and any other holder breaks. Let the owner of `AppServices` dispose it.
   - File(s): `lib/screens/home_page.dart`, `lib/main.dart`
 
 ## Medium

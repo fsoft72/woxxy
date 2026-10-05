@@ -32,7 +32,7 @@ void main() async {
     final services = AppServices.create(downloadPath: downloadPath, history: history);
 
     // Window and tray exist only on desktop platforms
-    await DesktopShell.init();
+    await DesktopShell.init(onQuit: services.dispose);
 
     zprint('🔔 Starting notification manager initialization...');
     await services.notificationManager.init();

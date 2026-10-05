@@ -28,6 +28,12 @@ class AppServices {
     required this.receivedFiles,
   });
 
+  /// Stops everything that was started. Called once by the owner when the app really quits.
+  Future<void> dispose() async {
+    await receivedFiles.dispose();
+    await networkService.dispose();
+  }
+
   /// Creates the real services wired together. This is the only place that builds them.
   factory AppServices.create({required String downloadPath, required FileHistory history}) {
     final settingsService = SettingsService();

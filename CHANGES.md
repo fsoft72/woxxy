@@ -1,5 +1,18 @@
 # Changes Log
 
+## Let the owner of AppServices dispose the network service
+
+HomePage no longer disposes the NetworkService it does not own. AppServices.dispose stops the handler and the network service and runs from the tray Quit action (DesktopShell.init onQuit). Added a test.
+
+### Files
+- `lib/app_services.dart`
+- `lib/main.dart`
+- `lib/bootstrap/desktop_shell.dart`
+- `lib/screens/home_page.dart`
+- `test/app_services_test.dart`
+
+---
+
 ## Move received-file handling out of HomePage
 
 New ReceivedFilesHandler (history entry plus notification) is created in AppServices and started in main(), so it lives as long as the app and no file is lost when a screen is unmounted. HomePage no longer listens to onFileReceived. Added tests.
