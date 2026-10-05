@@ -1,5 +1,20 @@
 # Changes Log
 
+## Split `main()` and fix the fatal error screen
+
+main() shrank from ~190 to ~50 lines: window/tray setup moved to bootstrap/desktop_shell.dart (split into small methods), download folder resolution to bootstrap/download_path.dart (with fallback), MyApp to app.dart and HomePage to screens/home_page.dart. The fatal error handler now always calls runApp(InitErrorApp) (the old isRootWidgetAttached check was always false, so no error screen was ever shown). Added tests.
+
+### Files
+- `lib/main.dart`
+- `lib/app.dart`
+- `lib/screens/home_page.dart`
+- `lib/bootstrap/desktop_shell.dart`
+- `lib/bootstrap/download_path.dart`
+- `lib/widgets/init_error_app.dart`
+- `test/bootstrap_test.dart`
+
+---
+
 ## Fix the settings screen behaviors
 
 The username is validated per keystroke but saved/announced only after a 600 ms pause or on submit, and empty names are rejected with a message. SVG is no longer offered as a profile picture (peers cannot decode it) and legacy SVG paths render with SvgPicture.file. Picked pictures are copied into app storage by ProfileImageStore (new file name each time so the image cache never shows a stale picture). Added widget and unit tests.
