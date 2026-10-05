@@ -9,6 +9,7 @@ import 'package:woxxy/funcs/hashing.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/local_identity.dart';
 import '../../models/peer.dart';
+import 'socket_reader.dart';
 import 'transfer_protocol.dart';
 import '../../config/network_constants.dart';
 
@@ -183,61 +184,22 @@ class SendService {
     };
   }
 
-  /// Waits for a ready signal from the receiver before starting file transfer
-  /// This helps prevent Windows timing issues with socket closure
-  Future<void> _waitForReadySignal(Socket socket, String transferId) async {
-    try {
-      zprint("📡 Waiting for ready signal from receiver...");
-      
-      final completer = Completer<void>();
-      late StreamSubscription subscription;
-      bool signalReceived = false;
-      
-      // Set up timeout
-      final timeout = Timer(READY_SIGNAL_TIMEOUT, () {
-        if (!completer.isCompleted) {
-          subscription.cancel();
-          completer.complete(); // Continue even without signal
-          zprint("⏰ Ready signal timeout - proceeding anyway");
-        }
-      });
+  /// Waits for the ready signal of the receiver before the file is sent.
+  ///
+  /// A receiver that closes the connection instead (it rejected the transfer) makes this fail at
+  /// once. Only a silent receiver (an older version, or a Windows timing quirk) is tolerated:
+  /// after [READY_SIGNAL_TIMEOUT] the file is sent anyway.
+  Future<void> _waitForReadySignal(SocketReader reader) async {
+    zprint("📡 Waiting for ready signal from receiver...");
+    final bytes = await reader.read(READY_SIGNAL_LENGTH, READY_SIGNAL_TIMEOUT);
 
-      // Listen for ready signal
-      subscription = socket.listen(
-        (data) {
-          if (!signalReceived && data.length >= READY_SIGNAL_LENGTH) {
-            if (data[0] == READY_SIGNAL[0] && data[1] == READY_SIGNAL[1] && data[2] == READY_SIGNAL[2]) {
-              signalReceived = true;
-              timeout.cancel();
-              subscription.cancel();
-              if (!completer.isCompleted) {
-                completer.complete();
-                zprint("✅ Ready signal received from receiver");
-              }
-            }
-          }
-        },
-        onError: (error) {
-          timeout.cancel();
-          subscription.cancel();
-          if (!completer.isCompleted) {
-            completer.complete(); // Continue even on error
-            zprint("⚠️ Error waiting for ready signal: $error - proceeding anyway");
-          }
-        },
-        onDone: () {
-          timeout.cancel();
-          if (!completer.isCompleted) {
-            completer.complete(); // Continue if connection closes
-            zprint("⚠️ Connection closed while waiting for ready signal - proceeding anyway");
-          }
-        },
-      );
-
-      await completer.future;
-    } catch (e) {
-      zprint("⚠️ Exception while waiting for ready signal: $e - proceeding anyway");
+    if (bytes.length == READY_SIGNAL_LENGTH) {
+      final matches = bytes[0] == READY_SIGNAL[0] && bytes[1] == READY_SIGNAL[1] && bytes[2] == READY_SIGNAL[2];
+      zprint(matches ? "✅ Ready signal received from receiver" : "⚠️ Unexpected ready signal - proceeding anyway");
+      return;
     }
+    if (reader.isClosed) throw Exception('The receiver closed the connection before accepting the transfer');
+    zprint("⏰ Ready signal timeout - proceeding anyway");
   }
 
   /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
@@ -270,6 +232,7 @@ class SendService {
     final file = File(filePath);
     final fileSize = metadata['size'] as int;
     Socket? socket;
+    SocketReader? reader;
 
     try {
       zprint("  [Send Meta] Connecting to ${receiver.address.address}:${receiver.port} for $transferId");
@@ -289,7 +252,8 @@ class SendService {
       zprint("  [Send Meta] Metadata sent and flushed.");
 
       // Wait for ready signal from receiver (Windows compatibility)
-      await _waitForReadySignal(socket, transferId);
+      reader = SocketReader(socket);
+      await _waitForReadySignal(reader);
 
       zprint("  [Send Data] Starting file stream for $filePath...");
       int bytesSent = 0;
@@ -314,6 +278,7 @@ class SendService {
       rethrow;
     } finally {
       zprint("🧼 Final cleanup for $transferId...");
+      await reader?.dispose();
       _activeTransfers.remove(transferId);
       if (socket != null) {
         try {

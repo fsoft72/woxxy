@@ -1,5 +1,9 @@
 # Changes Log
 
+## Fail fast when the receiver closes before the ready signal
+
+A new `SocketReader` owns the single socket subscription of a send. A receiver that closes the connection now fails the send at once, a ready signal split in several chunks is buffered, and only a silent receiver still gets the file after the timeout. Tests: `test/ready_signal_test.dart`.
+
 ## Validate profile pictures before announcing them
 
 ProfileImageStore.import now rejects pictures above 10 MB or 4096 px, the settings screen reports why, and NetworkService does not announce the hash of an oversized avatar, so peers no longer ask for an image nobody can send. Tests in `test/settings_test.dart`.
