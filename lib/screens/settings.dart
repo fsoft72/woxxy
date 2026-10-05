@@ -4,7 +4,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
 import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
@@ -138,15 +137,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return const CircleAvatar(
         radius: 50,
         child: Icon(Icons.person, size: 50),
-      );
-    }
-
-    if (_selectedImagePath!.toLowerCase().endsWith('.svg')) {
-      return CircleAvatar(
-        radius: 50,
-        child: ClipOval(
-          child: SvgPicture.file(File(_selectedImagePath!)),
-        ),
       );
     }
 

@@ -46,4 +46,16 @@ void main() {
     expect((await service.loadSettings()).profileImage, isNull);
     expect((await SharedPreferences.getInstance()).containsKey('profile_image'), isFalse);
   });
+
+  test('a user can lose the profile picture and the stored picture is removed', () async {
+    final user = User(username: 'alice', profileImage: '/img/a.png', defaultDownloadDirectory: '/dl');
+    await service.saveSettings(user);
+
+    final cleared = user.copyWith(clearProfileImage: true);
+    expect(cleared.profileImage, isNull);
+    expect(user.copyWith(username: 'bob').profileImage, '/img/a.png', reason: 'null still means keep');
+
+    await service.saveSettings(cleared);
+    expect((await service.loadSettings()).profileImage, isNull);
+  });
 }

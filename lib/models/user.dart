@@ -28,15 +28,17 @@ class User {
     };
   }
 
-  // Create a copy of User with optional field updates
+  /// Copy of this user with some fields replaced. A null argument keeps the current value;
+  /// [clearProfileImage] removes the profile picture instead.
   User copyWith({
     String? username,
     String? profileImage,
+    bool clearProfileImage = false,
     String? defaultDownloadDirectory,
   }) {
     return User(
-      username: username ?? this.username, // If username is null use current
-      profileImage: profileImage ?? this.profileImage, // If profileImage is null use current
+      username: username ?? this.username,
+      profileImage: clearProfileImage ? null : (profileImage ?? this.profileImage),
       defaultDownloadDirectory: defaultDownloadDirectory ?? this.defaultDownloadDirectory,
     );
   }

@@ -1,7 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/file_received_event.dart';
+import 'package:woxxy/models/peer.dart';
+import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/models/notification_manager.dart';
 import 'package:woxxy/screens/home.dart';
 import 'package:woxxy/services/network_service.dart';
@@ -58,5 +63,17 @@ void main() {
 
     expect(find.text('No other peers found on the network'), findsOneWidget);
     expect(lines, isEmpty);
+  });
+
+  testWidgets('shows the peers that are already known when the page opens', (tester) async {
+    final peers = PeerManager(avatarStore: AvatarStore());
+    peers.addPeer(Peer(name: 'carol', id: '10.0.0.9', address: InternetAddress('10.0.0.9'), port: 8090));
+    network = testNetworkService(peerManager: peers);
+
+    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager())));
+    await tester.pump();
+
+    expect(find.text('carol'), findsOneWidget);
+    expect(find.text('No other peers found on the network'), findsNothing);
   });
 }

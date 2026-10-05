@@ -67,12 +67,8 @@ class _HomeContentState extends State<HomeContent> {
           child: StreamBuilder<List<Peer>>(
             stream: widget.networkService.peerStream,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(
-                  child: Text('No peers found. Searching...'),
-                );
-              }
-              final peers = snapshot.data!;
+              // The stream is seeded, so there is always data; the list starts empty
+              final peers = snapshot.data ?? widget.networkService.currentPeers;
 
               if (peers.isEmpty) {
                 return const Center(

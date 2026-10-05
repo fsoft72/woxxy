@@ -4,16 +4,11 @@ import '../models/history.dart';
 import '../funcs/file_opener.dart';
 import '../funcs/format.dart';
 
-class HistoryScreen extends StatefulWidget {
+class HistoryScreen extends StatelessWidget {
   final FileHistory history;
 
   const HistoryScreen({super.key, required this.history});
 
-  @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
-}
-
-class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -21,14 +16,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: const Text('File History'),
       ),
       body: ListenableBuilder(
-        listenable: widget.history,
+        listenable: history,
         builder: (context, _) => _buildList(),
       ),
     );
   }
 
   Widget _buildList() {
-    final entries = widget.history.entries;
+    final entries = history.entries;
     return ListView.builder(
         itemCount: entries.length,
         itemBuilder: (context, index) {
@@ -44,7 +39,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               padding: const EdgeInsets.only(right: 16.0),
               child: const Icon(Icons.delete, color: Colors.white),
             ),
-            onDismissed: (direction) => widget.history.removeEntry(entry),
+            onDismissed: (direction) => history.removeEntry(entry),
             child: Card(
               margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
               child: ListTile(
