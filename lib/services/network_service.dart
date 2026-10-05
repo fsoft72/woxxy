@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/hashing.dart';
 
@@ -16,6 +15,7 @@ import '../models/user.dart';
 
 import 'network/discovery_service.dart';
 import 'network/ip_monitor.dart';
+import 'network/local_ip_resolver.dart';
 import 'network/receive_service.dart';
 import 'network/send_service.dart';
 import 'network/server_service.dart';
@@ -49,7 +49,7 @@ class NetworkService {
   late final ReceiveService _receiveService;
   late final SendService _sendService;
 
-  final IpResolver? _ipResolver;
+  final IpResolver _ipResolver;
   late final IpMonitor _ipMonitor;
 
   // Who this device is; shared with the send and discovery services
@@ -87,7 +87,7 @@ class NetworkService {
     IpResolver? ipResolver,
   })  : _fileTransferManager = fileTransferManager,
         _avatarStore = avatarStore,
-        _ipResolver = ipResolver {
+        _ipResolver = ipResolver ?? LocalIpResolver().call {
     // The discovery service is created below; the lambda reads it only when a peer shows up
     _peerManager = PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
 
@@ -107,7 +107,7 @@ class NetworkService {
     );
 
     _ipMonitor = IpMonitor(
-      resolver: () => (_ipResolver ?? _getIpAddress)(),
+      resolver: () => _ipResolver(),
       onChanged: _handleIpChanged,
     );
 
@@ -125,7 +125,7 @@ class NetworkService {
   Future<void> start(User user) async {
     zprint('🚀 Starting NetworkService Facade...');
     try {
-      final ipAddress = await (_ipResolver ?? _getIpAddress)();
+      final ipAddress = await _ipResolver();
       if (ipAddress == null) {
         zprint("❌ Could not determine IP address. Network service cannot start.");
         throw NetworkStartException('No local network address found. Connect to a Wi-Fi or Ethernet network and retry.');
@@ -244,41 +244,5 @@ class NetworkService {
     _identity.username = user.username;
     _identity.profileImagePath = user.profileImage;
     zprint('👤 Facade User Details Loaded: Name=${_identity.username}, Avatar=${_identity.profileImagePath}');
-  }
-
-  Future<String?> _getIpAddress() async {
-    // (Keep the IP address fetching logic here in the facade, as it's a core setup step)
-    try {
-      final info = NetworkInfo();
-      final wifiIP = await info.getWifiIP();
-      if (wifiIP != null && wifiIP.isNotEmpty && wifiIP != '0.0.0.0') {
-        zprint("✅ Found WiFi IP: $wifiIP");
-        return wifiIP;
-      }
-      zprint("⚠️ WiFi IP not found or invalid ($wifiIP). Checking other interfaces...");
-
-      final interfaces = await NetworkInterface.list(
-        includeLoopback: false,
-        includeLinkLocal: false,
-        type: InternetAddressType.IPv4,
-      );
-      zprint("🔍 Found ${interfaces.length} IPv4 interfaces (excluding loopback/link-local).");
-
-      for (var interface in interfaces) {
-        // zprint("  - Interface: ${interface.name}");
-        for (var addr in interface.addresses) {
-          // zprint("    - Address: ${addr.address}");
-          if (addr.address != '0.0.0.0' && !addr.address.startsWith('169.254')) {
-            zprint("✅ Using IP from interface ${interface.name}: ${addr.address}");
-            return addr.address;
-          }
-        }
-      }
-      zprint('❌ Could not determine a suitable IP address.');
-      return null;
-    } catch (e) {
-      zprint('❌ Error getting IP address: $e');
-      return null;
-    }
   }
 }

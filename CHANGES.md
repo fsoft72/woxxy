@@ -1,5 +1,9 @@
 # Changes Log
 
+## Choose the local IP with a resolver that skips virtual adapters
+
+New `LocalIpResolver` (moved out of `NetworkService`): a failing Wi-Fi lookup no longer skips the interface search, and `pickLocalAddress` prefers private addresses of real adapters over Docker, VM and VPN ones. Tests: `test/local_ip_resolver_test.dart`.
+
 ## Pass the user to NetworkService.start
 
 `NetworkService.start(user)` takes the current user from the caller, so settings are no longer loaded a second time and `NetworkService` lost its `SettingsService` dependency. `HomePage` passes its current user (also on retry). Test in `test/network_start_test.dart`.
