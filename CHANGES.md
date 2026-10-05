@@ -1,5 +1,16 @@
 # Changes Log
 
+## Limit the decoded size of received avatars
+
+AvatarStore reads the declared size first (ImageDescriptor), rejects sides above MAX_AVATAR_SIDE_PIXELS and decodes at most AVATAR_DECODE_SIDE_PIXELS on the longest side. Added tests with real PNGs.
+
+### Files
+- `lib/models/avatars.dart`
+- `lib/config/transfer_constants.dart`
+- `test/avatar_store_test.dart`
+
+---
+
 ## Stop in-flight receives on dispose
 
 ReceiveService tracks its active sockets and destroys them in dispose, which closes the file sinks and removes the partial files. Added a test.

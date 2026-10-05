@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
@@ -16,8 +18,45 @@ final Uint8List _png = base64Decode(
 Peer _peer(String id, {String? hash}) =>
     Peer(name: 'bob', id: id, address: InternetAddress.loopbackIPv4, port: 8090, avatarHash: hash);
 
+/// A real PNG of the given size.
+Future<Uint8List> _makePng(int width, int height) async {
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder).drawRect(
+      ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), ui.Paint()..color = const ui.Color(0xFF2196F3));
+  final image = await recorder.endRecording().toImage(width, height);
+  final data = (await image.toByteData(format: ui.ImageByteFormat.png))!;
+  image.dispose();
+  return data.buffer.asUint8List();
+}
+
 void main() {
   group('AvatarStore', () {
+    testWidgets('a big avatar is scaled down while decoding', (tester) async {
+      final store = AvatarStore();
+      final png = await tester.runAsync(() => _makePng(1000, 400));
+
+      await tester.runAsync(() => store.setAvatar('a', png!, hash: 'h'));
+
+      final image = store.getAvatar('a')!;
+      expect(image.width, AVATAR_DECODE_SIDE_PIXELS);
+      expect(image.height, closeTo(AVATAR_DECODE_SIDE_PIXELS * 0.4, 1));
+      store.clear();
+      await tester.pump(const Duration(seconds: 3));
+    });
+
+    testWidgets('an avatar declaring a huge size is rejected', (tester) async {
+      final store = AvatarStore();
+
+      await tester.runAsync(() async {
+        final wide = await _makePng(MAX_AVATAR_SIDE_PIXELS + 1, 1);
+        await expectLater(
+          store.setAvatar('a', wide),
+          throwsA(isA<ArgumentError>().having((e) => e.message, 'message', contains('too large'))),
+        );
+      });
+      expect(store.hasAvatar('a'), isFalse);
+    });
+
     testWidgets('stores an avatar with its hash and notifies only that peer', (tester) async {
       final store = AvatarStore();
       var aNotified = 0;

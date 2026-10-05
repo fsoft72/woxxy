@@ -32,3 +32,9 @@ const int WRITE_FLUSH_THRESHOLD_BYTES = 4 * 1024 * 1024;
 /// Placeholder older senders put in the checksum field when they could not hash the file.
 /// Receivers still treat it as "no checksum"; current senders send null instead.
 const String LEGACY_CHECKSUM_ERROR = 'CHECKSUM_ERROR';
+
+/// Longest side, in pixels, an avatar image may declare; larger ones are rejected before decoding
+const int MAX_AVATAR_SIDE_PIXELS = 4096;
+
+/// Avatars are decoded at most this many pixels on their longest side (they are shown at 80 px)
+const int AVATAR_DECODE_SIDE_PIXELS = 512;

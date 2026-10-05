@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 /// How long a replaced or removed image stays alive before it is disposed, so widgets that
@@ -36,10 +37,7 @@ class AvatarStore {
 
     zprint("🖼️ [AvatarStore] Setting avatar for $peerId (${imageData.length} bytes)");
     try {
-      final codec = await ui.instantiateImageCodec(imageData);
-      final frameInfo = await codec.getNextFrame();
-      final image = frameInfo.image;
-      codec.dispose();
+      final image = await _decodeLimited(imageData);
 
       final previous = _avatars[peerId];
       _avatars[peerId] = image;
@@ -51,6 +49,36 @@ class AvatarStore {
     } catch (e, stackTrace) {
       zprint("❌ [AvatarStore] Failed to set avatar for $peerId: $e\n$stackTrace");
       rethrow;
+    }
+  }
+
+  /// Decodes [imageData] after checking its declared size, and scales it down while decoding so a
+  /// small compressed file can never expand into a huge bitmap.
+  Future<ui.Image> _decodeLimited(Uint8List imageData) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(imageData);
+    try {
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      try {
+        final longest = descriptor.width > descriptor.height ? descriptor.width : descriptor.height;
+        if (longest > MAX_AVATAR_SIDE_PIXELS) {
+          throw ArgumentError('Avatar is too large: ${descriptor.width}x${descriptor.height} pixels');
+        }
+        final scale = longest > AVATAR_DECODE_SIDE_PIXELS;
+        final landscape = descriptor.width >= descriptor.height;
+        final codec = await descriptor.instantiateCodec(
+          targetWidth: scale && landscape ? AVATAR_DECODE_SIDE_PIXELS : null,
+          targetHeight: scale && !landscape ? AVATAR_DECODE_SIDE_PIXELS : null,
+        );
+        try {
+          return (await codec.getNextFrame()).image;
+        } finally {
+          codec.dispose();
+        }
+      } finally {
+        descriptor.dispose();
+      }
+    } finally {
+      buffer.dispose();
     }
   }
 
