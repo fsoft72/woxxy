@@ -8,7 +8,7 @@ import '../services/network_service.dart';
 import '../models/file_received_event.dart';
 import '../models/peer.dart';
 import '../models/notification_manager.dart';
-import '../funcs/utils.dart';
+import '../funcs/ui_helpers.dart';
 import '../widgets/peer_avatar.dart';
 import 'peer_details.dart';
 

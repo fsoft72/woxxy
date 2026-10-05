@@ -9,7 +9,7 @@ import 'package:woxxy/config/version.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 import '../app_services.dart';
-import '../funcs/utils.dart';
+import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
 import '../services/network_service.dart';
 import '../services/settings_service.dart';

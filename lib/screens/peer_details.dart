@@ -1,7 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../funcs/utils.dart';
+import '../funcs/ui_helpers.dart';
 import '../models/peer.dart';
 import '../services/network_service.dart';
 import '../services/send_queue_controller.dart';

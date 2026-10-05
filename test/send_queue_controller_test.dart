@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/funcs/throttle.dart';
-import 'package:woxxy/funcs/utils.dart';
+import 'package:woxxy/funcs/format.dart';
 import 'package:woxxy/services/send_queue_controller.dart';
 import 'package:woxxy/widgets/send/queue_summary.dart';
 import 'package:woxxy/widgets/send/transfer_progress_card.dart';

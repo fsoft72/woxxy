@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:io';
-import '../funcs/utils.dart';
+import '../funcs/ui_helpers.dart';
 import '../models/user.dart';
 import '../models/file_transfer_manager.dart';
 import '../services/profile_image_store.dart';

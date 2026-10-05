@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/throttle.dart';
-import 'package:woxxy/funcs/utils.dart';
+import 'package:woxxy/funcs/transfer_id.dart';
 
 import 'network/send_service.dart';
 import '../config/transfer_constants.dart';

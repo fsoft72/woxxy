@@ -1,9 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
+import 'package:woxxy/funcs/file_opener.dart';
 
 import 'notifications/notification_backend.dart';
 import 'notifications/platform_notification_backend.dart';
@@ -90,27 +89,6 @@ class NotificationManager {
   void handleNotificationClick(String? payload) {
     zprint('🔔 Notification clicked, payload: $payload');
     if (payload == null || payload.isEmpty) return;
-    (_directoryOpener ?? _openDirectory)(payload);
-  }
-
-  /// Opens a directory in the platform's file manager.
-  Future<void> _openDirectory(String dirPath) async {
-    try {
-      if (!await Directory(dirPath).exists()) {
-        zprint('⚠️ Directory does not exist, cannot open: $dirPath');
-        return;
-      }
-
-      zprint('📂 Opening directory: $dirPath');
-      if (Platform.isLinux) {
-        await Process.run('xdg-open', [dirPath]);
-      } else if (Platform.isMacOS) {
-        await Process.run('open', [dirPath]);
-      } else if (Platform.isWindows) {
-        await Process.run('explorer.exe', [dirPath]);
-      }
-    } catch (e) {
-      zprint('❌ Error opening directory: $e');
-    }
+    (_directoryOpener ?? openDirectory)(payload);
   }
 }

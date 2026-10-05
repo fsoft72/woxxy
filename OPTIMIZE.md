@@ -51,7 +51,7 @@ These two items were in the first analysis as "Critical" and were reviewed by th
 
 - [x] **Default username defined in six places with two different values** - `'WoxxyUser'` is repeated in `NetworkService`, `SendService` and `DiscoveryService`, while `SettingsService` defaults to `'User'`. Create `DEFAULT_USERNAME` in `lib/config/` and use it everywhere.
   - File(s): `lib/services/network_service.dart`, `lib/services/network/send_service.dart`, `lib/services/network/discovery_service.dart`, `lib/services/settings_service.dart`
-- [ ] **`utils.dart` mixes unrelated responsibilities** - UI (`showSnackbar`), process launching (`openFileLocation`), id generation and formatting live in one file, and the "open folder" platform switch is repeated in `NotificationManager._openDirectory`. Split into `ui_helpers`, `file_opener` (shared by both callers) and `format`.
+- [x] **`utils.dart` mixes unrelated responsibilities** - UI (`showSnackbar`), process launching (`openFileLocation`), id generation and formatting live in one file, and the "open folder" platform switch is repeated in `NotificationManager._openDirectory`. Split into `ui_helpers`, `file_opener` (shared by both callers) and `format`.
   - File(s): `lib/funcs/utils.dart`, `lib/models/notification_manager.dart`
 - [ ] **Size formatting is inconsistent** - `formatBytes` exists, but `HistoryScreen` and `SendQueueController._onSuccess` do their own `/ 1024 / 1024` and `toStringAsFixed`, and `send_service.dart` uses a raw `1024`. Reuse `formatBytes` and `BYTES_PER_MB`.
   - File(s): `lib/screens/history.dart`, `lib/services/send_queue_controller.dart`, `lib/services/network/send_service.dart`

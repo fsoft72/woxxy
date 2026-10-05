@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/config/transfer_constants.dart';
-import 'package:woxxy/funcs/utils.dart';
+import 'package:woxxy/funcs/transfer_id.dart';
 
 List<File> _libFiles() => Directory('lib')
     .listSync(recursive: true)

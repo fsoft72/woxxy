@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 
-import '../../funcs/utils.dart';
+import '../../funcs/format.dart';
 import '../../services/send_queue_controller.dart';
 
 /// How many waiting files are listed before "...and N more".

@@ -1,5 +1,29 @@
 # Changes Log
 
+## Split utils.dart and share the folder opener
+
+utils.dart is split into ui_helpers (showSnackbar), file_opener (openFileLocation and the new shared openDirectory), format (formatBytes) and transfer_id (generateTransferId). NotificationManager no longer repeats the platform switch. The opener takes an injectable process runner. Added file_opener_test.
+
+### Files
+- `lib/funcs/utils.dart`
+- `lib/funcs/ui_helpers.dart`
+- `lib/funcs/file_opener.dart`
+- `lib/funcs/format.dart`
+- `lib/funcs/transfer_id.dart`
+- `lib/models/notification_manager.dart`
+- `lib/screens/history.dart`
+- `lib/screens/home.dart`
+- `lib/screens/peer_details.dart`
+- `lib/screens/settings.dart`
+- `lib/screens/home_page.dart`
+- `lib/services/send_queue_controller.dart`
+- `lib/widgets/send/queue_summary.dart`
+- `test/file_opener_test.dart`
+- `test/send_queue_controller_test.dart`
+- `test/constants_test.dart`
+
+---
+
 ## Use DEFAULT_USERNAME everywhere
 
 The five 'WoxxyUser' literals were already replaced by DEFAULT_USERNAME with LocalIdentity; SettingsService now uses it too, so a first run gets the same name everywhere instead of 'User'. Added a test.

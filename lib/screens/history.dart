@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import '../models/history.dart';
-import '../funcs/utils.dart';
+import '../funcs/file_opener.dart';
 import '../config/transfer_constants.dart';
 
 class HistoryScreen extends StatefulWidget {
