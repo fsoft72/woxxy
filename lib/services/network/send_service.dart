@@ -305,55 +305,21 @@ class SendService {
 
       zprint("  [Send Data] Starting file stream for $filePath...");
       int bytesSent = 0;
-      final fileStream = file.openRead();
-      final completer = Completer<void>();
-
       onProgress?.call(fileSize, 0); // Initial progress
 
-      StreamSubscription? subscription;
-      subscription = fileStream.listen(
-        (chunk) {
-          if (!_activeTransfers.containsKey(transferId)) {
-            zprint("🛑 Transfer $transferId cancelled during stream chunk processing.");
-            subscription?.cancel();
-            if (!completer.isCompleted) completer.completeError(Exception('Transfer cancelled'));
-            return;
-          }
-          try {
-            socket?.add(chunk);
-            bytesSent += chunk.length;
-            onProgress?.call(fileSize, bytesSent);
-          } catch (e, s) {
-            zprint("❌ Error writing chunk to socket for $transferId: $e\n$s");
-            subscription?.cancel();
-            if (!completer.isCompleted) completer.completeError(e);
-          }
-        },
-        onDone: () async {
-          zprint("✅ File stream finished for $transferId. Bytes sent: $bytesSent");
-          if (!_activeTransfers.containsKey(transferId)) {
-            zprint("🛑 Transfer $transferId cancelled just before stream completion.");
-            if (!completer.isCompleted) completer.completeError(Exception('Transfer cancelled'));
-            return;
-          }
-          try {
-            await socket?.flush();
-            zprint("  [Send Data] Final flush complete.");
-            onProgress?.call(fileSize, fileSize); // Final progress
-            if (!completer.isCompleted) completer.complete();
-          } catch (e, s) {
-            zprint("❌ Error during final flush for $transferId: $e\n$s");
-            if (!completer.isCompleted) completer.completeError(e);
-          }
-        },
-        onError: (error, stackTrace) {
-          zprint("❌ Error reading file stream for $transferId: $error\n$stackTrace");
-          if (!completer.isCompleted) completer.completeError(error);
-        },
-        cancelOnError: true,
-      );
-
-      await completer.future;
+      // addStream pauses the file reader while the socket buffer is full (backpressure)
+      final chunks = file.openRead().map((chunk) {
+        if (!_activeTransfers.containsKey(transferId)) throw Exception('Transfer cancelled');
+        bytesSent += chunk.length;
+        onProgress?.call(fileSize, bytesSent);
+        return chunk;
+      });
+      await socket.addStream(chunks);
+      // A cancel destroys the socket, which can end addStream without an error
+      if (!_activeTransfers.containsKey(transferId)) throw Exception('Transfer cancelled');
+      await socket.flush();
+      onProgress?.call(fileSize, fileSize); // Final progress
+      zprint("  [Send Data] Stream flushed. Bytes sent: $bytesSent");
       zprint("✅ Stream processing finished for $transferId.");
     } catch (e, s) {
       zprint("❌ Error in _sendFileWithMetadata ($transferId): $e\n$s");

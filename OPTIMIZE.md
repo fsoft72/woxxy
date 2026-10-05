@@ -15,7 +15,7 @@
 
 ## High
 
-- [ ] **Respect backpressure when sending** - `SendService._sendFileWithMetadata` calls `socket.add(chunk)` in a `listen` callback without pausing, so a fast disk and a slow network queue the whole file in the socket buffer. Replace the manual subscription with `socket.addStream(file.openRead().map(...))` (count bytes in `map`) and then `flush()`.
+- [x] **Respect backpressure when sending** - `SendService._sendFileWithMetadata` calls `socket.add(chunk)` in a `listen` callback without pausing, so a fast disk and a slow network queue the whole file in the socket buffer. Replace the manual subscription with `socket.addStream(file.openRead().map(...))` (count bytes in `map`) and then `flush()`.
   - File(s): `lib/services/network/send_service.dart`
 - [ ] **Throttle progress updates to the UI** - `onProgress` runs once per 64 KB chunk and each call does `setState` in `PeerDetailPage`, which rebuilds the whole page thousands of times per second. Emit progress at most every ~100 ms or on a 1% change, or expose it through a `ValueNotifier` consumed only by the progress widget.
   - File(s): `lib/screens/peer_details.dart`, `lib/services/network/send_service.dart`

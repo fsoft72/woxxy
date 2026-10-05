@@ -1,5 +1,15 @@
 # Changes Log
 
+## Respect backpressure when sending
+
+SendService streams the file with socket.addStream, so the file reader pauses while the socket buffer is full instead of queueing the whole file. A cancel that ends addStream silently is now detected and reported as an error. Added a stalled-receiver test.
+
+### Files
+- `lib/services/network/send_service.dart`
+- `test/send_backpressure_test.dart`
+
+---
+
 ## Do not buffer the whole received file in RAM for MD5
 
 FileTransfer no longer keeps every received byte in memory: the MD5 is computed incrementally with a chunked conversion fed on each write. Added tests for matching/mismatching checksums and socket-closure behavior.
