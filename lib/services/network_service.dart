@@ -21,6 +21,18 @@ import 'network/server_service.dart';
 // Re-export the progress callback type if needed by consumers
 export 'network/send_service.dart' show FileTransferProgressCallback;
 
+/// Thrown when the network layer cannot start (for example no usable local IP address).
+class NetworkStartException implements Exception {
+  final String message;
+  NetworkStartException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+/// Resolves the local IPv4 address used to announce this device.
+typedef IpResolver = Future<String?> Function();
+
 class NetworkService {
   // --- Constants ---
   static const int _port = 8090;
@@ -36,6 +48,8 @@ class NetworkService {
   late final ServerService _serverService;
   late final ReceiveService _receiveService;
   late final SendService _sendService;
+
+  final IpResolver? _ipResolver;
 
   // State managed by the facade
   String? _currentIpAddress;
@@ -58,7 +72,8 @@ class NetworkService {
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
 
   // --- Initialization & Lifecycle ---
-  NetworkService() {
+  /// Creates the facade. [ipResolver] is injectable so tests can simulate network conditions.
+  NetworkService({IpResolver? ipResolver}) : _ipResolver = ipResolver {
     // Instantiate internal services, passing dependencies and callbacks
     _sendService = SendService(); // SendService needs user details updated later
 
@@ -89,10 +104,10 @@ class NetworkService {
   Future<void> start() async {
     zprint('🚀 Starting NetworkService Facade...');
     try {
-      _currentIpAddress = await _getIpAddress();
+      _currentIpAddress = await (_ipResolver ?? _getIpAddress)();
       if (_currentIpAddress == null) {
-        zprint("❌ FATAL: Could not determine IP address. Network service cannot start.");
-        return; // Prevent further initialization
+        zprint("❌ Could not determine IP address. Network service cannot start.");
+        throw NetworkStartException('No local network address found. Connect to a Wi-Fi or Ethernet network and retry.');
       }
       zprint('  -> Determined IP: $_currentIpAddress');
 
@@ -109,10 +124,14 @@ class NetworkService {
       _peerManager.startPeerCleanup(); // Start peer cleanup timer
 
       zprint('✅ NetworkService Facade started successfully.');
+    } on NetworkStartException {
+      rethrow; // Nothing was started, the service can simply be started again
     } catch (e, s) {
       zprint('❌ Error starting NetworkService Facade: $e\n$s');
-      await dispose(); // Attempt cleanup on error
-      rethrow;
+      // Stop only what start() opened so a retry is possible (dispose() is final)
+      await _discoveryService.dispose();
+      await _serverService.dispose();
+      throw NetworkStartException('Could not start the network service: $e');
     }
   }
 

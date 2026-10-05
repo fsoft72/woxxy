@@ -9,6 +9,7 @@ import 'package:woxxy/funcs/debug.dart';
 import 'screens/history.dart';
 import 'screens/home.dart';
 import 'screens/settings.dart';
+import 'widgets/startup_error_view.dart';
 import 'services/network_service.dart';
 import 'services/settings_service.dart';
 import 'models/notification_manager.dart';
@@ -251,6 +252,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   int _selectedIndex = 1; // Default to home screen
   User? _currentUser;
   bool _isLoading = true;
+  String? _startupError;
   final bool _isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
   @override
@@ -261,6 +263,15 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
     _initializeApp();
   }
 
+  /// Starts again after a failed startup (for example once the network is back).
+  Future<void> _retryStart() async {
+    setState(() {
+      _startupError = null;
+      _isLoading = true;
+    });
+    await _startNetwork();
+  }
+
   Future<void> _initializeApp() async {
     if (_isDesktop) {
       trayManager.addListener(this);
@@ -268,12 +279,27 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
       // Ensure preventClose is set correctly if not done in main() for some reason
       // await windowManager.setPreventClose(true);
     }
+    await _startNetwork();
+  }
+
+  Future<void> _startNetwork() async {
     // No need to load settings again here, use widget.initialUser
     _networkService.setUsername(_currentUser!.username);
     // _networkService.setUserId(_currentUser!.userId); // Removed setUserId
 
     // Start network service *after* setting username (and potentially IP)
-    await _networkService.start(); // Start discovers peers, etc.
+    try {
+      await _networkService.start(); // Start discovers peers, etc.
+    } on NetworkStartException catch (e) {
+      zprint('❌ Network start failed: $e');
+      if (mounted) {
+        setState(() {
+          _startupError = e.message;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
 
     _setupFileReceivedListener();
 
@@ -287,6 +313,7 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
   // Removed _loadSettings method as initial user is passed via constructor
 
   void _setupFileReceivedListener() {
+    _fileReceivedSubscription?.cancel(); // A retry must not add a second listener
     _fileReceivedSubscription = _networkService.onFileReceived.listen((event) async {
       if (!mounted) return;
 
@@ -386,6 +413,10 @@ class _HomePageState extends State<HomePage> with TrayListener, WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final startupError = _startupError;
+    if (startupError != null) {
+      return StartupErrorView(message: startupError, onRetry: _retryStart);
+    }
     if (_isLoading || _currentUser == null) {
       // Check for currentUser null as well
       return const Scaffold(

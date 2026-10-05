@@ -1,5 +1,17 @@
 # Changes Log
 
+## Handle network start failure
+
+NetworkService.start() now throws a NetworkStartException when no IP is found (instead of returning silently) and only stops discovery/server on failure so it can be retried. HomePage catches it and shows StartupErrorView with a Retry button instead of an endless spinner. IP resolution is injectable for tests.
+
+### Files
+- `lib/services/network_service.dart`
+- `lib/widgets/startup_error_view.dart`
+- `lib/main.dart`
+- `test/network_start_test.dart`
+
+---
+
 ## Replace the stringly-typed
 
 The string stream and the dead '|' parser are gone (typed FileReceivedEvent introduced in the previous commit); both consumers now keep their StreamSubscription and cancel it in dispose, so HomeContent no longer leaks a listener (and duplicate snackbars) each time it is rebuilt. Added widget tests.
