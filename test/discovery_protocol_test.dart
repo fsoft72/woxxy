@@ -20,6 +20,13 @@ void main() {
       }
     });
 
+    test('announce carries the avatar hash only when there is one', () {
+      final withHash = decodeDiscoveryMessage(encodeAnnounce(name: 'a', ip: '1.1.1.1', port: 1, avatarHash: 'abc'));
+      final without = decodeDiscoveryMessage(encodeAnnounce(name: 'a', ip: '1.1.1.1', port: 1));
+      expect((withHash as AnnounceMessage).avatarHash, 'abc');
+      expect((without as AnnounceMessage).avatarHash, isNull);
+    });
+
     test('avatar request round trips', () {
       final decoded = decodeDiscoveryMessage(encodeAvatarRequest(ip: '10.0.0.2', port: 8090));
       expect(decoded, isA<AvatarRequestMessage>());

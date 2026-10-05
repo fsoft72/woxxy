@@ -1,5 +1,26 @@
 # Changes Log
 
+## Fix avatar cache correctness and rebuild cost
+
+Peers now announce the MD5 of their avatar; PeerManager re-requests it when the cached hash differs (throttled to once per 30 s) and evicts it when the peer has none or leaves. AvatarStore disposes replaced images after a grace delay (no disposed-image crash), exposes a per-peer ValueListenable, and no longer logs on every miss. PeerAvatarWidget listens only to its own peer, so an update rebuilds one avatar instead of all.
+
+### Files
+- `lib/models/avatars.dart`
+- `lib/models/peer.dart`
+- `lib/models/peer_manager.dart`
+- `lib/widgets/peer_avatar.dart`
+- `lib/screens/home.dart`
+- `lib/screens/peer_details.dart`
+- `lib/services/network_service.dart`
+- `lib/services/network/discovery_protocol.dart`
+- `lib/services/network/discovery_service.dart`
+- `lib/services/network/receive_service.dart`
+- `test/avatar_store_test.dart`
+- `test/peer_manager_test.dart`
+- `test/discovery_protocol_test.dart`
+
+---
+
 ## Fix `PeerManager` lifecycle and updates
 
 PeerManager is no longer a global singleton (each NetworkService owns one, so disposing it cannot break a later instance), the avatar callback is optional, add/notify after dispose are ignored, announcements with a new name/port update the known peer, and the cleanup timer now runs at a third of the timeout. Clock and timeout are injectable; tests use fake_async.

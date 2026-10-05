@@ -22,6 +22,7 @@ class DiscoveryService {
   Timer? _discoveryTimer;
   String? _currentIpAddress; // Local IP address
   String _currentUsername = 'WoxxyUser'; // Local username
+  String? _avatarHash; // MD5 of the local avatar, announced so peers can refresh their cache
 
   static const Duration _pingInterval = Duration(seconds: 5);
 
@@ -65,8 +66,9 @@ class DiscoveryService {
     zprint('✅ DiscoveryService disposed');
   }
 
-  void updateUserDetails(String? ipAddress, String username) {
+  void updateUserDetails(String? ipAddress, String username, {String? avatarHash}) {
     _currentIpAddress = ipAddress;
+    _avatarHash = avatarHash;
     _currentUsername = username.isNotEmpty ? username : "WoxxyUser";
     // No need to explicitly call send here, the timer will pick up the new message
     zprint(
@@ -107,7 +109,7 @@ class DiscoveryService {
   }
 
   Uint8List _buildDiscoveryMessage() =>
-      encodeAnnounce(name: _currentUsername, ip: _currentIpAddress ?? 'NO_IP', port: mainServerPort);
+      encodeAnnounce(name: _currentUsername, ip: _currentIpAddress ?? 'NO_IP', port: mainServerPort, avatarHash: _avatarHash);
 
   void _startDiscoveryListener() {
     zprint('👂 Starting discovery listener on port $discoveryPort...');
@@ -160,6 +162,7 @@ class DiscoveryService {
       id: message.ip, // IP is the peer id
       address: InternetAddress(message.ip),
       port: message.port,
+      avatarHash: message.avatarHash,
     ));
   }
 
@@ -186,12 +189,6 @@ class DiscoveryService {
       zprint('⚠️ Cannot request avatar: Missing local IP.');
       return;
     }
-    // Check if we already have the avatar using the peer's IP as the key
-    if (avatarStore.hasAvatar(peer.id)) {
-      // zprint('✅ Avatar for ${peer.name} (${peer.id}) already exists.');
-      return;
-    }
-
     zprint('❓ Requesting avatar from ${peer.name} (${peer.id}) at ${peer.address.address}:$discoveryPort');
     final requestMessage = encodeAvatarRequest(ip: _currentIpAddress!, port: mainServerPort);
     try {

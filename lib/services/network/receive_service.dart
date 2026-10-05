@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
@@ -241,7 +242,7 @@ class ReceiveService {
       }
 
       // Store avatar in memory
-      await avatarStore.setAvatar(senderIp, bytes);
+      await avatarStore.setAvatar(senderIp, bytes, hash: md5.convert(bytes).toString());
       zprint('✅ Avatar stored for $senderIp (${bytes.length} bytes)');
       
       // Notify UI to refresh peer list

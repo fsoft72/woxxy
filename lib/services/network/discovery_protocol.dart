@@ -24,7 +24,10 @@ sealed class DiscoveryMessage {
 class AnnounceMessage extends DiscoveryMessage {
   final String name;
 
-  const AnnounceMessage({required this.name, required super.ip, required super.port});
+  /// MD5 of the announcer's avatar file, null when it has no avatar
+  final String? avatarHash;
+
+  const AnnounceMessage({required this.name, required super.ip, required super.port, this.avatarHash});
 }
 
 /// Direct request asking the receiver to send its avatar to [ip]:[port].
@@ -33,8 +36,8 @@ class AvatarRequestMessage extends DiscoveryMessage {
 }
 
 /// Encodes an announcement as UTF-8 JSON.
-Uint8List encodeAnnounce({required String name, required String ip, required int port}) =>
-    _encode({'type': _TYPE_ANNOUNCE, 'name': name, 'ip': ip, 'port': port});
+Uint8List encodeAnnounce({required String name, required String ip, required int port, String? avatarHash}) =>
+    _encode({'type': _TYPE_ANNOUNCE, 'name': name, 'ip': ip, 'port': port, if (avatarHash != null) 'avatar': avatarHash});
 
 /// Encodes an avatar request as UTF-8 JSON.
 Uint8List encodeAvatarRequest({required String ip, required int port}) =>
@@ -63,7 +66,8 @@ DiscoveryMessage? decodeDiscoveryMessage(List<int> data) {
     case _TYPE_ANNOUNCE:
       final name = decoded['name'];
       if (name is! String) return null;
-      return AnnounceMessage(name: name, ip: ip, port: port);
+      final avatar = decoded['avatar'];
+      return AnnounceMessage(name: name, ip: ip, port: port, avatarHash: avatar is String ? avatar : null);
     case _TYPE_AVATAR_REQUEST:
       return AvatarRequestMessage(ip: ip, port: port);
     default:

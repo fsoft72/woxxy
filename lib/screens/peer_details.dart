@@ -396,7 +396,6 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           peer: widget.peer,
           size: 80,
           borderWidth: 2.0,
-          refreshStream: widget.networkService.peerStream,
         ),
         const SizedBox(width: 16),
         Expanded(

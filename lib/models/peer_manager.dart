@@ -20,6 +20,9 @@ typedef RequestAvatarCallback = void Function(Peer peer);
 /// Default time without announcements after which a peer is considered gone.
 const Duration DEFAULT_PEER_TIMEOUT = Duration(seconds: 30);
 
+/// Minimum time between two avatar requests to the same peer.
+const Duration DEFAULT_AVATAR_RETRY_INTERVAL = Duration(seconds: 30);
+
 /// Tracks the peers announced on the LAN and drops the ones that stopped announcing.
 class PeerManager {
   final AvatarStore _avatarStore;
@@ -40,6 +43,7 @@ class PeerManager {
   RequestAvatarCallback? _requestAvatarCallback;
 
   final Map<String, _PeerStatus> _peers = {};
+  final Map<String, DateTime> _lastAvatarRequestAt = {};
   late final BehaviorSubject<List<Peer>> _peerController;
   Timer? _cleanupTimer;
   bool _disposed = false;
@@ -80,6 +84,8 @@ class PeerManager {
 
     for (final status in removed) {
       zprint('🗑️ Removing inactive peer: ${status.peer.name} (${status.peer.id})');
+      _avatarStore.removeAvatar(status.peer.id); // Do not keep images of peers that left
+      _lastAvatarRequestAt.remove(status.peer.id);
     }
     _emit();
   }
@@ -113,22 +119,36 @@ class PeerManager {
     existing.lastSeen = _now();
     final changed = existing.peer.name != peer.name ||
         existing.peer.port != peer.port ||
-        existing.peer.address.address != peer.address.address;
+        existing.peer.address.address != peer.address.address ||
+        existing.peer.avatarHash != peer.avatarHash;
     if (changed) {
       zprint('✏️ Peer updated: ${existing.peer.name} -> ${peer.name} (${peer.id})');
       existing.peer = peer;
       _emit();
     }
+
+    // Ask again only when the peer announces a different avatar or the request got lost
+    _requestAvatarForPeer(peer);
   }
 
-  /// Requests avatar for a peer if not already present in cache
+  /// Keeps the cached avatar of a peer in sync with the hash it announces: requests it when it
+  /// is missing or different (at most once per [DEFAULT_AVATAR_RETRY_INTERVAL] so a lost
+  /// transfer is retried without flooding the peer) and evicts it when the peer has none.
   void _requestAvatarForPeer(Peer peer) {
     final request = _requestAvatarCallback;
     if (request == null) return;
-    if (_avatarStore.hasAvatar(peer.id)) {
-      zprint("✅ Avatar already cached for ${peer.name} (${peer.id}) - skipping request");
+
+    final announcedHash = peer.avatarHash;
+    if (announcedHash == null) {
+      if (_avatarStore.hasAvatar(peer.id)) _avatarStore.removeAvatar(peer.id);
       return;
     }
+    if (_avatarStore.hasAvatar(peer.id) && _avatarStore.avatarHash(peer.id) == announcedHash) return;
+
+    final now = _now();
+    final last = _lastAvatarRequestAt[peer.id];
+    if (last != null && now.difference(last) < DEFAULT_AVATAR_RETRY_INTERVAL) return;
+    _lastAvatarRequestAt[peer.id] = now;
 
     zprint("🖼️ Requesting avatar for ${peer.name} (${peer.id})");
     try {

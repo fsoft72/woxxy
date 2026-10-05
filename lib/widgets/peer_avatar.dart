@@ -34,45 +34,30 @@ String getInitials(String name) {
   return (words[0].substring(0, 1) + words[1].substring(0, 1)).toUpperCase();
 }
 
-/// A reusable avatar widget for displaying a peer's avatar image or fallback initials
+/// A reusable avatar widget for displaying a peer's avatar image or fallback initials.
+/// Rebuilds only when the avatar of this peer changes.
 class PeerAvatarWidget extends StatelessWidget {
   final Peer peer;
   final double size;
   final double borderWidth;
-  final Stream<List<Peer>>? refreshStream;
 
   const PeerAvatarWidget({
     super.key,
     required this.peer,
     this.size = 40.0,
     this.borderWidth = 1.0,
-    this.refreshStream,
   });
 
   @override
   Widget build(BuildContext context) {
-    final avatarStore = AvatarStore();
-
     return SizedBox(
       width: size,
       height: size,
-      child: refreshStream != null
-          ? StreamBuilder<List<Peer>>(
-              stream: refreshStream,
-              builder: (context, _) => _buildContent(avatarStore),
-            )
-          : _buildContent(avatarStore),
+      child: ValueListenableBuilder<ui.Image?>(
+        valueListenable: AvatarStore().listenableFor(peer.id),
+        builder: (context, image, _) => image != null ? _buildAvatarImage(image) : _buildDefaultAvatar(),
+      ),
     );
-  }
-
-  /// Builds the avatar content (image or default fallback)
-  Widget _buildContent(AvatarStore avatarStore) {
-    final peerAvatar = avatarStore.getAvatar(peer.id);
-
-    if (peerAvatar != null) {
-      return _buildAvatarImage(peerAvatar);
-    }
-    return _buildDefaultAvatar();
   }
 
   /// Builds the avatar from a ui.Image

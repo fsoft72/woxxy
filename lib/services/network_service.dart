@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:crypto/crypto.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/services/settings_service.dart';
@@ -55,6 +56,7 @@ class NetworkService {
   String? _currentIpAddress;
   String _currentUsername = 'WoxxyUser';
   String? _profileImagePath;
+  String? _avatarHash;
 
   // Stream Controllers (if needed publicly)
   // Note: Peer stream is now accessed via PeerManager
@@ -116,7 +118,8 @@ class NetworkService {
 
       // Update internal services with initial user details
       _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-      _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername);
+      _avatarHash = await _avatarHashFor(_profileImagePath);
+      _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: _avatarHash);
 
       // Start the underlying services
       await _serverService.start();
@@ -158,16 +161,33 @@ class NetworkService {
     }
     // Update relevant services
     _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-    _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername);
+    _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: _avatarHash);
     zprint("👤 Username updated to: $_currentUsername");
   }
 
   void setProfileImagePath(String? imagePath) {
     _profileImagePath = imagePath;
-    // Update relevant services
     _sendService.updateUserDetails(_currentIpAddress, _currentUsername, _profileImagePath);
-    // Discovery doesn't directly need the image path, only SendService for sending it
     zprint("🖼️ Profile image path updated: $_profileImagePath");
+
+    // Announce the new avatar hash so peers refresh their cached copy
+    _avatarHashFor(imagePath).then((hash) {
+      _avatarHash = hash;
+      _discoveryService.updateUserDetails(_currentIpAddress, _currentUsername, avatarHash: hash);
+    });
+  }
+
+  /// MD5 of the avatar file, or null if there is none or it cannot be read.
+  Future<String?> _avatarHashFor(String? imagePath) async {
+    if (imagePath == null || imagePath.isEmpty) return null;
+    try {
+      final file = File(imagePath);
+      if (!await file.exists()) return null;
+      return (await md5.bind(file.openRead()).first).toString();
+    } catch (e) {
+      zprint('⚠️ Could not hash avatar $imagePath: $e');
+      return null;
+    }
   }
 
   /// Send file to a peer. Delegates to SendService.

@@ -6,8 +6,8 @@ import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
 
-Peer _peer(String id, {String name = 'bob', int port = 8090}) =>
-    Peer(name: name, id: id, address: InternetAddress.loopbackIPv4, port: port);
+Peer _peer(String id, {String name = 'bob', int port = 8090, String? avatarHash}) =>
+    Peer(name: name, id: id, address: InternetAddress.loopbackIPv4, port: port, avatarHash: avatarHash);
 
 void main() {
   late DateTime now;
@@ -27,8 +27,8 @@ void main() {
     final emissions = <int>[];
     final sub = manager.peerStream.listen((peers) => emissions.add(peers.length));
 
-    manager.addPeer(_peer('p1'));
-    manager.addPeer(_peer('p1'));
+    manager.addPeer(_peer('p1', avatarHash: 'h1'));
+    manager.addPeer(_peer('p1', avatarHash: 'h1'));
     await Future<void>.delayed(Duration.zero);
     await sub.cancel();
 

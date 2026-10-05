@@ -89,7 +89,6 @@ class _HomeContentState extends State<HomeContent> {
                     leading: PeerAvatarWidget(
                       peer: peer,
                       size: 40,
-                      refreshStream: widget.networkService.peerStream,
                     ),
                     title: Text(peer.name),
                     subtitle: Text('${peer.address.address}:${peer.port}'),
