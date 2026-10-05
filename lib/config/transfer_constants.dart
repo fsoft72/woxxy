@@ -16,3 +16,9 @@ const int METADATA_LENGTH_PREFIX_BYTES = 4;
 
 /// Highest notification id before the counter wraps (platforms use signed 32 bit ids)
 const int MAX_NOTIFICATION_ID = 2147483647;
+
+/// Largest file a peer may announce (64 GiB)
+const int MAX_TRANSFER_SIZE_BYTES = 64 * 1024 * 1024 * 1024;
+
+/// Largest avatar image accepted or sent (10 MB)
+const int MAX_AVATAR_SIZE_BYTES = 10 * 1024 * 1024;

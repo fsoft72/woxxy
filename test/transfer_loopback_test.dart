@@ -138,4 +138,50 @@ void main() {
     expect(manager.files, isEmpty);
     expect(received, isEmpty);
   });
+
+  group('hostile senders', () {
+    Map<String, dynamic> metaFor(int size, {String type = TRANSFER_TYPE_FILE}) => {
+          'name': 'x.bin',
+          'size': size,
+          'senderUsername': 'raw',
+          'senderIp': '127.0.0.1',
+          'transferId': 'hostile-${DateTime.now().microsecondsSinceEpoch}',
+          'type': type,
+        };
+
+    Future<void> sendRaw(Map<String, dynamic> meta, List<int> data) async {
+      final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);
+      socket.add(encodeMetadataFrame(meta));
+      socket.add(data);
+      await socket.flush();
+      await socket.close().catchError((_) {});
+      await socket.drain<void>().timeout(const Duration(seconds: 5)).catchError((_) {});
+      // Give the receiver a moment to finish its cleanup
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+
+    test('more data than declared is rejected and nothing is kept', () async {
+      await sendRaw(metaFor(10), List.filled(5000, 1));
+
+      expect(received, isEmpty);
+      expect(manager.files, isEmpty);
+      final downloads = Directory(path.join(tmp.path, 'downloads'));
+      expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
+    });
+
+    test('negative and absurd sizes are rejected before a file is created', () async {
+      await sendRaw(metaFor(-5), [1, 2, 3]);
+      await sendRaw(metaFor(MAX_TRANSFER_SIZE_BYTES + 1), [1, 2, 3]);
+
+      expect(received, isEmpty);
+      expect(manager.files, isEmpty);
+      final downloads = Directory(path.join(tmp.path, 'downloads'));
+      expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
+    });
+
+    test('an avatar above the avatar size cap is rejected', () async {
+      await sendRaw(metaFor(MAX_AVATAR_SIZE_BYTES + 1, type: TRANSFER_TYPE_AVATAR), [1, 2, 3]);
+      expect(manager.files, isEmpty);
+    });
+  });
 }

@@ -1,5 +1,16 @@
 # Changes Log
 
+## Harden the receiver against hostile peers
+
+The receiver rejects negative or oversized declared sizes (64 GiB files, 10 MB avatars) before creating any file and aborts a transfer, deleting the partial file, as soon as the peer sends more bytes than declared. Free-disk check and an accept prompt were intentionally not added (they need a plugin and a UX decision). Added hostile-sender loopback tests.
+
+### Files
+- `lib/config/transfer_constants.dart`
+- `lib/services/network/receive_service.dart`
+- `test/transfer_loopback_test.dart`
+
+---
+
 ## Add automated tests
 
 The project now has a test suite (flutter test): filename sanitization, metadata framing, incremental MD5, transfer manager, loopback send/receive, backpressure, discovery protocol, notifications, history and peer manager basics. PeerManager timeout tests land with the PeerManager rework, and fake_async was added as a dev dependency for them.

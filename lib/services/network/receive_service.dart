@@ -51,6 +51,9 @@ class ReceiveService {
         final data = iterator.current;
 
         if (fileTransferKey != null) {
+          if (receivedBytes + data.length > dataExpected) {
+            throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
+          }
           await fileTransferManager.write(fileTransferKey, data);
           receivedBytes += data.length;
           continue;
@@ -64,6 +67,9 @@ class ReceiveService {
         if (fileTransferKey == null) return; // Rejected, socket already destroyed
 
         dataExpected = receivedInfo['size'] as int? ?? 0;
+        if (receivedBytes + frame.remainingData.length > dataExpected) {
+          throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
+        }
         if (frame.remainingData.isNotEmpty) {
           await fileTransferManager.write(fileTransferKey, frame.remainingData);
           receivedBytes += frame.remainingData.length;
@@ -99,6 +105,13 @@ class ReceiveService {
     final md5Checksum = info['md5Checksum'] as String?;
 
     zprint('📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername');
+
+    final maxSize = transferType == TRANSFER_TYPE_AVATAR ? MAX_AVATAR_SIZE_BYTES : MAX_TRANSFER_SIZE_BYTES;
+    if (fileSize < 0 || fileSize > maxSize) {
+      zprint('❌ Rejecting transfer: declared size $fileSize is outside 0..$maxSize.');
+      socket.destroy();
+      return null;
+    }
 
     // Key by transfer id so avatars and parallel files from one IP never collide
     final remoteTransferId = info['transferId'] as String?;

@@ -34,7 +34,7 @@
 
 ## Medium
 
-- [ ] **Harden the receiver against hostile peers** - Any LAN host can push a file with no confirmation, `receivedBytes` is never compared to `dataExpected` while streaming (a sender can send unlimited data), and the declared size is not checked against free disk space. Reject data beyond the declared size, cap the size, and optionally ask the user to accept from unknown peers.
+- [x] **Harden the receiver against hostile peers** - Any LAN host can push a file with no confirmation, `receivedBytes` is never compared to `dataExpected` while streaming (a sender can send unlimited data), and the declared size is not checked against free disk space. Reject data beyond the declared size, cap the size, and optionally ask the user to accept from unknown peers. (Done: size caps and overrun rejection. Not done: free disk space check and the accept prompt, which need a plugin and a UX decision.)
   - File(s): `lib/services/network/receive_service.dart`
 - [ ] **Fix `PeerManager` lifecycle and updates** - It is a singleton whose `BehaviorSubject` is closed by `NetworkService.dispose()` (later `add` throws), `_requestAvatarCallback` is `late` and throws if `addPeer` runs before wiring, an existing peer only refreshes `lastSeen` so renamed users or changed ports are never updated, and the cleanup timer period equals the timeout so a dead peer can stay up to ~60 s.
   - File(s): `lib/models/peer_manager.dart`, `lib/services/network_service.dart`
