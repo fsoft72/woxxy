@@ -14,11 +14,15 @@ class SendDropZone extends StatefulWidget {
   /// Called when the user asks for the file picker
   final VoidCallback onBrowse;
 
+  /// False greys the zone out and ignores drops and clicks (the receiver is not reachable)
+  final bool enabled;
+
   const SendDropZone({
     super.key,
     required this.queueLength,
     required this.onFilesDropped,
     required this.onBrowse,
+    this.enabled = true,
   });
 
   @override
@@ -51,7 +55,7 @@ class _SendDropZoneState extends State<SendDropZone> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ElevatedButton.icon(
-            onPressed: widget.onBrowse,
+            onPressed: widget.enabled ? widget.onBrowse : null,
             icon: const Icon(Icons.file_upload),
             label: const Text('Select Files to Send'),
           ),
@@ -64,6 +68,7 @@ class _SendDropZoneState extends State<SendDropZone> {
   Widget _buildDesktop(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     return DropTarget(
+      enable: widget.enabled,
       onDragDone: (details) {
         setState(() => _isDragging = false);
         if (details.files.isEmpty) return;
@@ -86,7 +91,7 @@ class _SendDropZoneState extends State<SendDropZone> {
               Text('Drag and drop files here to send', style: TextStyle(color: _isDragging ? primary : null)),
               const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: widget.onBrowse,
+                onPressed: widget.enabled ? widget.onBrowse : null,
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Browse Files'),
                 style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)),

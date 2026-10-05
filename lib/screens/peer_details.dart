@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -27,13 +29,21 @@ class PeerDetailPage extends StatefulWidget {
 
 class _PeerDetailPageState extends State<PeerDetailPage> {
   late final SendQueueController _queue;
+  late final StreamSubscription<List<Peer>> _peersSubscription;
+
+  /// Latest announcement of the peer: its port or name may change while this page is open.
+  late Peer _peer = widget.peer;
+
+  /// False once the peer stopped announcing itself (it left the network).
+  bool _online = true;
 
   @override
   void initState() {
     super.initState();
+    _peersSubscription = widget.networkService.peerStream.listen(_onPeersChanged);
     _queue = SendQueueController(
       send: (transferId, filePath, onProgress) =>
-          widget.networkService.sendFile(transferId, filePath, widget.peer, onProgress: onProgress),
+          widget.networkService.sendFile(transferId, filePath, _peer, onProgress: onProgress),
       cancel: widget.networkService.cancelTransfer,
       onMessage: (message) {
         if (mounted) showSnackbar(context, message);
@@ -41,8 +51,18 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     );
   }
 
+  /// Follows the peer in the peer list: takes its newest address data and notices when it is gone.
+  void _onPeersChanged(List<Peer> peers) {
+    final current = peers.where((p) => p.id == widget.peer.id).firstOrNull;
+    setState(() {
+      _online = current != null;
+      if (current != null) _peer = current;
+    });
+  }
+
   @override
   void dispose() {
+    _peersSubscription.cancel();
     _queue.dispose();
     super.dispose();
   }
@@ -66,7 +86,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(widget.peer.name),
+        title: Text(_peer.name),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -74,6 +94,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildProfileHeader(),
+            if (!_online) _buildOfflineBanner(),
             const Divider(height: 32),
             ListenableBuilder(listenable: _queue, builder: (context, _) => _buildTransferStatus()),
             const SizedBox(height: 16),
@@ -84,6 +105,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   queueLength: _queue.queue.length,
                   onFilesDropped: _queue.addFiles,
                   onBrowse: _pickFiles,
+                  enabled: _online,
                 ),
               ),
             ),
@@ -121,12 +143,30 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
     );
   }
 
+  Widget _buildOfflineBanner() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off, size: 16, color: Colors.red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${_peer.name} is no longer on the network. Sending is disabled until it comes back.',
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProfileHeader() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         PeerAvatarWidget(
-          peer: widget.peer,
+          peer: _peer,
           avatarStore: widget.networkService.avatarStore,
           size: 80,
           borderWidth: 2.0,
@@ -137,7 +177,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.peer.name,
+                _peer.name,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -150,7 +190,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      widget.peer.address.address,
+                      _peer.address.address,
                       style: const TextStyle(color: Colors.grey),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -162,7 +202,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
                   const Icon(Icons.settings_ethernet, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Text(
-                    'Port: ${widget.peer.port}',
+                    'Port: ${_peer.port}',
                     style: const TextStyle(color: Colors.grey),
                   ),
                 ],

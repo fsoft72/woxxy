@@ -80,16 +80,18 @@ class NetworkService {
   bool get hasFileReceivedListeners => _fileReceivedController.hasListener;
 
   // --- Initialization & Lifecycle ---
-  /// Creates the facade over its collaborators. [ipResolver] is injectable so tests can simulate network conditions.
+  /// Creates the facade over its collaborators. [ipResolver] and [peerManager] are injectable so tests can simulate network conditions and peers.
   NetworkService({
     required FileTransferManager fileTransferManager,
     required AvatarStore avatarStore,
     IpResolver? ipResolver,
+    PeerManager? peerManager,
   })  : _fileTransferManager = fileTransferManager,
         _avatarStore = avatarStore,
         _ipResolver = ipResolver ?? LocalIpResolver().call {
     // The discovery service is created below; the lambda reads it only when a peer shows up
-    _peerManager = PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
+    _peerManager = peerManager ??
+        PeerManager(avatarStore: avatarStore, requestAvatar: (peer) => _discoveryService.requestAvatar(peer));
 
     // Instantiate internal services, passing dependencies and callbacks
     _sendService = SendService(identity: _identity);

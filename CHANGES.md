@@ -1,5 +1,9 @@
 # Changes Log
 
+## Keep the peer detail page in sync with the peer list
+
+`PeerDetailPage` follows `peerStream`: sends use the latest address data of the peer, and a peer that left shows an offline warning and disables the drop zone and Browse button (`SendDropZone.enabled`). `NetworkService` accepts an injected `PeerManager`. Tests: `test/peer_details_test.dart`.
+
 ## Choose the local IP with a resolver that skips virtual adapters
 
 New `LocalIpResolver` (moved out of `NetworkService`): a failing Wi-Fi lookup no longer skips the interface search, and `pickLocalAddress` prefers private addresses of real adapters over Docker, VM and VPN ones. Tests: `test/local_ip_resolver_test.dart`.
