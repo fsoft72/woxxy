@@ -180,7 +180,7 @@ class SendService {
     final bytes = await reader.read(READY_SIGNAL_LENGTH, READY_SIGNAL_TIMEOUT);
 
     if (bytes.length == READY_SIGNAL_LENGTH) {
-      final matches = bytes[0] == READY_SIGNAL[0] && bytes[1] == READY_SIGNAL[1] && bytes[2] == READY_SIGNAL[2];
+      final matches = listEquals(bytes, READY_SIGNAL);
       zprint(matches ? "✅ Ready signal received from receiver" : "⚠️ Unexpected ready signal - proceeding anyway");
       return;
     }

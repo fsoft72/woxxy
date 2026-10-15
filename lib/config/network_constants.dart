@@ -12,6 +12,9 @@ const Duration DISCOVERY_PING_INTERVAL = Duration(seconds: 5);
 /// How long the sender waits for the receiver's ready signal before sending anyway
 const Duration READY_SIGNAL_TIMEOUT = Duration(seconds: 5);
 
+/// Pause before the discovery socket is bound again after it was lost
+const Duration DISCOVERY_RESTART_DELAY = Duration(seconds: 3);
+
 /// Maximum time to open the TCP connection to a peer
 const Duration CONNECT_TIMEOUT = Duration(seconds: 10);
 

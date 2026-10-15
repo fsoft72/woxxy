@@ -52,6 +52,15 @@ void main() {
     expect(TRANSFER_TYPE_AVATAR, 'AVATAR_FILE');
     expect(BYTES_PER_MB, 1048576);
     expect(MAX_AVATAR_SIZE_BYTES, 10 * BYTES_PER_MB);
+    expect(DISCOVERY_RESTART_DELAY, const Duration(seconds: 3));
+  });
+
+  test('discovery and the send handshake use no magic values', () {
+    final discovery = File('lib/services/network/discovery_service.dart').readAsStringSync();
+    expect(discovery, isNot(contains("'NO_IP'")));
+    expect(discovery, isNot(contains('Duration(seconds:')));
+    final send = File('lib/services/network/send_service.dart').readAsStringSync();
+    expect(send, isNot(contains('READY_SIGNAL[')));
   });
 
   test('transfer ids are unique even for the same filename generated in a tight loop', () {

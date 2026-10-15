@@ -1,5 +1,9 @@
 # Changes Log
 
+## Remove the magic values from discovery and the handshake
+
+The discovery re-bind pause is `DISCOVERY_RESTART_DELAY` in `network_constants.dart`, the announcement is built from the known address (the `'NO_IP'` placeholder is gone: nothing is sent while the IP is unknown), and the ready signal is compared with `listEquals`. Tests in `test/constants_test.dart` and `test/ready_signal_test.dart`.
+
 ## Share one transfer lifecycle between file and avatar sends
 
 `SendService` keeps a single `Map<String, Socket?>` of running sends (null until connected) instead of `_liveTransfers` plus `_activeTransfers`, and both `sendFile` and `sendAvatar` run through `_runTransfer`, which registers the id, checks the local address and always forgets the transfer at the end. Tests in `test/send_cancel_test.dart`.

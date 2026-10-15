@@ -63,7 +63,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [ ] **Debug test-notification button inside the production widget** - `HomeContent` hard-codes `/tmp/test.txt` and fake values behind `kDebugMode`; move it to a debug-only menu or delete it so `HomeContent` has a single responsibility (the peer list).
   - File(s): `lib/screens/home.dart`
 
-- [ ] **Magic values in discovery and the send handshake** - `'NO_IP'` in `_buildDiscoveryMessage`, the inline `Duration(seconds: 3)` default of `restartDelay`, and the index-by-index `READY_SIGNAL` comparison in `_waitForReadySignal`; add `DISCOVERY_RESTART_DELAY` to `network_constants.dart`, skip the announcement when the IP is null, and compare with `listEquals`.
+- [x] **Magic values in discovery and the send handshake** - `'NO_IP'` in `_buildDiscoveryMessage`, the inline `Duration(seconds: 3)` default of `restartDelay`, and the index-by-index `READY_SIGNAL` comparison in `_waitForReadySignal`; add `DISCOVERY_RESTART_DELAY` to `network_constants.dart`, skip the announcement when the IP is null, and compare with `listEquals`.
   - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network/send_service.dart`, `lib/config/network_constants.dart`
 
 - [ ] **Linux notification icon looked up on every notification** - `LinuxNotificationBackend.show` calls `_iconPath()`, which runs a synchronous `existsSync` each time; resolve it once in `init` and keep it in a field.

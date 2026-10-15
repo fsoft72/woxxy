@@ -58,4 +58,16 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 100));
     expect(received.length, greaterThan(2000), reason: 'header plus the whole payload arrived');
   });
+
+  test('an unexpected 3 byte signal is tolerated and the file is sent', () async {
+    onConnection = (socket) {
+      socket.listen(received.addAll, onDone: socket.destroy);
+      socket.add([0x58, 0x58, 0x58]);
+    };
+
+    await sender.sendFile('odd', file.path, peer());
+
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(received.length, greaterThan(2000));
+  });
 }

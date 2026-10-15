@@ -45,7 +45,7 @@ class DiscoveryService {
     required this.avatarStore,
     required this.sendAvatarCallback,
     required this.identity,
-    this.restartDelay = const Duration(seconds: 3),
+    this.restartDelay = DISCOVERY_RESTART_DELAY,
     DateTime Function()? clock,
   }) : _now = clock ?? DateTime.now;
 
@@ -151,7 +151,7 @@ class DiscoveryService {
       return;
     }
 
-    final message = _buildDiscoveryMessage();
+    final message = _buildDiscoveryMessage(ip);
     for (final target in broadcastAddressesFor(ip)) {
       try {
         socket.send(message, InternetAddress(target), discoveryPort);
@@ -162,10 +162,10 @@ class DiscoveryService {
     }
   }
 
-  Uint8List _buildDiscoveryMessage() =>
-      encodeAnnounce(
+  /// Announcement of this device at [ip] (never sent while the address is unknown).
+  Uint8List _buildDiscoveryMessage(String ip) => encodeAnnounce(
           name: identity.username,
-          ip: identity.ipAddress ?? 'NO_IP',
+          ip: ip,
           port: mainServerPort,
           avatarHash: identity.avatarHash,
           transferVersion: TRANSFER_PROTOCOL_VERSION);
