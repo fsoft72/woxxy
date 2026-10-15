@@ -238,6 +238,24 @@ void main() {
     });
   });
 
+  test('the speed counts only the time spent sending, not the preparation', () async {
+    const size = 1024 * 1024;
+    final c = controller((id, path, onProgress) async {
+      await Future<void>.delayed(const Duration(milliseconds: 400)); // Hashing and connecting
+      onProgress(size, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      onProgress(size, size);
+    });
+
+    await c.addFiles([await makeFile('a.bin', size: size)]);
+    await idle(c);
+
+    // 1 MB in about 0.1 s gives about 10 MB/s; counting the preparation too would give 2 MB/s
+    expect(c.speedMBps, greaterThan(3));
+    expect(messages.single, isNot(contains('in 0.5s')));
+    c.dispose();
+  });
+
   test('a file is "preparing" until its first progress report', () async {
     final firstReport = Completer<void>();
     final finish = Completer<void>();

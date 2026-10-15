@@ -1,5 +1,9 @@
 # Changes Log
 
+## Measure the send speed from the first byte
+
+The stopwatch of each file in `SendQueueController` starts at the first progress report instead of before `send`, so hashing and connecting no longer lower the live MB/s or the speed in the "File sent successfully" message. Test in `test/send_queue_controller_test.dart`.
+
 ## Decode the metadata header in linear time
 
 `MetadataFrameDecoder` reads the 4-byte length prefix once (from the first bytes, kept apart) and copies the collected chunks only when the whole frame arrived, instead of calling `toBytes()` on every chunk. A 1 MB header in 64-byte chunks went from about 5 s to a few milliseconds. Test in `test/transfer_protocol_test.dart`.

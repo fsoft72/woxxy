@@ -170,7 +170,8 @@ class SendQueueController extends ChangeNotifier {
       _preparing = true;
       _notify();
 
-      final stopwatch = Stopwatch()..start();
+      // Started by the first progress report: hashing and connecting are not part of the speed
+      final stopwatch = Stopwatch();
       _throttle.reset();
       final transferId = _idGenerator(item.name);
       _activeTransferId = transferId;
@@ -178,6 +179,7 @@ class SendQueueController extends ChangeNotifier {
       try {
         await _send(transferId, item.path, (totalSize, bytesSent) {
           if (stale()) return;
+          if (_preparing) stopwatch.start();
           _preparing = false;
           // Chunks arrive far faster than the UI needs; the final update is always delivered
           if (!_throttle.shouldEmit(force: bytesSent >= totalSize)) return;

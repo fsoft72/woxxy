@@ -25,7 +25,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 
 ## Medium
 
-- [ ] **Send speed includes the hashing time** - the stopwatch in `SendQueueController._processQueue` starts before `_send`, which first hashes the file, so both the live MB/s and the final "File sent successfully" speed are underestimated for large files; start timing on the first progress callback (when `_preparing` turns false).
+- [x] **Send speed includes the hashing time** - the stopwatch in `SendQueueController._processQueue` starts before `_send`, which first hashes the file, so both the live MB/s and the final "File sent successfully" speed are underestimated for large files; start timing on the first progress callback (when `_preparing` turns false).
   - File(s): `lib/services/send_queue_controller.dart`
 
 - [ ] **Send queue state is spread over five booleans** - `_processing`, `_isTransferring`, `_preparing`, `_transferComplete` and `_disposed` are set in several places (`addFiles`, `_processQueue`, `cancelAll`, `_onSuccess`) and only some combinations are valid; replace the first four with one `SendPhase` enum (`idle`, `preparing`, `sending`, `completed`) so the UI reads a single value.
