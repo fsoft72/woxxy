@@ -9,6 +9,7 @@ import 'package:woxxy/funcs/hashing.dart';
 import '../../config/transfer_constants.dart';
 import '../../models/local_identity.dart';
 import '../../models/peer.dart';
+import '../../models/transfer_metadata.dart';
 import 'socket_reader.dart';
 import 'transfer_protocol.dart';
 import '../../config/network_constants.dart';
@@ -176,11 +177,9 @@ class SendService {
   /// Creates metadata specifically for avatar transfers
   /// The checksum announced in discovery is reused when it belongs to this very file, so a burst
   /// of avatar requests does not read the image once per peer.
-  Future<Map<String, dynamic>> _createAvatarMetadata(File avatarFile, String transferId) async {
+  Future<TransferMetadata> _createAvatarMetadata(File avatarFile, String transferId) {
     final announced = identity.profileImagePath == avatarFile.path ? identity.avatarHash : null;
-    final originalMetadata = await _createFileMetadata(avatarFile, transferId, knownChecksum: announced);
-    
-    return {...originalMetadata, 'type': TRANSFER_TYPE_AVATAR};
+    return _createFileMetadata(avatarFile, transferId, knownChecksum: announced, type: TRANSFER_TYPE_AVATAR);
   }
 
   /// Waits for the ready signal of the receiver before the file is sent.
@@ -217,7 +216,8 @@ class SendService {
   /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
   /// cannot be hashed, and the receiver then skips verification.
   /// [knownChecksum] skips reading the file for the MD5.
-  Future<Map<String, dynamic>> _createFileMetadata(File file, String transferId, {String? knownChecksum}) async {
+  Future<TransferMetadata> _createFileMetadata(File file, String transferId,
+      {String? knownChecksum, String type = TRANSFER_TYPE_FILE}) async {
     final fileSize = await file.length();
     final filename = path.basename(file.path);
 
@@ -230,22 +230,22 @@ class SendService {
       }
     }
 
-    return {
-      'name': filename,
-      'size': fileSize,
-      'senderUsername': identity.username,
-      'senderIp': identity.ipAddress, // Only read by older receivers, to store a received avatar
-      'md5Checksum': checksum,
-      'transferId': transferId,
-      'type': TRANSFER_TYPE_FILE,
-    };
+    return TransferMetadata(
+      name: filename,
+      size: fileSize,
+      senderUsername: identity.username,
+      senderIp: identity.ipAddress,
+      md5Checksum: checksum,
+      transferId: transferId,
+      type: type,
+    );
   }
 
   // Helper to send metadata and file data
-  Future<void> _sendFileWithMetadata(String transferId, String filePath, Peer receiver, Map<String, dynamic> metadata,
+  Future<void> _sendFileWithMetadata(String transferId, String filePath, Peer receiver, TransferMetadata metadata,
       {FileTransferProgressCallback? onProgress}) async {
     final file = File(filePath);
-    final fileSize = metadata['size'] as int;
+    final fileSize = metadata.size;
     Socket? socket;
     SocketReader? reader;
 
@@ -260,7 +260,7 @@ class SendService {
       _activeTransfers[transferId] = socket; // Add BEFORE sending data
       _throwIfCancelled(transferId); // Cancelled while connecting: the finally block closes the socket
 
-      final frame = encodeMetadataFrame(metadata);
+      final frame = encodeMetadataFrame(metadata.toJson());
       zprint("  [Send Meta] Sending metadata frame (${frame.length} bytes)...");
       socket.add(frame);
       await socket.flush();

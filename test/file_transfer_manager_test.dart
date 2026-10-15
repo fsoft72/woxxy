@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/models/file_transfer_manager.dart';
+import 'package:woxxy/models/transfer_metadata.dart';
+
+/// Header of a file transfer named [name] with [size] bytes.
+TransferMetadata meta(String name, int size) => TransferMetadata(name: name, size: size, senderUsername: 'bob');
 
 void main() {
   late Directory tmp;
@@ -19,8 +23,8 @@ void main() {
   });
 
   test('two transfers from the same IP do not collide', () async {
-    final a = await manager.add('1.1.1.1#a', 'a.txt', 3, 'bob', {}, sourceIp: '1.1.1.1');
-    final b = await manager.add('1.1.1.1#b', 'b.txt', 3, 'bob', {}, sourceIp: '1.1.1.1');
+    final a = await manager.add('1.1.1.1#a', meta('a.txt', 3), sourceIp: '1.1.1.1');
+    final b = await manager.add('1.1.1.1#b', meta('b.txt', 3), sourceIp: '1.1.1.1');
     expect(a, isTrue);
     expect(b, isTrue);
 
@@ -34,16 +38,16 @@ void main() {
   });
 
   test('a duplicate key is rejected and does not replace the active transfer', () async {
-    expect(await manager.add('k', 'a.txt', 1, 'bob', {}), isTrue);
+    expect(await manager.add('k', meta('a.txt', 1), sourceIp: '1.1.1.1'), isTrue);
     final original = manager.files['k'];
-    expect(await manager.add('k', 'other.txt', 1, 'bob', {}), isFalse);
+    expect(await manager.add('k', meta('other.txt', 1), sourceIp: '1.1.1.1'), isFalse);
     expect(manager.files['k'], same(original));
     await manager.handleSocketClosure('k');
   });
 
   test('concurrent transfers with the same filename get distinct paths', () async {
     final results = await Future.wait(
-      List.generate(10, (i) => manager.add('k$i', 'same.txt', 1, 'bob', {})),
+      List.generate(10, (i) => manager.add('k$i', meta('same.txt', 1), sourceIp: '1.1.1.1')),
     );
     expect(results.every((r) => r), isTrue);
 
@@ -57,7 +61,7 @@ void main() {
   test('directory override keeps the file out of the download path', () async {
     final other = await Directory.systemTemp.createTemp('woxxy_avatar_');
     try {
-      expect(await manager.add('av', 'me.png', 1, 'bob', {}, directory: other.path), isTrue);
+      expect(await manager.add('av', meta('me.png', 1), sourceIp: '1.1.1.1', directory: other.path), isTrue);
       expect(path.dirname(manager.files['av']!.destinationFilename), other.path);
       expect(tmp.listSync(), isEmpty);
       await manager.handleSocketClosure('av');

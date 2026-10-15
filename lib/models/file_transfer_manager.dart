@@ -1,4 +1,5 @@
 import 'file_transfer.dart';
+import 'transfer_metadata.dart';
 import 'dart:io';
 import 'package:woxxy/funcs/debug.dart';
 
@@ -17,11 +18,7 @@ class FileTransferManager {
   /// Returns true if the transfer was successfully created
   /// `key` uniquely identifies the transfer (the sender's transferId); `sourceIp` is the sender address.
   /// `directory` overrides the download path (used for temporary avatar files).
-  Future<bool> add(String key, String originalFilename, int size, String senderUsername,
-      Map<String, dynamic> metadata,
-      {String? md5Checksum,
-      String? sourceIp,
-      String? directory}) async {
+  Future<bool> add(String key, TransferMetadata metadata, {required String sourceIp, String? directory}) async {
     try {
       // Check if a transfer with the same key is already active
       if (files.containsKey(key)) {
@@ -29,18 +26,15 @@ class FileTransferManager {
         return false;
       }
 
-      zprint("➕ Adding transfer for '$originalFilename' from '$key'");
-      // md5Checksum from metadata overrides the optional parameter if present
-      final effectiveMd5 = metadata['md5Checksum'] as String? ?? md5Checksum;
-
+      zprint("➕ Adding transfer for '${metadata.name}' from '$key'");
       FileTransfer? transfer = await FileTransfer.start(
-        sourceIp: sourceIp ?? key,
-        originalFilename: originalFilename,
-        size: size,
+        sourceIp: sourceIp,
+        originalFilename: metadata.name,
+        size: metadata.size,
         downloadPath: directory ?? downloadPath,
-        senderUsername: senderUsername,
-        metadata: metadata,
-        expectedMd5: effectiveMd5,
+        senderUsername: metadata.senderUsername,
+        metadata: metadata.toJson(),
+        expectedMd5: metadata.md5Checksum,
       );
 
       if (transfer != null) {

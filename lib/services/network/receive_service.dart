@@ -11,6 +11,7 @@ import '../../config/transfer_constants.dart';
 import '../../models/avatars.dart';
 import '../../models/file_received_event.dart';
 import '../../models/file_transfer_manager.dart';
+import '../../models/transfer_metadata.dart';
 import 'transfer_protocol.dart';
 
 class ReceiveService {
@@ -49,7 +50,7 @@ class ReceiveService {
     final decoder = MetadataFrameDecoder();
     // A stalled sender raises a TimeoutException, handled like any other transfer error
     final iterator = StreamIterator<Uint8List>(socket.timeout(idleTimeout));
-    Map<String, dynamic>? receivedInfo;
+    TransferMetadata? receivedInfo;
     String? fileTransferKey; // Set once metadata is accepted
     var receivedBytes = 0;
     var dataExpected = 0;
@@ -71,11 +72,11 @@ class ReceiveService {
         final frame = decoder.add(data);
         if (frame == null) continue; // Header not complete yet
 
-        receivedInfo = frame.metadata;
+        receivedInfo = TransferMetadata.fromJson(frame.metadata);
         fileTransferKey = await _acceptTransfer(socket, sourceIp, receivedInfo);
         if (fileTransferKey == null) return; // Rejected, socket already destroyed
 
-        dataExpected = receivedInfo['size'] as int? ?? 0;
+        dataExpected = receivedInfo.size;
         if (receivedBytes + frame.remainingData.length > dataExpected) {
           throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
         }
@@ -128,40 +129,30 @@ class ReceiveService {
 
   /// Registers the incoming transfer and sends the ready signal.
   /// Returns the transfer key, or null if the transfer was rejected (socket destroyed).
-  Future<String?> _acceptTransfer(Socket socket, String sourceIp, Map<String, dynamic> info) async {
-    final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
-    final fileName = info['name'] as String? ?? 'unknown_file';
-    final fileSize = info['size'] as int? ?? 0;
-    final senderUsername = info['senderUsername'] as String? ?? 'Unknown';
-    final md5Checksum = info['md5Checksum'] as String?;
+  Future<String?> _acceptTransfer(Socket socket, String sourceIp, TransferMetadata info) async {
+    zprint('📄 Received metadata: $info');
 
-    zprint('📄 Received metadata: type=$transferType, name=$fileName, size=$fileSize, sender=$senderUsername');
-
-    final maxSize = transferType == TRANSFER_TYPE_AVATAR ? MAX_AVATAR_SIZE_BYTES : MAX_TRANSFER_SIZE_BYTES;
-    if (fileSize < 0 || fileSize > maxSize) {
-      zprint('❌ Rejecting transfer: declared size $fileSize is outside 0..$maxSize.');
+    final maxSize = info.isAvatar ? MAX_AVATAR_SIZE_BYTES : MAX_TRANSFER_SIZE_BYTES;
+    if (info.size < 0 || info.size > maxSize) {
+      zprint('❌ Rejecting transfer: declared size ${info.size} is outside 0..$maxSize.');
       socket.destroy();
       return null;
     }
 
     // Key by transfer id so avatars and parallel files from one IP never collide
-    final remoteTransferId = info['transferId'] as String?;
+    final remoteTransferId = info.transferId;
     final key = (remoteTransferId != null && remoteTransferId.isNotEmpty)
         ? '$sourceIp#$remoteTransferId'
         : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
 
     final added = await fileTransferManager.add(
       key,
-      fileName,
-      fileSize,
-      senderUsername,
       info,
-      md5Checksum: md5Checksum,
       sourceIp: sourceIp,
-      directory: transferType == TRANSFER_TYPE_AVATAR ? _avatarTempDirectory() : null,
+      directory: info.isAvatar ? _avatarTempDirectory() : null,
     );
     if (!added) {
-      zprint("❌ Failed to add transfer for $fileName from $sourceIp. Closing connection.");
+      zprint("❌ Failed to add transfer for ${info.name} from $sourceIp. Closing connection.");
       socket.destroy();
       return null;
     }
@@ -185,7 +176,7 @@ class ReceiveService {
   Future<bool?> _onConnectionClosed({
     required String sourceIp,
     required String? key,
-    required Map<String, dynamic>? info,
+    required TransferMetadata? info,
     required int receivedBytes,
     required int dataExpected,
     required Duration elapsed,
@@ -215,8 +206,7 @@ class ReceiveService {
       return false;
     }
 
-    final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
-    if (transferType == TRANSFER_TYPE_AVATAR) {
+    if (info.isAvatar) {
       await _processReceivedAvatar(fileTransfer.destinationFilename, sourceIp);
     } else {
       zprint('✅ File transfer finalized successfully.');

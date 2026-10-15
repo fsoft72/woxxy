@@ -1,5 +1,9 @@
 # Changes Log
 
+## Describe the transfer header with a TransferMetadata class
+
+The new `lib/models/transfer_metadata.dart` holds the header fields with `toJson`/`fromJson` (defaults for older senders, `FormatException` for a value of the wrong type). `SendService` builds it, `ReceiveService` reads it, and `FileTransferManager.add` takes it instead of name, size, sender, map and checksum (`sourceIp` is now required). Tests in `test/transfer_metadata_test.dart`, `test/file_transfer_manager_test.dart` and `test/transfer_loopback_test.dart`.
+
 ## Rely on the image decoder to validate received avatars
 
 `ReceiveService._isValidImageData` (a magic-byte check that also accepted GIF and WebP) is gone: `AvatarStore.setAvatar` decodes the image and already rejects anything that is not one. Test in `test/transfer_loopback_test.dart`.

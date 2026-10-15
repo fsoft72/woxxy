@@ -233,6 +233,15 @@ void main() {
       expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
     });
 
+    test('a size of the wrong type is rejected before a file is created', () async {
+      await sendRaw({...metaFor(3), 'size': '3'}, [1, 2, 3]);
+
+      expect(received, isEmpty);
+      expect(manager.files, isEmpty);
+      final downloads = Directory(path.join(tmp.path, 'downloads'));
+      expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
+    });
+
     test('an avatar above the avatar size cap is rejected', () async {
       await sendRaw(metaFor(MAX_AVATAR_SIZE_BYTES + 1, type: TRANSFER_TYPE_AVATAR), [1, 2, 3]);
       expect(manager.files, isEmpty);
