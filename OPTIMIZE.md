@@ -54,7 +54,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [ ] **`Peer` has no equality and carries unused JSON code** - `PeerManager.addPeer` compares name, port, address and avatarHash field by field, while `Peer.toJson`/`Peer.fromJson` are never used; add `==`/`hashCode` to `Peer`, use them in `addPeer`, and drop the dead serialization.
   - File(s): `lib/models/peer.dart`, `lib/models/peer_manager.dart`
 
-- [ ] **Metadata decoder copies its buffer on every chunk** - `MetadataFrameDecoder.add` calls `_buffer.toBytes()` for each incoming chunk until the header is complete, which is quadratic for headers near the 1 MB limit; read the 4-byte length once and copy only when `_length >= frameEnd`.
+- [x] **Metadata decoder copies its buffer on every chunk** - `MetadataFrameDecoder.add` calls `_buffer.toBytes()` for each incoming chunk until the header is complete, which is quadratic for headers near the 1 MB limit; read the 4-byte length once and copy only when `_length >= frameEnd`.
   - File(s): `lib/services/network/transfer_protocol.dart`
 
 - [ ] **Small cleanups in `HomePage`** - `_initializeApp` only calls `_startNetwork`, `dispose` is an empty override, the `mounted` check in `onDestinationSelected` is unnecessary, and the IP condition is evaluated twice in `build`; remove the wrappers and keep one local `ip` variable.

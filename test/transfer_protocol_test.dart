@@ -47,4 +47,19 @@ void main() {
   test('fewer than 4 bytes waits for more', () {
     expect(MetadataFrameDecoder().add([0, 0]), isNull);
   });
+
+  test('a large header fed in small chunks decodes in linear time', () {
+    final big = {'name': 'x' * (MAX_METADATA_LENGTH - 100)};
+    final bytes = encodeMetadataFrame(big);
+    final decoder = MetadataFrameDecoder();
+    final stopwatch = Stopwatch()..start();
+
+    MetadataFrame? frame;
+    for (var i = 0; i < bytes.length; i += 64) {
+      frame = decoder.add(Uint8List.sublistView(bytes, i, i + 64 > bytes.length ? bytes.length : i + 64));
+    }
+
+    expect(frame!.metadata, big);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 1)), reason: 'the buffer must not be copied per chunk');
+  });
 }

@@ -1,5 +1,9 @@
 # Changes Log
 
+## Decode the metadata header in linear time
+
+`MetadataFrameDecoder` reads the 4-byte length prefix once (from the first bytes, kept apart) and copies the collected chunks only when the whole frame arrived, instead of calling `toBytes()` on every chunk. A 1 MB header in 64-byte chunks went from about 5 s to a few milliseconds. Test in `test/transfer_protocol_test.dart`.
+
 ## Remove the magic values from discovery and the handshake
 
 The discovery re-bind pause is `DISCOVERY_RESTART_DELAY` in `network_constants.dart`, the announcement is built from the known address (the `'NO_IP'` placeholder is gone: nothing is sent while the IP is unknown), and the ready signal is compared with `listEquals`. Tests in `test/constants_test.dart` and `test/ready_signal_test.dart`.
