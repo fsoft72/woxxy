@@ -1,5 +1,12 @@
 # Changes Log
 
+## Regenerate OPTIMIZE.md with a new code analysis
+
+The previous list was done and removed, so `OPTIMIZE.md` was rewritten from a fresh read of `lib/`. It has 0 Critical, 5 High, 7 Medium and 9 Low items (the main ones: leaving the peer page cancels the sends, every sent file is read twice for the MD5, received avatars are stored under the IP written in the metadata, untyped transfer metadata, the app bar IP never updates). No code was changed.
+
+### Files
+- `OPTIMIZE.md`
+
 ## Rename the history speed field to speedMBps
 
 `FileHistoryEntry.uploadSpeedMBps` (the speed of a received file) is now `speedMBps`; `fromJson` still reads the old `uploadSpeedMBps` key so saved histories load, and new saves use the new key. Test in `test/file_history_test.dart`.
