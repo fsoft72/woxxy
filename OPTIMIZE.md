@@ -43,7 +43,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Leftover fields and fallbacks in `FileTransfer` and `FileTransferManager.add`** - `FileTransfer.metadata` is stored but never read, `sourceIp` is documented as "the key in FileTransferManager" (the key is now `ip#transferId`), `add` falls back to `sourceIp ?? key` and takes an `md5Checksum` parameter that is immediately overridden by `metadata['md5Checksum']`; remove the dead field and the redundant parameter and fix the doc.
   - File(s): `lib/models/file_transfer.dart`, `lib/models/file_transfer_manager.dart`
 
-- [ ] **Redundant lookups and duplicate cleanup in `FileTransferManager`** - every method does `containsKey(key)` then `files[key]!`, and the `catch` of `end()` deletes the file again although `FileTransfer.end()` already deletes it on failure; use a single `final transfer = files.remove(key)` at the top of `end`/`handleSocketClosure` with an early `if (transfer == null) return false;`.
+- [x] **Redundant lookups and duplicate cleanup in `FileTransferManager`** - every method does `containsKey(key)` then `files[key]!`, and the `catch` of `end()` deletes the file again although `FileTransfer.end()` already deletes it on failure; use a single `final transfer = files.remove(key)` at the top of `end`/`handleSocketClosure` with an early `if (transfer == null) return false;`.
   - File(s): `lib/models/file_transfer_manager.dart`
 
 ## Low / Nice to have

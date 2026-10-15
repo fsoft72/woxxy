@@ -51,15 +51,16 @@ class FileTransferManager {
   }
 
   /// Writes data to an existing file transfer identified by `key`.
-  /// Returns false if the transfer doesn't exist.
+  /// Returns false if the transfer doesn't exist or the write failed.
   Future<bool> write(String key, List<int> binaryData) async {
-    try {
-      if (files.containsKey(key)) {
-        await files[key]!.write(binaryData);
-        return true;
-      }
+    final transfer = files[key];
+    if (transfer == null) {
       zprint("⚠️ Attempted to write to non-existent transfer key: $key");
       return false;
+    }
+    try {
+      await transfer.write(binaryData);
+      return true;
     } catch (e, s) {
       zprint('❌ Error writing to transfer key $key: $e\n$s');
       return false;
@@ -68,69 +69,35 @@ class FileTransferManager {
 
   /// Ends a file transfer identified by `key` and removes it from the manager.
   /// Returns true if the transfer existed and ended successfully (MD5 check passed).
-  /// Returns false otherwise (transfer not found, end() failed, MD5 mismatch).
+  /// Returns false otherwise (transfer not found, file error, MD5 mismatch); [FileTransfer.end]
+  /// has then already deleted the file.
   Future<bool> end(String key) async {
-    FileTransfer? transfer; // To access transfer details after removal
-    try {
-      if (files.containsKey(key)) {
-        transfer = files[key]!; // Get reference before potentially removing
-        zprint("🏁 Attempting to end transfer for key '$key'.");
-        final success = await transfer.end(); // Calls onTransferComplete if successful
-        if (success) {
-          zprint("✅ Transfer ended successfully for key '$key'.");
-          files.remove(key); // Remove AFTER successful end
-          return true;
-        } else {
-          // end() returned false, likely MD5 mismatch or file closing error
-          zprint("❌ Transfer end failed for key '$key' (MD5 mismatch or file error).");
-          // File should have been deleted by transfer.end() on mismatch.
-          // Remove from manager anyway.
-          files.remove(key);
-          return false;
-        }
-      }
+    final transfer = files.remove(key);
+    if (transfer == null) {
       zprint("⚠️ Attempted to end non-existent transfer key: $key");
       return false;
+    }
+    try {
+      final success = await transfer.end();
+      zprint(success ? "✅ Transfer ended successfully for key '$key'." : "❌ Transfer end failed for key '$key'.");
+      return success;
     } catch (e, s) {
       zprint('❌ Error ending transfer key $key: $e\n$s');
-      // Ensure removal even if end() throws an unexpected error
-      if (files.containsKey(key)) {
-        files.remove(key);
-      }
-      // Try to delete the potentially corrupted file if transfer object is available
-      if (transfer != null) {
-        try {
-          await File(transfer.destinationFilename).delete();
-          zprint("🗑️ Deleted potentially problematic file after error during end(): ${transfer.destinationFilename}");
-        } catch (_) {} // Ignore delete error
-      }
       return false;
     }
   }
 
-  /// Safely closes a file transfer when a socket is closed unexpectedly (e.g., onDone, onError).
-  /// Identified by `key`. Removes the transfer from the manager.
-  /// Returns false if the transfer doesn't exist.
+  /// Closes a file transfer whose socket closed unexpectedly (e.g., onDone, onError): the
+  /// partial file is deleted and the transfer removed. Returns false if the transfer doesn't exist.
   Future<bool> handleSocketClosure(String key) async {
-    try {
-      if (files.containsKey(key)) {
-        zprint("🔌 Handling unexpected socket closure for key '$key'.");
-        // closeOnSocketClosure handles file cleanup (MD5 check, delete if mismatch/incomplete)
-        await files[key]!.closeOnSocketClosure();
-        files.remove(key); // Remove from active transfers
-        zprint("🧹 Resources cleaned up for key '$key' after socket closure.");
-        return true;
-      }
+    final transfer = files.remove(key);
+    if (transfer == null) {
       zprint("⚠️ Attempted socket closure handling for non-existent key: $key");
       return false;
-    } catch (e, s) {
-      zprint('❌ Error handling socket closure for key $key: $e\n$s');
-      // Ensure removal even on error during cleanup
-      if (files.containsKey(key)) {
-        files.remove(key);
-      }
-      return false;
     }
+    zprint("🔌 Handling unexpected socket closure for key '$key'.");
+    await transfer.closeOnSocketClosure(); // Never throws: errors are logged inside
+    return true;
   }
 
   /// Updates the download path for future file transfers.

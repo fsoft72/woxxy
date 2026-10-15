@@ -1,5 +1,9 @@
 # Changes Log
 
+## Look up each transfer once in FileTransferManager
+
+`write`, `end` and `handleSocketClosure` read (or remove) the transfer once with an early return for unknown keys, and `end` no longer deletes the file a second time: `FileTransfer.end` already does it on failure. Tests in `test/file_transfer_manager_test.dart`.
+
 ## Drop the unused metadata map of FileTransfer
 
 `FileTransfer.metadata` (stored, never read) and the matching `start` parameter are gone, and the docs of `sourceIp` and of the manager key (`<sourceIp>#<transferId>`) are correct again. The `sourceIp ?? key` fallback and the redundant `md5Checksum` parameter already went with `TransferMetadata`. Test in `test/file_transfer_manager_test.dart`.

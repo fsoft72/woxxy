@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/models/file_transfer_manager.dart';
@@ -41,6 +42,24 @@ void main() {
     expect(await manager.add('9.9.9.9#x', meta('x.txt', 1), sourceIp: '9.9.9.9'), isTrue);
     expect(manager.files['9.9.9.9#x']!.sourceIp, '9.9.9.9');
     await manager.handleSocketClosure('9.9.9.9#x');
+  });
+
+  test('a checksum mismatch removes the transfer and its file', () async {
+    final header = TransferMetadata(name: 'bad.bin', size: 3, senderUsername: 'bob', md5Checksum: md5.convert([9]).toString());
+    expect(await manager.add('bad', header, sourceIp: '1.1.1.1'), isTrue);
+    final file = manager.files['bad']!.destinationFilename;
+    await manager.write('bad', [1, 2, 3]);
+
+    expect(await manager.end('bad'), isFalse);
+    expect(manager.files, isEmpty);
+    expect(File(file).existsSync(), isFalse);
+    expect(await manager.end('bad'), isFalse);
+  });
+
+  test('unknown keys are reported, not thrown', () async {
+    expect(await manager.write('nope', [1]), isFalse);
+    expect(await manager.end('nope'), isFalse);
+    expect(await manager.handleSocketClosure('nope'), isFalse);
   });
 
   test('a duplicate key is rejected and does not replace the active transfer', () async {
