@@ -25,12 +25,21 @@ LinuxNotificationDetails linuxNotificationDetails(String? iconPath) => LinuxNoti
 /// support, so the notification would silently not appear. The payload is remembered here and
 /// handed to the click handler instead.
 class LinuxNotificationBackend implements NotificationBackend {
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin;
+  final String? Function() _findIcon;
   String? _lastPayload;
+
+  /// Icon file found once by [init] and reused by every notification
+  String? _iconPath;
+
+  /// [plugin] and [findIcon] (the lookup of the icon file) are injectable for tests.
+  LinuxNotificationBackend({FlutterLocalNotificationsPlugin? plugin, String? Function()? findIcon})
+      : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
+        _findIcon = findIcon ?? _bundledIcon;
 
   @override
   Future<bool> init(NotificationClickHandler onClick) async {
-    final iconPath = await _iconPath();
+    final iconPath = _iconPath = _findIcon();
     final initialized = await _plugin.initialize(
       InitializationSettings(
         linux: LinuxInitializationSettings(
@@ -46,17 +55,17 @@ class LinuxNotificationBackend implements NotificationBackend {
 
   @override
   Future<void> show({required int id, required String title, required String body, String? payload}) async {
-    final iconPath = await _iconPath();
     _lastPayload = payload;
     await _plugin.show(
       id,
       title,
       body,
-      NotificationDetails(linux: linuxNotificationDetails(iconPath)),
+      NotificationDetails(linux: linuxNotificationDetails(_iconPath)),
     );
   }
 
-  Future<String?> _iconPath() async {
+  /// Path of the bundled notification icon, null (and logged) when it is missing.
+  static String? _bundledIcon() {
     final iconPath = bundledAssetPath(NOTIFICATION_ICON_ASSET);
     if (iconPath == null) zprint('⚠️ Notification icon not found in the app bundle: $NOTIFICATION_ICON_ASSET');
     return iconPath;

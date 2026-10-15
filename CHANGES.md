@@ -1,5 +1,9 @@
 # Changes Log
 
+## Look up the Linux notification icon once
+
+`LinuxNotificationBackend` finds the icon file in `init`, keeps it in a field and reuses it for every notification instead of running `existsSync` each time; the plugin and the icon lookup are injectable. Test in `test/notification_details_test.dart`.
+
 ## Give Peer value equality and drop its JSON code
 
 `Peer` compares (and hashes) every announced value, so `PeerManager.addPeer` detects a changed announcement with `existing.peer != peer` instead of a field by field check, and the unused `toJson`/`fromJson` are gone. Tests in `test/peer_test.dart`.

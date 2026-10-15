@@ -66,7 +66,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Magic values in discovery and the send handshake** - `'NO_IP'` in `_buildDiscoveryMessage`, the inline `Duration(seconds: 3)` default of `restartDelay`, and the index-by-index `READY_SIGNAL` comparison in `_waitForReadySignal`; add `DISCOVERY_RESTART_DELAY` to `network_constants.dart`, skip the announcement when the IP is null, and compare with `listEquals`.
   - File(s): `lib/services/network/discovery_service.dart`, `lib/services/network/send_service.dart`, `lib/config/network_constants.dart`
 
-- [ ] **Linux notification icon looked up on every notification** - `LinuxNotificationBackend.show` calls `_iconPath()`, which runs a synchronous `existsSync` each time; resolve it once in `init` and keep it in a field.
+- [x] **Linux notification icon looked up on every notification** - `LinuxNotificationBackend.show` calls `_iconPath()`, which runs a synchronous `existsSync` each time; resolve it once in `init` and keep it in a field.
   - File(s): `lib/models/notifications/linux_notification_backend.dart`
 
 - [x] **`sendFile` returns the id it was given** - `SendService.sendFile`, `NetworkService.sendFile` and the `SendFileFunction` typedef return `Future<String>` holding the caller's own `transferId`; return `Future<void>` to make the contract honest.
