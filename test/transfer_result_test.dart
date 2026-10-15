@@ -47,12 +47,12 @@ void main() {
   test('a receiver that reports success makes the send succeed', () async {
     resultToSend = () => [RESULT_OK];
 
-    expect(await sender.sendFile('good', file.path, peer()), 'good');
+    await expectLater(sender.sendFile('good', file.path, peer()), completes);
   });
 
   test('an older receiver that sends no result is still treated as success', () async {
     resultToSend = () => null;
 
-    expect(await sender.sendFile('old', file.path, peer()), 'old');
+    await expectLater(sender.sendFile('old', file.path, peer()), completes);
   });
 }

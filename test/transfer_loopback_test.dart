@@ -90,11 +90,8 @@ void main() {
     final avatarFile = await makeFile('me.png', _png);
     final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice', profileImagePath: avatarFile.path));
 
-    final results = await Future.wait([
-      sender.sendFile('file-1', src.path, peer),
-      sender.sendAvatar(peer),
-    ]);
-    expect(results[1], isTrue);
+    final (_, avatarSent) = await (sender.sendFile('file-1', src.path, peer), sender.sendAvatar(peer)).wait;
+    expect(avatarSent, isTrue);
 
     await waitFor(() => received.isNotEmpty);
     expect(File(received.single).readAsBytesSync(), bytes);

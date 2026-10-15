@@ -46,9 +46,8 @@ class _FakeSend extends SendService {
   _FakeSend(this.calls, LocalIdentity identity) : super(identity: identity);
 
   @override
-  Future<String> sendFile(String transferId, String filePath, Peer receiver, {FileTransferProgressCallback? onProgress}) async {
+  Future<void> sendFile(String transferId, String filePath, Peer receiver, {FileTransferProgressCallback? onProgress}) async {
     calls.add('send $transferId');
-    return transferId;
   }
 
   @override

@@ -199,7 +199,7 @@ class NetworkService {
   }
 
   /// Send file to a peer. Delegates to SendService.
-  Future<String> sendFile(String transferId, String filePath, Peer receiver,
+  Future<void> sendFile(String transferId, String filePath, Peer receiver,
       {FileTransferProgressCallback? onProgress}) {
     // Delegate directly to SendService
     return _sendService.sendFile(transferId, filePath, receiver, onProgress: onProgress);

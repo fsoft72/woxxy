@@ -13,7 +13,7 @@ import 'network/send_service.dart';
 import '../config/transfer_constants.dart';
 
 /// Sends one file; returns when the transfer finished. Matches [NetworkService.sendFile] for one peer.
-typedef SendFileFunction = Future<String> Function(
+typedef SendFileFunction = Future<void> Function(
     String transferId, String filePath, FileTransferProgressCallback onProgress);
 
 /// Cancels an active transfer by id.

@@ -69,7 +69,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [ ] **Linux notification icon looked up on every notification** - `LinuxNotificationBackend.show` calls `_iconPath()`, which runs a synchronous `existsSync` each time; resolve it once in `init` and keep it in a field.
   - File(s): `lib/models/notifications/linux_notification_backend.dart`
 
-- [ ] **`sendFile` returns the id it was given** - `SendService.sendFile`, `NetworkService.sendFile` and the `SendFileFunction` typedef return `Future<String>` holding the caller's own `transferId`; return `Future<void>` to make the contract honest.
+- [x] **`sendFile` returns the id it was given** - `SendService.sendFile`, `NetworkService.sendFile` and the `SendFileFunction` typedef return `Future<String>` holding the caller's own `transferId`; return `Future<void>` to make the contract honest.
   - File(s): `lib/services/network/send_service.dart`, `lib/services/network_service.dart`, `lib/services/send_queue_controller.dart`
 
 - [ ] **Duplicated doc comment and missing class docs** - `FileHistoryEntry.speedMBps` has the same doc line twice, and public classes such as `Peer`, `User`, `SettingsService`, `ServerService`, `DiscoveryService`, `ReceiveService` and `SendService` have no class-level doc comment.

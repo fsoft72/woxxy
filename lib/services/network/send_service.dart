@@ -52,9 +52,9 @@ class SendService {
     if (!_liveTransfers.contains(transferId)) throw Exception('Transfer cancelled');
   }
 
-  /// Send file to a peer with progress tracking and cancellation support
-  /// Returns the transfer ID which can be used to cancel the transfer
-  Future<String> sendFile(String transferId, String filePath, Peer receiver,
+  /// Sends a file to a peer with progress tracking. Completes when the receiver has the file and
+  /// throws when the send failed or was cancelled with [cancelTransfer] and [transferId].
+  Future<void> sendFile(String transferId, String filePath, Peer receiver,
       {FileTransferProgressCallback? onProgress}) async {
     zprint('📤 Starting file transfer process for $filePath to ${receiver.name} (${receiver.id})');
     final file = File(filePath);
@@ -84,7 +84,6 @@ class SendService {
     } finally {
       _liveTransfers.remove(transferId);
     }
-    return transferId;
   }
 
   /// Sends the user's profile image as an avatar to a peer

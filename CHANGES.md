@@ -1,5 +1,9 @@
 # Changes Log
 
+## Return nothing from sendFile
+
+`SendService.sendFile`, `NetworkService.sendFile` and `SendFileFunction` return `Future<void>`: they complete when the receiver has the file and throw otherwise, instead of handing back the caller's own transfer id. Tests in `test/transfer_result_test.dart` (plus the fakes in the queue, injection and loopback tests).
+
 ## Send the MD5 after the data so a file is read once
 
 Discovery announcements now carry the transfer protocol version (`tv`, `TRANSFER_PROTOCOL_VERSION = 2`, kept in `Peer.transferVersion`). To a version 2 peer, `SendService` sends the header with `md5InTrailer: true` and no checksum, hashes the chunks while streaming them (`Md5Accumulator` in `funcs/hashing.dart`) and appends the 32-character hex digest after the data, so the file is read only once and the send starts at once. `ReceiveService` splits the bytes after the declared size into the trailer (anything longer is rejected), `FileTransfer` always hashes what it writes and `end(trailerMd5:)` verifies against the trailer. Peers that announce no version still get the checksum in the header. Tests in `test/md5_trailer_test.dart`, `test/discovery_protocol_test.dart`, `test/peer_manager_test.dart` and `test/hashing_test.dart`.

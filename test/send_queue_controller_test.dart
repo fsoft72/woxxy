@@ -61,7 +61,6 @@ void main() {
     final c = controller((id, path, onProgress) async {
       sent.add(path.split('/').last);
       onProgress(10, 10);
-      return id;
     });
     final folder = Directory('${tmp.path}/folder')..createSync();
 
@@ -76,7 +75,6 @@ void main() {
     final c = controller((id, path, onProgress) async {
       sent.add(path.split('/').last);
       onProgress(10, 10);
-      return id;
     });
 
     await c.addFiles([await makeFile('a.txt'), await makeFile('b.txt'), await makeFile('c.txt')]);
@@ -100,7 +98,6 @@ void main() {
         throw Exception('socket destroyed');
       }
       onProgress(10, 10);
-      return id;
     });
 
     await c.addFiles([await makeFile('a.txt')]);
@@ -120,7 +117,6 @@ void main() {
     final c = controller((id, path, onProgress) async {
       sent.add(path);
       onProgress(10, 10);
-      return id;
     });
     final files = [for (var i = 0; i < 40; i++) await makeFile('f$i.txt')];
 
@@ -135,7 +131,6 @@ void main() {
   test('a file moves from waiting to completed or failed', () async {
     final c = controller((id, path, onProgress) async {
       if (path.endsWith('bad.txt')) throw Exception('nope');
-      return id;
     });
     await c.addFiles([await makeFile('ok.txt'), await makeFile('bad.txt')]);
     expect(c.queue.first.status, anyOf(QueuedFileStatus.waiting, QueuedFileStatus.completed));
@@ -150,7 +145,6 @@ void main() {
     final c = controller((id, path, onProgress) async {
       if (path.endsWith('bad.txt')) throw Exception('peer vanished');
       sent.add(path.split('/').last);
-      return id;
     });
 
     await c.addFiles([await makeFile('bad.txt'), await makeFile('good.txt')]);
@@ -190,7 +184,6 @@ void main() {
     final c = controller((id, path, onProgress) async {
       sent.add(path.split('/').last);
       if (path.endsWith('a.txt')) await gate.future;
-      return id;
     });
 
     await c.addFiles([await makeFile('a.txt')]);
@@ -209,7 +202,6 @@ void main() {
         for (var i = 1; i <= 5000; i++) {
           onProgress(5000, i);
         }
-        return id;
       },
       throttle: ProgressThrottle(interval: const Duration(seconds: 1), clock: () => now),
     );
@@ -227,7 +219,6 @@ void main() {
     final gate = Completer<void>();
     final c = controller((id, path, onProgress) async {
       await gate.future;
-      return id;
     });
 
     await c.addFiles([await makeFile('a.txt')]);
@@ -255,7 +246,6 @@ void main() {
       onProgress(10, 0);
       await finish.future;
       onProgress(10, 10);
-      return id;
     });
 
     await c.addFiles([await makeFile('a.txt')]);
