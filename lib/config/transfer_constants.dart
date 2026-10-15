@@ -4,6 +4,14 @@
 const String TRANSFER_TYPE_FILE = 'FILE';
 const String TRANSFER_TYPE_AVATAR = 'AVATAR_FILE';
 
+/// Transfer protocol version this build accepts, announced in discovery. 1: the MD5 travels in the
+/// metadata header. 2: the sender may also send it as a trailer after the data
+/// ([MD5_TRAILER_LENGTH] hex characters), so the file is read only once.
+const int TRANSFER_PROTOCOL_VERSION = 2;
+
+/// Length of the MD5 trailer: the hex digest as ASCII
+const int MD5_TRAILER_LENGTH = 32;
+
 /// Ready signal bytes ("RDY" in ASCII) used for sender/receiver handshake
 const List<int> READY_SIGNAL = [0x52, 0x44, 0x59];
 const int READY_SIGNAL_LENGTH = 3;

@@ -39,6 +39,16 @@ void main() {
     }
   });
 
+  test('Md5Accumulator gives the digest of all the chunks', () {
+    final data = List.generate(100000, (i) => i % 251);
+    final accumulator = Md5Accumulator();
+    for (var i = 0; i < data.length; i += 4096) {
+      accumulator.add(data.sublist(i, i + 4096 > data.length ? data.length : i + 4096));
+    }
+
+    expect(accumulator.close(), md5.convert(data).toString());
+  });
+
   group('md5OfPathOrNull', () {
     test('hashes an existing file', () async {
       final file = File('${tmp.path}/a.bin')..writeAsBytesSync([1, 2, 3]);

@@ -1,5 +1,9 @@
 # Changes Log
 
+## Send the MD5 after the data so a file is read once
+
+Discovery announcements now carry the transfer protocol version (`tv`, `TRANSFER_PROTOCOL_VERSION = 2`, kept in `Peer.transferVersion`). To a version 2 peer, `SendService` sends the header with `md5InTrailer: true` and no checksum, hashes the chunks while streaming them (`Md5Accumulator` in `funcs/hashing.dart`) and appends the 32-character hex digest after the data, so the file is read only once and the send starts at once. `ReceiveService` splits the bytes after the declared size into the trailer (anything longer is rejected), `FileTransfer` always hashes what it writes and `end(trailerMd5:)` verifies against the trailer. Peers that announce no version still get the checksum in the header. Tests in `test/md5_trailer_test.dart`, `test/discovery_protocol_test.dart`, `test/peer_manager_test.dart` and `test/hashing_test.dart`.
+
 ## Keep received avatars in memory
 
 `ReceiveService` now routes each accepted transfer to an `_IncomingTransfer`: user files still go through `FileTransferManager`, avatars (at most 10 MB) are collected in a `BytesBuilder`, checked against their MD5 and handed to `AvatarStore` with that same hash. The temp folder, `AVATAR_TEMP_FOLDER` and the `directory` parameter of `FileTransferManager.add` are gone. A wrong avatar checksum is now reported to the sender with the failure byte. Tests in `test/transfer_loopback_test.dart`.

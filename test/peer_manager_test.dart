@@ -55,6 +55,13 @@ void main() {
     expect(updates, hasLength(1));
   });
 
+  test('a peer that announces a new transfer protocol version is updated', () {
+    manager.addPeer(_peer('p1'));
+    manager.addPeer(Peer(name: 'bob', id: 'p1', address: InternetAddress.loopbackIPv4, port: 8090, transferVersion: 2));
+
+    expect(manager.currentPeers.single.acceptsMd5Trailer, isTrue);
+  });
+
   test('peers silent for longer than the timeout are removed, active ones stay', () {
     manager.addPeer(_peer('quiet'));
     manager.addPeer(_peer('active'));

@@ -70,7 +70,8 @@ class SendService {
         throw Exception('Local IP address is unknown.');
       }
 
-      final metadata = await _createFileMetadata(file, transferId);
+      // A receiver that accepts the trailer gets the MD5 computed while streaming: one read only
+      final metadata = await _createFileMetadata(file, transferId, md5InTrailer: receiver.acceptsMd5Trailer);
       _throwIfCancelled(transferId);
       zprintLazy(() => "  [Send] Generated metadata: ${json.encode(metadata)}");
 
@@ -215,14 +216,15 @@ class SendService {
 
   /// Creates the metadata header of a transfer. The checksum is left out (null) when the file
   /// cannot be hashed, and the receiver then skips verification.
-  /// [knownChecksum] skips reading the file for the MD5.
+  /// [knownChecksum] skips reading the file for the MD5. With [md5InTrailer] the file is not hashed
+  /// here: the checksum is computed while streaming and sent after the data.
   Future<TransferMetadata> _createFileMetadata(File file, String transferId,
-      {String? knownChecksum, String type = TRANSFER_TYPE_FILE}) async {
+      {String? knownChecksum, String type = TRANSFER_TYPE_FILE, bool md5InTrailer = false}) async {
     final fileSize = await file.length();
     final filename = path.basename(file.path);
 
     var checksum = knownChecksum;
-    if (checksum == null) {
+    if (checksum == null && !md5InTrailer) {
       try {
         checksum = await md5OfFile(file);
       } catch (e) {
@@ -238,6 +240,7 @@ class SendService {
       md5Checksum: checksum,
       transferId: transferId,
       type: type,
+      md5InTrailer: md5InTrailer,
     );
   }
 
@@ -275,8 +278,10 @@ class SendService {
       onProgress?.call(fileSize, 0); // Initial progress
 
       // addStream pauses the file reader while the socket buffer is full (backpressure)
+      final trailerMd5 = metadata.md5InTrailer ? Md5Accumulator() : null;
       final chunks = file.openRead().map((chunk) {
         _throwIfCancelled(transferId);
+        trailerMd5?.add(chunk);
         bytesSent += chunk.length;
         onProgress?.call(fileSize, bytesSent);
         return chunk;
@@ -284,6 +289,7 @@ class SendService {
       await socket.addStream(chunks);
       // A cancel destroys the socket, which can end addStream without an error
       _throwIfCancelled(transferId);
+      if (trailerMd5 != null) socket.add(ascii.encode(trailerMd5.close()));
       await socket.flush();
       await _checkResult(socket, reader);
       onProgress?.call(fileSize, fileSize); // Final progress

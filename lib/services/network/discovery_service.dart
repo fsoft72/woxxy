@@ -9,6 +9,7 @@ import '../../models/peer_manager.dart';
 import '../../models/avatars.dart';
 import 'discovery_protocol.dart';
 import '../../config/network_constants.dart';
+import '../../config/transfer_constants.dart';
 
 // Define a type for the sendAvatar callback
 typedef SendAvatarCallback = Future<bool> Function(Peer receiver);
@@ -163,7 +164,11 @@ class DiscoveryService {
 
   Uint8List _buildDiscoveryMessage() =>
       encodeAnnounce(
-          name: identity.username, ip: identity.ipAddress ?? 'NO_IP', port: mainServerPort, avatarHash: identity.avatarHash);
+          name: identity.username,
+          ip: identity.ipAddress ?? 'NO_IP',
+          port: mainServerPort,
+          avatarHash: identity.avatarHash,
+          transferVersion: TRANSFER_PROTOCOL_VERSION);
 
   void _startDiscoveryListener(RawDatagramSocket socket) {
     zprint('👂 Starting discovery listener on port $discoveryPort...');
@@ -212,6 +217,7 @@ class DiscoveryService {
       address: InternetAddress(message.ip),
       port: message.port,
       avatarHash: message.avatarHash,
+      transferVersion: message.transferVersion,
     ));
   }
 

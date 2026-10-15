@@ -1,21 +1,9 @@
 import 'package:path/path.dart' as path;
 import 'dart:io';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:woxxy/config/transfer_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/filename.dart';
-
-/// Collects the single digest emitted by a chunked hash conversion.
-class _DigestSink implements Sink<Digest> {
-  Digest? digest;
-
-  @override
-  void add(Digest data) => digest = data;
-
-  @override
-  void close() {}
-}
+import 'package:woxxy/funcs/hashing.dart';
 
 /// Represents a single file transfer operation with progress tracking
 class FileTransfer {
@@ -40,11 +28,10 @@ class FileTransfer {
   /// Expected MD5 checksum of the file, as reported in metadata
   final String? expectedMd5;
 
-  /// Incremental MD5 state, fed chunk by chunk so the file is never held in memory
-  final _DigestSink _md5Sink = _DigestSink();
-  ByteConversionSink? _md5Input;
+  /// Incremental MD5 of everything written, so the file is never read back. Always computed,
+  /// because the checksum may also arrive after the data (trailer).
+  final Md5Accumulator _md5 = Md5Accumulator();
   int _unflushedBytes = 0; // Bytes added to the sink since the last flush
-  bool _calculatingMd5 = false; // Flag to indicate if we need to hash incoming data
 
   FileTransfer._internal({
     required this.sourceIp,
@@ -54,15 +41,7 @@ class FileTransfer {
     required this.duration,
     required this.senderUsername,
     required this.expectedMd5,
-  }) {
-    // Without an announced checksum there is nothing to verify (older senders sent a sentinel)
-    final expected = expectedMd5;
-    _calculatingMd5 = expected != null && expected.isNotEmpty && expected != LEGACY_CHECKSUM_ERROR;
-    if (_calculatingMd5) {
-      _md5Input = md5.startChunkedConversion(_md5Sink);
-      zprint(" M-> MD5 check required for $destinationFilename. Incremental hashing enabled.");
-    }
-  }
+  });
 
   /// Creates a new FileTransfer instance and prepares the file for writing.
   /// Returns null if the file cannot be created.
@@ -131,7 +110,7 @@ class FileTransfer {
   /// disk slows the sender down (through TCP) instead of filling memory.
   Future<void> write(List<int> binaryData) async {
     try {
-      _md5Input?.add(binaryData);
+      _md5.add(binaryData);
       fileSink.add(binaryData);
       _unflushedBytes += binaryData.length;
       if (_unflushedBytes < WRITE_FLUSH_THRESHOLD_BYTES) return;
@@ -166,9 +145,10 @@ class FileTransfer {
 
   /// Finalizes the transfer: closes the file and verifies the MD5. Has no side effects beyond the file itself;
   /// the caller decides about history and notifications.
+  /// [trailerMd5] is the checksum received after the data; it wins over [expectedMd5].
   /// Returns `true` if the transfer is considered successful (file closed, MD5 matches if applicable).
   /// Returns `false` if closing fails or the MD5 verification fails (the file is deleted in both cases).
-  Future<bool> end() async {
+  Future<bool> end({String? trailerMd5}) async {
     zprint("✅ Finalizing transfer for: $destinationFilename");
     try {
       await _closeSink();
@@ -178,25 +158,21 @@ class FileTransfer {
       return false;
     }
 
-    if (!_calculatingMd5) {
+    // Without an announced checksum there is nothing to verify (older senders sent a sentinel)
+    final expected = trailerMd5 ?? expectedMd5;
+    if (expected == null || expected.isEmpty || expected == LEGACY_CHECKSUM_ERROR) {
       zprint('   Skipping MD5 verification (not required or not possible).');
       return true;
     }
 
-    final actualMd5 = _finishMd5();
-    if (actualMd5 != expectedMd5) {
-      zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expectedMd5, Got: $actualMd5');
+    final actualMd5 = _md5.close();
+    if (actualMd5 != expected) {
+      zprint('   ❌ Final MD5 checksum MISMATCH! Expected: $expected, Got: $actualMd5');
       await _deleteFile();
       return false;
     }
     zprint('   ✅ Final MD5 checksum verified successfully.');
     return true;
-  }
-
-  /// Closes the incremental hash and returns the hex digest of everything written so far.
-  String _finishMd5() {
-    _md5Input!.close();
-    return _md5Sink.digest!.toString();
   }
 
   /// Helper method to safely delete the destination file.

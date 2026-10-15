@@ -29,6 +29,14 @@ void main() {
       expect((without as AnnounceMessage).avatarHash, isNull);
     });
 
+    test('announce carries the transfer protocol version, 1 when it is missing', () {
+      final v2 = decodeDiscoveryMessage(encodeAnnounce(name: 'a', ip: '1.1.1.1', port: 1, transferVersion: 2));
+      final old = decodeDiscoveryMessage(
+          utf8.encode(json.encode({'v': DISCOVERY_PROTOCOL_VERSION, 'type': 'announce', 'name': 'a', 'ip': '1.1.1.1', 'port': 1})));
+      expect((v2 as AnnounceMessage).transferVersion, 2);
+      expect((old as AnnounceMessage).transferVersion, 1);
+    });
+
     test('avatar request round trips', () {
       final decoded = decodeDiscoveryMessage(encodeAvatarRequest(ip: '10.0.0.2', port: 8090));
       expect(decoded, isA<AvatarRequestMessage>());

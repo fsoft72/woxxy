@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -22,5 +23,32 @@ Future<String?> md5OfPathOrNull(String? path, {int? maxBytes}) async {
   } catch (e) {
     zprint('⚠️ Could not hash $path: $e');
     return null;
+  }
+}
+
+/// Collects the single digest emitted by a chunked hash conversion.
+class _DigestSink implements Sink<Digest> {
+  Digest? digest;
+
+  @override
+  void add(Digest data) => digest = data;
+
+  @override
+  void close() {}
+}
+
+/// Incremental MD5: feed the content chunk by chunk with [add], then read the hex digest once
+/// with [close]. Nothing is kept in memory but the hash state.
+class Md5Accumulator {
+  final _DigestSink _sink = _DigestSink();
+  late final ByteConversionSink _input = md5.startChunkedConversion(_sink);
+
+  /// Adds the next chunk of the content.
+  void add(List<int> chunk) => _input.add(chunk);
+
+  /// Ends the content and returns its hex MD5. Call it only once.
+  String close() {
+    _input.close();
+    return _sink.digest!.toString();
   }
 }

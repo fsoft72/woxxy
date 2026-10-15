@@ -78,14 +78,15 @@ class FileTransferManager {
   /// Returns true if the transfer existed and ended successfully (MD5 check passed).
   /// Returns false otherwise (transfer not found, file error, MD5 mismatch); [FileTransfer.end]
   /// has then already deleted the file.
-  Future<bool> end(String key) async {
+  /// [trailerMd5] is the checksum the sender appended after the data, if any.
+  Future<bool> end(String key, {String? trailerMd5}) async {
     final transfer = _files.remove(key);
     if (transfer == null) {
       zprint("⚠️ Attempted to end non-existent transfer key: $key");
       return false;
     }
     try {
-      final success = await transfer.end();
+      final success = await transfer.end(trailerMd5: trailerMd5);
       zprint(success ? "✅ Transfer ended successfully for key '$key'." : "❌ Transfer end failed for key '$key'.");
       return success;
     } catch (e, s) {

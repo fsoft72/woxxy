@@ -25,6 +25,10 @@ class TransferMetadata {
   /// [TRANSFER_TYPE_FILE] or [TRANSFER_TYPE_AVATAR]
   final String type;
 
+  /// True when the MD5 follows the data as a trailer of [MD5_TRAILER_LENGTH] bytes instead of
+  /// being in [md5Checksum]. Only sent to receivers that announce [TRANSFER_PROTOCOL_VERSION] 2.
+  final bool md5InTrailer;
+
   const TransferMetadata({
     required this.name,
     required this.size,
@@ -33,6 +37,7 @@ class TransferMetadata {
     this.md5Checksum,
     this.transferId,
     this.type = TRANSFER_TYPE_FILE,
+    this.md5InTrailer = false,
   });
 
   /// True when the transfer carries the sender's profile picture instead of a user file.
@@ -47,6 +52,7 @@ class TransferMetadata {
         'md5Checksum': md5Checksum,
         'transferId': transferId,
         'type': type,
+        if (md5InTrailer) 'md5InTrailer': true,
       };
 
   /// Reads a received header. Missing optional values get the defaults older senders relied on;
@@ -60,6 +66,7 @@ class TransferMetadata {
       md5Checksum: _read<String>(json, 'md5Checksum'),
       transferId: _read<String>(json, 'transferId'),
       type: _read<String>(json, 'type') ?? TRANSFER_TYPE_FILE,
+      md5InTrailer: _read<bool>(json, 'md5InTrailer') ?? false,
     );
   }
 

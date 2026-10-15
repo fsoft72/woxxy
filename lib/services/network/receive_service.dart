@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -54,15 +55,22 @@ class ReceiveService {
     _IncomingTransfer? incoming; // Set once metadata is accepted
     var receivedBytes = 0;
     var dataExpected = 0;
+    var trailerExpected = 0; // MD5_TRAILER_LENGTH when the checksum follows the data
+    final trailer = BytesBuilder();
     bool? outcome; // Reported to the sender; stays null when no transfer was accepted
 
+    // File bytes go to the transfer, the bytes after them (if announced) to the trailer
     Future<void> receive(Uint8List data) async {
-      if (data.isEmpty) return;
-      if (receivedBytes + data.length > dataExpected) {
+      final dataPart = data.length.clamp(0, dataExpected - receivedBytes);
+      if (dataPart > 0) {
+        await incoming!.write(dataPart == data.length ? data : Uint8List.sublistView(data, 0, dataPart));
+        receivedBytes += dataPart;
+      }
+      if (dataPart == data.length) return;
+      if (trailer.length + data.length - dataPart > trailerExpected) {
         throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
       }
-      await incoming!.write(data);
-      receivedBytes += data.length;
+      trailer.add(Uint8List.sublistView(data, dataPart));
     }
 
     try {
@@ -80,18 +88,19 @@ class ReceiveService {
         if (incoming == null) return; // Rejected, socket already destroyed
 
         dataExpected = info.size;
+        trailerExpected = info.md5InTrailer ? MD5_TRAILER_LENGTH : 0;
         await receive(frame.remainingData);
       }
 
       zprint('📊 Socket closed after ${stopwatch.elapsedMilliseconds}ms. Received $receivedBytes/$dataExpected bytes.');
       if (incoming == null) {
         zprint("ℹ️ Socket closed before any metadata was accepted.");
-      } else if (receivedBytes < dataExpected) {
-        zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
+      } else if (receivedBytes < dataExpected || trailer.length < trailerExpected) {
+        zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected, trailer ${trailer.length}/$trailerExpected). Cleaning up...');
         await incoming.abort();
         outcome = false;
       } else {
-        outcome = await incoming.finish();
+        outcome = await incoming.finish(trailerMd5: trailerExpected > 0 ? latin1.decode(trailer.takeBytes()) : null);
       }
     } catch (e, s) {
       zprint('❌ Error during transfer from $sourceIp: $e\n$s');
@@ -183,8 +192,9 @@ abstract class _IncomingTransfer {
   /// Stores a chunk; throws when it cannot be stored.
   Future<void> write(Uint8List data);
 
-  /// All declared bytes arrived: verifies and delivers them. Returns true on success.
-  Future<bool> finish();
+  /// All declared bytes arrived: verifies them against [trailerMd5] (the checksum sent after the
+  /// data) or the header checksum, and delivers them. Returns true on success.
+  Future<bool> finish({String? trailerMd5});
 
   /// The transfer failed or ended early: drops what was received.
   Future<void> abort();
@@ -206,9 +216,9 @@ class _IncomingFile implements _IncomingTransfer {
   }
 
   @override
-  Future<bool> finish() async {
+  Future<bool> finish({String? trailerMd5}) async {
     final transfer = manager[key]!;
-    if (!await manager.end(key)) {
+    if (!await manager.end(key, trailerMd5: trailerMd5)) {
       zprint('❌ File transfer finalization failed (end() returned false).');
       return false;
     }
@@ -239,10 +249,10 @@ class _IncomingAvatar implements _IncomingTransfer {
   Future<void> write(Uint8List data) async => _bytes.add(data);
 
   @override
-  Future<bool> finish() async {
+  Future<bool> finish({String? trailerMd5}) async {
     final bytes = _bytes.takeBytes();
     final hash = md5.convert(bytes).toString();
-    final expected = info.md5Checksum;
+    final expected = trailerMd5 ?? info.md5Checksum;
     if (expected != null && expected.isNotEmpty && expected != LEGACY_CHECKSUM_ERROR && expected != hash) {
       zprint('❌ Avatar from $sourceIp does not match its checksum.');
       return false;
