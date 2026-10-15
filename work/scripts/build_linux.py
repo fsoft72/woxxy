@@ -78,7 +78,15 @@ def copy_bundle_to_ramdisk():
         print(f"{RAMDISK_DIR} not found, skipping the copy to the ramdisk.")
         exit(1)
 
-    shutil.copytree(BUNDLE_DIR, RAMDISK_DIR, dirs_exist_ok=True)
+    # Copy entry by entry: copytree() would also run copystat() on RAMDISK_DIR itself,
+    # which fails with "Operation not permitted" on a mount point owned by root.
+    for name in os.listdir(BUNDLE_DIR):
+        src = os.path.join(BUNDLE_DIR, name)
+        dst = os.path.join(RAMDISK_DIR, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, dst)
     print(f"Release bundle copied to {RAMDISK_DIR}")
 
 
