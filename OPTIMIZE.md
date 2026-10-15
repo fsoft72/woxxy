@@ -60,7 +60,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Small cleanups in `HomePage`** - `_initializeApp` only calls `_startNetwork`, `dispose` is an empty override, the `mounted` check in `onDestinationSelected` is unnecessary, and the IP condition is evaluated twice in `build`; remove the wrappers and keep one local `ip` variable.
   - File(s): `lib/screens/home_page.dart`
 
-- [ ] **Debug test-notification button inside the production widget** - `HomeContent` hard-codes `/tmp/test.txt` and fake values behind `kDebugMode`; move it to a debug-only menu or delete it so `HomeContent` has a single responsibility (the peer list).
+- [x] **Debug test-notification button inside the production widget** - `HomeContent` hard-codes `/tmp/test.txt` and fake values behind `kDebugMode`; move it to a debug-only menu or delete it so `HomeContent` has a single responsibility (the peer list).
   - File(s): `lib/screens/home.dart`
 
 - [x] **Magic values in discovery and the send handshake** - `'NO_IP'` in `_buildDiscoveryMessage`, the inline `Duration(seconds: 3)` default of `restartDelay`, and the index-by-index `READY_SIGNAL` comparison in `_waitForReadySignal`; add `DISCOVERY_RESTART_DELAY` to `network_constants.dart`, skip the announcement when the IP is null, and compare with `listEquals`.

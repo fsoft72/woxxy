@@ -1,20 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import '../services/network_service.dart';
 import '../services/send_queues.dart';
 import '../models/file_received_event.dart';
 import '../models/peer.dart';
-import '../models/notification_manager.dart';
 import '../funcs/ui_helpers.dart';
 import '../widgets/peer_avatar.dart';
 import 'peer_details.dart';
 
 class HomeContent extends StatefulWidget {
   final NetworkService networkService;
-  final NotificationManager notificationManager;
 
   /// Queues the peer pages send through; they keep running when a page is closed
   final SendQueues sendQueues;
@@ -22,7 +19,6 @@ class HomeContent extends StatefulWidget {
   const HomeContent({
     super.key,
     required this.networkService,
-    required this.notificationManager,
     required this.sendQueues,
   });
 
@@ -51,67 +47,45 @@ class _HomeContentState extends State<HomeContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (kDebugMode)
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ElevatedButton.icon(
-              onPressed: () {
-                widget.notificationManager.showFileReceivedNotification(
-                  filePath: '/tmp/test.txt',
-                  senderUsername: 'Test User',
-                  fileSizeMB: 10.5,
-                  speedMBps: 5.2,
+    return StreamBuilder<List<Peer>>(
+      stream: widget.networkService.peerStream,
+      builder: (context, snapshot) {
+        // The stream is seeded, so there is always data; the list starts empty
+        final peers = snapshot.data ?? widget.networkService.currentPeers;
+
+        if (peers.isEmpty) {
+          return const Center(
+            child: Text('No other peers found on the network'),
+          );
+        }
+        return ListView.builder(
+          itemCount: peers.length,
+          itemBuilder: (context, index) {
+            final peer = peers[index];
+            return ListTile(
+              leading: PeerAvatarWidget(
+                peer: peer,
+                avatarStore: widget.networkService.avatarStore,
+                size: 40,
+              ),
+              title: Text(peer.name),
+              subtitle: Text('${peer.address.address}:${peer.port}'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => PeerDetailPage(
+                      peer: peer,
+                      networkService: widget.networkService,
+                      sendQueue: widget.sendQueues.forPeer(peer),
+                    ),
+                  ),
                 );
               },
-              icon: const Icon(Icons.notification_add),
-              label: const Text('Test Notification'),
-            ),
-          ),
-        Expanded(
-          child: StreamBuilder<List<Peer>>(
-            stream: widget.networkService.peerStream,
-            builder: (context, snapshot) {
-              // The stream is seeded, so there is always data; the list starts empty
-              final peers = snapshot.data ?? widget.networkService.currentPeers;
-
-              if (peers.isEmpty) {
-                return const Center(
-                  child: Text('No other peers found on the network'),
-                );
-              }
-              return ListView.builder(
-                itemCount: peers.length,
-                itemBuilder: (context, index) {
-                  final peer = peers[index];
-                  return ListTile(
-                    leading: PeerAvatarWidget(
-                      peer: peer,
-                      avatarStore: widget.networkService.avatarStore,
-                      size: 40,
-                    ),
-                    title: Text(peer.name),
-                    subtitle: Text('${peer.address.address}:${peer.port}'),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => PeerDetailPage(
-                            peer: peer,
-                            networkService: widget.networkService,
-                            sendQueue: widget.sendQueues.forPeer(peer),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+            );
+          },
+        );
+      },
     );
   }
 }

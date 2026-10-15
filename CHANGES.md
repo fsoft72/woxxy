@@ -1,5 +1,9 @@
 # Changes Log
 
+## Remove the debug notification button from the peer list
+
+`HomeContent` no longer has the `kDebugMode` "Test Notification" button with its fake `/tmp/test.txt` values, so it only shows the peer list (the single-child `Column` went too) and no longer needs the `NotificationManager`. Test in `test/home_content_test.dart`.
+
 ## Remove the leftover wrappers of HomePage
 
 `HomePage` calls `_startNetwork` directly (no `_initializeApp` wrapper), drops the empty `dispose` override and the useless `mounted` check of the navigation bar; the IP is already read once by the new `ValueListenableBuilder`. The network fakes of the injection test moved to `test/support/fake_network.dart` so the new `test/home_page_test.dart` can start `HomePage` without sockets (address shown and updated, Retry after a failed start, tab switching).

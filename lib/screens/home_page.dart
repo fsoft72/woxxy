@@ -85,7 +85,6 @@ class _HomePageState extends State<HomePage> {
       HistoryScreen(history: widget.services.history),
       HomeContent(
         networkService: _networkService,
-        notificationManager: widget.services.notificationManager,
         sendQueues: widget.services.sendQueues,
       ),
       SettingsScreen(

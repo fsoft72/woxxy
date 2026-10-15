@@ -7,7 +7,6 @@ import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/file_received_event.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
-import 'package:woxxy/models/notification_manager.dart';
 import 'package:woxxy/screens/home.dart';
 import 'package:woxxy/services/network_service.dart';
 import 'package:woxxy/services/send_queues.dart';
@@ -26,7 +25,7 @@ void main() {
   const event = FileReceivedEvent(filePath: '/tmp/a/report.pdf', senderUsername: 'alice', fileSize: 10, speedMBps: 1);
 
   testWidgets('shows a snackbar for a received file', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
 
     network.handleFileReceived(event);
     await tester.pump();
@@ -35,7 +34,7 @@ void main() {
   });
 
   testWidgets('does not leak the subscription after the widget is disposed', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
     expect(network.hasFileReceivedListeners, isTrue);
 
     await tester.pumpWidget(host(const SizedBox()));
@@ -43,9 +42,9 @@ void main() {
   });
 
   testWidgets('remounting does not duplicate snackbars', (tester) async {
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
     await tester.pumpWidget(host(const SizedBox()));
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
 
     network.handleFileReceived(event);
     await tester.pump();
@@ -59,7 +58,7 @@ void main() {
     zprintSink = lines.add;
     addTearDown(() => zprintSink = original);
 
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
     await tester.pump();
 
     expect(find.text('No other peers found on the network'), findsOneWidget);
@@ -71,10 +70,18 @@ void main() {
     peers.addPeer(Peer(name: 'carol', id: '10.0.0.9', address: InternetAddress('10.0.0.9'), port: 8090));
     network = testNetworkService(peerManager: peers);
 
-    await tester.pumpWidget(host(HomeContent(networkService: network, notificationManager: NotificationManager(), sendQueues: SendQueues(network))));
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
     await tester.pump();
 
     expect(find.text('carol'), findsOneWidget);
     expect(find.text('No other peers found on the network'), findsNothing);
+  });
+
+  testWidgets('shows only the peer list, without debug buttons', (tester) async {
+    await tester.pumpWidget(host(HomeContent(networkService: network, sendQueues: SendQueues(network))));
+
+    expect(find.text('Test Notification'), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
+    expect(find.text('No other peers found on the network'), findsOneWidget);
   });
 }
