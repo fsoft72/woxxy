@@ -1065,3 +1065,11 @@ Fixed a critical issue where avatar transfers would fail on Windows with 0 bytes
 - Display peer avatars in lists and detail screens
 - Clean up temporary files properly
 - Work seamlessly between Linux, Windows, and other platforms
+
+## Android build toolchain upgrade
+
+- Gradle wrapper 8.3 -> 8.14
+- Android Gradle Plugin 8.2.1 -> 8.11.1
+- Kotlin plugin 1.8.22 -> 2.2.20
+- compileSdk 35 -> 36, versionCode bumped by the publish script
+- Flutter migrator flags in gradle.properties and analyzer excludes in analysis_options.yaml
