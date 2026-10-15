@@ -18,7 +18,6 @@ void main() {
           size: size,
           downloadPath: tmp.path,
           senderUsername: 'bob',
-          metadata: {},
           expectedMd5: md5Sum))!;
 
   test('verifies a checksum computed incrementally over many chunks', () async {
@@ -55,7 +54,7 @@ void main() {
 
   test('without a checksum the transfer is accepted as is', () async {
     final transfer = await FileTransfer.start(
-        sourceIp: 'k', originalFilename: 'nohash.bin', size: 2, downloadPath: tmp.path, senderUsername: 'bob', metadata: {});
+        sourceIp: 'k', originalFilename: 'nohash.bin', size: 2, downloadPath: tmp.path, senderUsername: 'bob');
     await transfer!.write([1, 2]);
     expect(await transfer.end(), isTrue);
   });

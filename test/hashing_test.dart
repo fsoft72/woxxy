@@ -31,7 +31,6 @@ void main() {
           size: 3,
           downloadPath: tmp.path,
           senderUsername: 'bob',
-          metadata: {},
           expectedMd5: expected))!;
       await transfer.write([1, 2, 3]);
 

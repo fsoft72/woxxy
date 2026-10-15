@@ -19,7 +19,7 @@ class _DigestSink implements Sink<Digest> {
 
 /// Represents a single file transfer operation with progress tracking
 class FileTransfer {
-  /// IP address of the source sending the file (used as the key in FileTransferManager)
+  /// IP address the connection of this transfer came from
   final String sourceIp;
 
   /// The filename on the local filesystem where the file will be saved
@@ -40,9 +40,6 @@ class FileTransfer {
   /// Expected MD5 checksum of the file, as reported in metadata
   final String? expectedMd5;
 
-  /// Full metadata map received from sender at the beginning of the transfer
-  final Map<String, dynamic> metadata;
-
   /// Incremental MD5 state, fed chunk by chunk so the file is never held in memory
   final _DigestSink _md5Sink = _DigestSink();
   ByteConversionSink? _md5Input;
@@ -56,7 +53,6 @@ class FileTransfer {
     required this.fileSink,
     required this.duration,
     required this.senderUsername,
-    required this.metadata, // Initialize metadata
     required this.expectedMd5,
   }) {
     // Without an announced checksum there is nothing to verify (older senders sent a sentinel)
@@ -77,7 +73,6 @@ class FileTransfer {
     required int size,
     required String downloadPath,
     required String senderUsername,
-    required Map<String, dynamic> metadata,
     String? expectedMd5,
   }) async {
     try {
@@ -86,7 +81,6 @@ class FileTransfer {
       zprint("   Size: $size bytes");
       zprint("   Sender: $senderUsername");
       zprint("   Expected MD5: $expectedMd5");
-      zprintLazy(() => "   Metadata: $metadata");
 
       // Ensure download directory exists
       Directory dir = Directory(downloadPath);
@@ -124,7 +118,6 @@ class FileTransfer {
         fileSink: sink,
         duration: watch,
         senderUsername: senderUsername,
-        metadata: metadata, // Store metadata
         expectedMd5: expectedMd5,
       );
     } catch (e, s) {

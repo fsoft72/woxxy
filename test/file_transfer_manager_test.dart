@@ -37,6 +37,12 @@ void main() {
     expect(File(path.join(tmp.path, 'b.txt')).readAsBytesSync(), [4, 5, 6]);
   });
 
+  test('the transfer keeps the address of the connection, not the key', () async {
+    expect(await manager.add('9.9.9.9#x', meta('x.txt', 1), sourceIp: '9.9.9.9'), isTrue);
+    expect(manager.files['9.9.9.9#x']!.sourceIp, '9.9.9.9');
+    await manager.handleSocketClosure('9.9.9.9#x');
+  });
+
   test('a duplicate key is rejected and does not replace the active transfer', () async {
     expect(await manager.add('k', meta('a.txt', 1), sourceIp: '1.1.1.1'), isTrue);
     final original = manager.files['k'];

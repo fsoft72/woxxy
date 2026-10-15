@@ -1,5 +1,9 @@
 # Changes Log
 
+## Drop the unused metadata map of FileTransfer
+
+`FileTransfer.metadata` (stored, never read) and the matching `start` parameter are gone, and the docs of `sourceIp` and of the manager key (`<sourceIp>#<transferId>`) are correct again. The `sourceIp ?? key` fallback and the redundant `md5Checksum` parameter already went with `TransferMetadata`. Test in `test/file_transfer_manager_test.dart`.
+
 ## Describe the transfer header with a TransferMetadata class
 
 The new `lib/models/transfer_metadata.dart` holds the header fields with `toJson`/`fromJson` (defaults for older senders, `FormatException` for a value of the wrong type). `SendService` builds it, `ReceiveService` reads it, and `FileTransferManager.add` takes it instead of name, size, sender, map and checksum (`sourceIp` is now required). Tests in `test/transfer_metadata_test.dart`, `test/file_transfer_manager_test.dart` and `test/transfer_loopback_test.dart`.

@@ -16,7 +16,8 @@ class FileTransferManager {
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
-  /// `key` uniquely identifies the transfer (the sender's transferId); `sourceIp` is the sender address.
+  /// `key` uniquely identifies the transfer (`<sourceIp>#<sender transferId>`); `sourceIp` is the address
+  /// the connection came from.
   /// `directory` overrides the download path (used for temporary avatar files).
   Future<bool> add(String key, TransferMetadata metadata, {required String sourceIp, String? directory}) async {
     try {
@@ -33,7 +34,6 @@ class FileTransferManager {
         size: metadata.size,
         downloadPath: directory ?? downloadPath,
         senderUsername: metadata.senderUsername,
-        metadata: metadata.toJson(),
         expectedMd5: metadata.md5Checksum,
       );
 

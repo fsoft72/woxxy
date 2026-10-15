@@ -36,7 +36,7 @@ void main() {
     final downloads = Directory(path.join(root.path, 'downloads'));
     try {
       final transfer = await FileTransfer.start(
-          sourceIp: 'k', originalFilename: '../escaped.txt', size: 1, downloadPath: downloads.path, senderUsername: 'bob', metadata: {});
+          sourceIp: 'k', originalFilename: '../escaped.txt', size: 1, downloadPath: downloads.path, senderUsername: 'bob');
       expect(transfer, isNotNull);
       expect(path.dirname(transfer!.destinationFilename), downloads.path);
       await transfer.fileSink.close();
