@@ -4,6 +4,7 @@ import '../models/history.dart';
 import '../funcs/file_opener.dart';
 import '../funcs/format.dart';
 
+/// The History tab: received files, newest first; swipe to remove, tap the folder to open it.
 class HistoryScreen extends StatelessWidget {
   final FileHistory history;
 

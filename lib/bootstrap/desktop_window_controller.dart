@@ -6,10 +6,19 @@ import 'desktop_shell.dart';
 
 /// The window and tray calls the controller needs; replaceable in tests.
 abstract class DesktopWindow {
+  /// Hides the main window (the app keeps running in the tray).
   Future<void> hide();
+
+  /// True when the main window is shown.
   Future<bool> isVisible();
+
+  /// Shows the main window.
   Future<void> show();
+
+  /// Brings the main window to the front.
   Future<void> focus();
+
+  /// Opens the context menu of the tray icon.
   Future<void> popUpTrayMenu();
 }
 

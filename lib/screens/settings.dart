@@ -17,6 +17,7 @@ const Duration USERNAME_SAVE_DELAY = Duration(milliseconds: 600);
 /// user when the change was refused (the screen then goes back to the previous values).
 typedef UserUpdateHandler = Future<String?> Function(User updated);
 
+/// The Settings tab: profile picture, username and download folder.
 class SettingsScreen extends StatefulWidget {
   final User user;
   final UserUpdateHandler onUserUpdated;

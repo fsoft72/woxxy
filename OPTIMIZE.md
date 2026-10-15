@@ -72,5 +72,5 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **`sendFile` returns the id it was given** - `SendService.sendFile`, `NetworkService.sendFile` and the `SendFileFunction` typedef return `Future<String>` holding the caller's own `transferId`; return `Future<void>` to make the contract honest.
   - File(s): `lib/services/network/send_service.dart`, `lib/services/network_service.dart`, `lib/services/send_queue_controller.dart`
 
-- [ ] **Duplicated doc comment and missing class docs** - `FileHistoryEntry.speedMBps` has the same doc line twice, and public classes such as `Peer`, `User`, `SettingsService`, `ServerService`, `DiscoveryService`, `ReceiveService` and `SendService` have no class-level doc comment.
+- [x] **Duplicated doc comment and missing class docs** - `FileHistoryEntry.speedMBps` has the same doc line twice, and public classes such as `Peer`, `User`, `SettingsService`, `ServerService`, `DiscoveryService`, `ReceiveService` and `SendService` have no class-level doc comment.
   - File(s): `lib/models/history.dart`, `lib/models/peer.dart`, `lib/models/user.dart`, `lib/services/settings_service.dart`, `lib/services/network/*.dart`

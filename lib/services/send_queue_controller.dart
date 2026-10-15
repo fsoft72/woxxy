@@ -47,8 +47,13 @@ class QueuedFile {
 
   QueuedFile(this.path, this.name, this.size);
 
+  /// Waiting, completed or failed.
   QueuedFileStatus get status => _status;
+
+  /// True once the file arrived.
   bool get isCompleted => _status == QueuedFileStatus.completed;
+
+  /// True when the send failed; see [errorMessage].
   bool get isFailed => _status == QueuedFileStatus.failed;
 
   /// Why the send failed; null unless [isFailed].
@@ -96,10 +101,12 @@ class SendQueueController extends ChangeNotifier {
 
   /// Files already sent or failed, oldest first.
   UnmodifiableListView<QueuedFile> get completed => UnmodifiableListView(_completed);
+  /// Name of the file being sent (or last sent).
   String get currentFileName => _currentFileName;
 
   /// Progress of the current file, 0 to 100.
   double get progress => _progress;
+  /// Speed of the current file, in MB/s.
   double get speedMBps => _speedMBps;
 
   /// What the current file is doing; [SendPhase.idle] when nothing is being sent.
@@ -110,6 +117,7 @@ class SendQueueController extends ChangeNotifier {
 
   /// True from the start of a file until its first progress report.
   bool get isPreparing => _phase == SendPhase.preparing;
+  /// Files sent successfully since the last [cancelAll].
   int get totalCompleted => _totalCompleted;
 
   /// The same messages as [onMessage], for screens that come and go while the queue keeps running.

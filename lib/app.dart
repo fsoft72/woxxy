@@ -4,6 +4,7 @@ import 'app_services.dart';
 import 'models/user.dart';
 import 'screens/home_page.dart';
 
+/// The root widget: theme and [HomePage].
 class MyApp extends StatelessWidget {
   final User initialUser; // Receive initial user data
   final AppServices services;

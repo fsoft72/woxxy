@@ -1,3 +1,4 @@
+/// The local user: display name, profile picture and download folder, as stored in the settings.
 class User {
   final String username;
   final String? profileImage;
@@ -9,7 +10,7 @@ class User {
     required this.defaultDownloadDirectory,
   });
 
-  // Factory constructor to create a User from JSON
+  /// Reads a user from JSON; a missing download folder becomes empty (the default folder).
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       username: json['username'] as String,
@@ -19,7 +20,7 @@ class User {
     );
   }
 
-  // Convert User instance to JSON
+  /// The user as JSON.
   Map<String, dynamic> toJson() {
     return {
       'username': username,

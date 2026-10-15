@@ -18,6 +18,8 @@ import '../../config/network_constants.dart';
 /// Callback function type for file transfer progress updates
 typedef FileTransferProgressCallback = void Function(int totalSize, int bytesSent);
 
+/// Sends files and the local avatar to peers over TCP: metadata header, ready signal, data,
+/// optional MD5 trailer and the result byte of the receiver.
 class SendService {
   /// Local address, name and avatar written into the metadata of every transfer
   final LocalIdentity identity;
@@ -302,6 +304,7 @@ class SendService {
     }
   }
 
+  /// Cancels every send that is still running.
   Future<void> dispose() async {
     zprint('🛑 Disposing SendService...');
     // Close any remaining active transfer sockets

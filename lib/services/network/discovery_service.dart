@@ -11,9 +11,11 @@ import 'discovery_protocol.dart';
 import '../../config/network_constants.dart';
 import '../../config/transfer_constants.dart';
 
-// Define a type for the sendAvatar callback
+/// Sends the local avatar to [receiver]; true when it arrived.
 typedef SendAvatarCallback = Future<bool> Function(Peer receiver);
 
+/// Announces this device on the LAN over UDP, registers the peers that announce themselves and
+/// answers avatar requests.
 class DiscoveryService {
   final int discoveryPort;
   final int mainServerPort; // Port where the main TCP server listens 
@@ -86,6 +88,7 @@ class DiscoveryService {
     _broadcastAnnouncement(); // Do not wait a full interval to become visible
   }
 
+  /// Stops announcing and closes the socket for good.
   Future<void> dispose() async {
     zprint('🛑 Disposing DiscoveryService...');
     _running = false;
@@ -248,7 +251,7 @@ class DiscoveryService {
     unawaited(sendAvatarCallback(requesterPeer)); // Failures are logged inside the callback
   }
 
-  // Method called by PeerManager (via NetworkService facade) to initiate an avatar request
+  /// Asks [peer] to send its avatar to this device (used by [PeerManager]).
   void requestAvatar(Peer peer) {
     final localIp = identity.ipAddress;
     if (localIp == null) {

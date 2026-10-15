@@ -15,6 +15,7 @@ import 'history.dart';
 import 'home.dart';
 import 'settings.dart';
 
+/// Main screen: starts the network, then shows the History, Home and Settings tabs.
 class HomePage extends StatefulWidget {
   final User initialUser; // Receive initial user data
   final AppServices services;

@@ -36,6 +36,7 @@ class NetworkStartException implements Exception {
 /// Resolves the local IPv4 address used to announce this device.
 typedef IpResolver = Future<String?> Function();
 
+/// Facade over discovery, the transfer server and the senders: the one network object the app uses.
 class NetworkService {
   // --- Dependencies & State ---
   late final PeerManager _peerManager;
@@ -63,7 +64,10 @@ class NetworkService {
   // --- Public Streams & Getters ---
   /// Avatar cache shared with the widgets that draw peer avatars
   AvatarStore get avatarStore => _avatarStore;
+  /// The peer list, emitted again on every change.
   Stream<List<Peer>> get peerStream => _peerManager.peerStream;
+
+  /// The peers known right now.
   List<Peer> get currentPeers => _peerManager.currentPeers;
   /// Emits one typed event for every file that was received and verified
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
@@ -172,6 +176,7 @@ class NetworkService {
     }
   }
 
+  /// Stops every service; the instance cannot be started again.
   Future<void> dispose() async {
     zprint('🛑 Disposing NetworkService Facade...');
     // Dispose in reverse order of dependency/start
@@ -188,12 +193,14 @@ class NetworkService {
 
   // --- Public Methods ---
 
+  /// Announces [username] from now on (an empty name becomes the default one).
   void setUsername(String username) {
     if (username.isEmpty) zprint("⚠️ Attempted to set empty username. Using default.");
     _identity.username = username; // The identity falls back to the default name when empty
     zprint("👤 Username updated to: ${_identity.username}");
   }
 
+  /// Announces the picture at [imagePath] (null for none); its hash is computed in the background.
   void setProfileImagePath(String? imagePath) {
     if (imagePath == _identity.profileImagePath) return; // Same picture: nothing to hash again
     _identity.profileImagePath = imagePath;
@@ -232,7 +239,7 @@ class NetworkService {
     _discoveryService.restart().catchError((Object e) => zprint('❌ Could not restart discovery after IP change: $e'));
   }
 
-  // Callback for ReceiveService to notify the facade when a file is fully received
+  /// Called by the receiver for every file that was stored and verified.
   @visibleForTesting
   void handleFileReceived(FileReceivedEvent event) {
     zprint('🎉 Facade notified: File received from ${event.senderUsername} at ${event.filePath}');

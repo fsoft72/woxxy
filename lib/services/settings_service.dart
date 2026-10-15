@@ -2,11 +2,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/network_constants.dart';
 import '../models/user.dart';
 
+/// Loads and saves the [User] settings in SharedPreferences.
 class SettingsService {
   static const String _usernameKey = 'username';
   static const String _profileImageKey = 'profile_image';
   static const String _downloadDirKey = 'download_directory';
 
+  /// Reads the stored settings, with defaults for the values never saved.
   Future<User> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     return User(

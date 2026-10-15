@@ -1,5 +1,9 @@
 # Changes Log
 
+## Document the public classes and members
+
+The duplicated doc line of `FileHistoryEntry.speedMBps` is gone, and the public classes, typedefs and members that had no doc comment (or only a `//` line) now have one: `MyApp`, `User`, `FileHistoryEntry`, the screens, `SettingsService`, `ServerService`, `DiscoveryService`, `SendService`, `NetworkService`, `PeerManager`, `DesktopWindow` and the queue getters. Documentation only, checked by `flutter analyze` and the full test suite.
+
 ## Look up the Linux notification icon once
 
 `LinuxNotificationBackend` finds the icon file in `init`, keeps it in a field and reuses it for every notification instead of running `existsSync` each time; the plugin and the icon lookup are injectable. Test in `test/notification_details_test.dart`.

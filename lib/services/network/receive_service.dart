@@ -177,6 +177,7 @@ class ReceiveService {
     return await fileTransferManager.add(key, info, sourceIp: sourceIp) ? key : null;
   }
 
+  /// Aborts the transfers being received (their partial files are deleted).
   Future<void> dispose() async {
     zprint('🛑 Disposing ReceiveService...');
     // Destroying the socket ends handleNewConnection, which cleans up the partial file

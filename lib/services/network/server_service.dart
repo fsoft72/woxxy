@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:woxxy/config/network_constants.dart';
 import 'package:woxxy/funcs/debug.dart';
 
-// Callback function type for handling newly accepted socket connections
+/// Handles one accepted connection until it ends.
 typedef ConnectionHandlerCallback = Future<void> Function(Socket socket);
 
+/// TCP server that accepts transfer connections (at most [maxConnections] at a time) and hands
+/// each one to [connectionHandler].
 class ServerService {
   final int port;
   final ConnectionHandlerCallback connectionHandler;
@@ -29,6 +31,7 @@ class ServerService {
     this.maxConnections = MAX_CONCURRENT_CONNECTIONS,
   });
 
+  /// Binds the port and starts accepting; throws when the port cannot be bound.
   Future<void> start() async {
     try {
       _server = await ServerSocket.bind(InternetAddress.anyIPv4, port);
@@ -66,6 +69,7 @@ class ServerService {
     }
   }
 
+  /// Stops accepting connections.
   Future<void> dispose() async {
     zprint('🛑 Disposing ServerService...');
     try {

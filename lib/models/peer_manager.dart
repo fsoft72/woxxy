@@ -14,7 +14,7 @@ class _PeerStatus {
   _PeerStatus(this.peer, this.lastSeen);
 }
 
-// Define the callback type
+/// Asks [peer] to send its avatar.
 typedef RequestAvatarCallback = void Function(Peer peer);
 
 /// Default time without announcements after which a peer is considered gone.
@@ -57,12 +57,15 @@ class PeerManager {
   /// disappears soon after it times out instead of up to twice the timeout later.
   Duration get cleanupInterval => _peerTimeout ~/ 3;
 
+  /// The peer list, emitted again on every change (it starts empty).
   Stream<List<Peer>> get peerStream => _peerController.stream;
+
+  /// A copy of the peers known right now.
   List<Peer> get currentPeers {
-    // Return a new list to prevent external modification
     return _peers.values.map((status) => status.peer).toList();
   }
 
+  /// Starts removing the peers that stopped announcing themselves.
   void startPeerCleanup() {
     zprint("🧹 Starting peer cleanup timer (interval: ${cleanupInterval.inSeconds}s)");
     _cleanupTimer?.cancel();
@@ -147,6 +150,7 @@ class PeerManager {
     }
   }
 
+  /// Stops the cleanup timer and closes the peer stream.
   void dispose() {
     zprint("🛑 Disposing PeerManager...");
     _disposed = true;

@@ -10,6 +10,7 @@ import '../funcs/ui_helpers.dart';
 import '../widgets/peer_avatar.dart';
 import 'peer_details.dart';
 
+/// The Home tab: the peers found on the network; tapping one opens its [PeerDetailPage].
 class HomeContent extends StatefulWidget {
   final NetworkService networkService;
 

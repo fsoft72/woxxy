@@ -27,6 +27,7 @@ class NotificationManager {
   bool _isInitialized = false;
   int _nextNotificationId = 1;
 
+  /// True once the platform backend is ready to show notifications.
   bool get isInitialized => _isInitialized;
 
   /// Returns a fresh notification id so a new notification does not replace the previous one.

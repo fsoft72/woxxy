@@ -7,11 +7,11 @@ import 'package:flutter/foundation.dart';
 /// Maximum number of history entries kept; the oldest are dropped first.
 const int MAX_HISTORY_ENTRIES = 500;
 
+/// One received file as shown in the History tab.
 class FileHistoryEntry {
   final String destinationPath;
   final String senderUsername;
   final int fileSize;
-  /// Average speed of the transfer, in MB/s
   /// Average speed of the transfer, in MB/s
   final double speedMBps;
   final DateTime createdAt;
@@ -24,6 +24,7 @@ class FileHistoryEntry {
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  /// The map stored in the saved history.
   Map<String, dynamic> toJson() => {
         'destinationPath': destinationPath,
         'senderUsername': senderUsername,
@@ -32,6 +33,7 @@ class FileHistoryEntry {
         'createdAt': createdAt.toIso8601String(),
       };
 
+  /// Reads an entry of the saved history (also the old `uploadSpeedMBps` key).
   factory FileHistoryEntry.fromJson(Map<String, dynamic> json) {
     return FileHistoryEntry(
       destinationPath: json['destinationPath'] as String,
@@ -69,17 +71,19 @@ class FileHistory extends ChangeNotifier {
     _entries.insert(index, entry);
   }
 
+  /// Removes [entry] (matched by path and time).
   void removeEntry(FileHistoryEntry entry) {
     _entries.removeWhere((e) => e.destinationPath == entry.destinationPath && e.createdAt == entry.createdAt);
     notifyListeners();
   }
 
+  /// Removes every entry.
   void clear() {
     _entries.clear();
     notifyListeners();
   }
 
-  // Convert to JSON for persistence
+  /// The entries as stored in the saved history, newest first.
   List<Map<String, dynamic>> toJson() => _entries.map((entry) => entry.toJson()).toList();
 
   /// Loads a history from JSON, skipping entries that cannot be parsed.
