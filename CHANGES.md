@@ -1,5 +1,9 @@
 # Changes Log
 
+## Remove the leftover wrappers of HomePage
+
+`HomePage` calls `_startNetwork` directly (no `_initializeApp` wrapper), drops the empty `dispose` override and the useless `mounted` check of the navigation bar; the IP is already read once by the new `ValueListenableBuilder`. The network fakes of the injection test moved to `test/support/fake_network.dart` so the new `test/home_page_test.dart` can start `HomePage` without sockets (address shown and updated, Retry after a failed start, tab switching).
+
 ## Update the app bar IP when the network changes
 
 `NetworkService` exposes the announced address as `ipAddressListenable` (set on start and on every IP change, disposed with the service), and `HomePage` draws the IP row in a `ValueListenableBuilder`, so a Wi-Fi switch shows the new address. The IP change handler is `@visibleForTesting handleIpChanged`. Test in `test/network_service_injection_test.dart`.

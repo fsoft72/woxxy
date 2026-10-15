@@ -57,7 +57,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Metadata decoder copies its buffer on every chunk** - `MetadataFrameDecoder.add` calls `_buffer.toBytes()` for each incoming chunk until the header is complete, which is quadratic for headers near the 1 MB limit; read the 4-byte length once and copy only when `_length >= frameEnd`.
   - File(s): `lib/services/network/transfer_protocol.dart`
 
-- [ ] **Small cleanups in `HomePage`** - `_initializeApp` only calls `_startNetwork`, `dispose` is an empty override, the `mounted` check in `onDestinationSelected` is unnecessary, and the IP condition is evaluated twice in `build`; remove the wrappers and keep one local `ip` variable.
+- [x] **Small cleanups in `HomePage`** - `_initializeApp` only calls `_startNetwork`, `dispose` is an empty override, the `mounted` check in `onDestinationSelected` is unnecessary, and the IP condition is evaluated twice in `build`; remove the wrappers and keep one local `ip` variable.
   - File(s): `lib/screens/home_page.dart`
 
 - [ ] **Debug test-notification button inside the production widget** - `HomeContent` hard-codes `/tmp/test.txt` and fake values behind `kDebugMode`; move it to a debug-only menu or delete it so `HomeContent` has a single responsibility (the peer list).

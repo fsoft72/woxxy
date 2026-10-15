@@ -7,55 +7,9 @@ import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/models/user.dart';
-import 'package:woxxy/services/network/discovery_service.dart';
-import 'package:woxxy/services/network/send_service.dart';
-import 'package:woxxy/services/network/server_service.dart';
 import 'package:woxxy/services/network_service.dart';
 
-class _FakeServer extends ServerService {
-  final List<String> calls;
-  _FakeServer(this.calls) : super(port: 0, connectionHandler: (_) async {});
-
-  @override
-  Future<void> start() async => calls.add('server.start');
-
-  @override
-  Future<void> dispose() async => calls.add('server.dispose');
-}
-
-class _FakeDiscovery extends DiscoveryService {
-  final List<String> calls;
-  _FakeDiscovery(this.calls, PeerManager peers, AvatarStore avatars, LocalIdentity identity)
-      : super(
-            discoveryPort: 0,
-            mainServerPort: 0,
-            peerManager: peers,
-            avatarStore: avatars,
-            sendAvatarCallback: (_) async => true,
-            identity: identity);
-
-  @override
-  Future<void> start() async => calls.add('discovery.start');
-
-  @override
-  Future<void> dispose() async => calls.add('discovery.dispose');
-}
-
-class _FakeSend extends SendService {
-  final List<String> calls;
-  _FakeSend(this.calls, LocalIdentity identity) : super(identity: identity);
-
-  @override
-  Future<void> sendFile(String transferId, String filePath, Peer receiver, {FileTransferProgressCallback? onProgress}) async {
-    calls.add('send $transferId');
-  }
-
-  @override
-  bool cancelTransfer(String transferId) {
-    calls.add('cancel $transferId');
-    return true;
-  }
-}
+import 'support/fake_network.dart';
 
 void main() {
   test('NetworkService runs on injected services, without opening any socket', () async {
@@ -69,9 +23,9 @@ void main() {
       ipResolver: () async => '192.168.1.50',
       peerManager: peers,
       identity: identity,
-      sendService: _FakeSend(calls, identity),
-      serverService: _FakeServer(calls),
-      discoveryService: _FakeDiscovery(calls, peers, avatars, identity),
+      sendService: FakeSend(calls, identity),
+      serverService: FakeServer(calls),
+      discoveryService: FakeDiscovery(calls, peers, avatars, identity),
     );
 
     await service.start(User(username: 'Ann', defaultDownloadDirectory: ''));
@@ -98,9 +52,9 @@ void main() {
       ipResolver: () async => '192.168.1.50',
       peerManager: peers,
       identity: identity,
-      sendService: _FakeSend(calls, identity),
-      serverService: _FakeServer(calls),
-      discoveryService: _FakeDiscovery(calls, peers, avatars, identity),
+      sendService: FakeSend(calls, identity),
+      serverService: FakeServer(calls),
+      discoveryService: FakeDiscovery(calls, peers, avatars, identity),
     );
     final seen = <String?>[];
     service.ipAddressListenable.addListener(() => seen.add(service.ipAddressListenable.value));

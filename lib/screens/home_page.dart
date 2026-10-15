@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _startNetwork();
   }
 
   /// Starts again after a failed startup (for example once the network is back).
@@ -51,10 +51,7 @@ class _HomePageState extends State<HomePage> {
     await _startNetwork();
   }
 
-  Future<void> _initializeApp() async {
-    await _startNetwork();
-  }
-
+  /// Starts the network announcing the current user; shows the error screen when it fails.
   Future<void> _startNetwork() async {
     try {
       await _networkService.start(_currentUser); // Discovers peers, announcing the current user
@@ -69,16 +66,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    if (mounted) {
-      setState(() {
-        _isLoading = false; // Loading is complete as initialUser is provided
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+    if (mounted) setState(() => _isLoading = false);
   }
 
   /// Applies the new settings and saves them. Returns an error message when it was refused.
@@ -167,12 +155,7 @@ class _HomePageState extends State<HomePage> {
       body: PersistentTabs(index: _selectedIndex, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          if (!mounted) return; // Check mounted before setState
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.history),
