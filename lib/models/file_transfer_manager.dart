@@ -5,14 +5,22 @@ import 'package:woxxy/funcs/debug.dart';
 
 /// Manages multiple file transfers from different sources
 class FileTransferManager {
-  /// Map of active file transfers, keyed by transfer id
-  final Map<String, FileTransfer> files = {};
+  /// Active file transfers, keyed by `<sourceIp>#<transferId>`; changed only through the methods below
+  final Map<String, FileTransfer> _files = {};
 
-  /// Path where downloaded files will be stored
-  String downloadPath;
+  String _downloadPath;
 
   /// Creates a manager that saves received files into [downloadPath].
-  FileTransferManager({required this.downloadPath});
+  FileTransferManager({required String downloadPath}) : _downloadPath = downloadPath;
+
+  /// Folder where received files are stored; changed with [updateDownloadPath].
+  String get downloadPath => _downloadPath;
+
+  /// The active transfer with [key], or null when there is none.
+  FileTransfer? operator [](String key) => _files[key];
+
+  /// Number of transfers being received right now.
+  int get activeCount => _files.length;
 
   /// Creates a new file transfer instance and adds it to the manager
   /// Returns true if the transfer was successfully created
@@ -22,7 +30,7 @@ class FileTransferManager {
   Future<bool> add(String key, TransferMetadata metadata, {required String sourceIp, String? directory}) async {
     try {
       // Check if a transfer with the same key is already active
-      if (files.containsKey(key)) {
+      if (_files.containsKey(key)) {
         zprint("❌ Transfer already active for key '$key'. Rejecting the new one.");
         return false;
       }
@@ -38,7 +46,7 @@ class FileTransferManager {
       );
 
       if (transfer != null) {
-        files[key] = transfer;
+        _files[key] = transfer;
         zprint("✅ Transfer added successfully for key '$key'.");
         return true;
       }
@@ -53,7 +61,7 @@ class FileTransferManager {
   /// Writes data to an existing file transfer identified by `key`.
   /// Returns false if the transfer doesn't exist or the write failed.
   Future<bool> write(String key, List<int> binaryData) async {
-    final transfer = files[key];
+    final transfer = _files[key];
     if (transfer == null) {
       zprint("⚠️ Attempted to write to non-existent transfer key: $key");
       return false;
@@ -72,7 +80,7 @@ class FileTransferManager {
   /// Returns false otherwise (transfer not found, file error, MD5 mismatch); [FileTransfer.end]
   /// has then already deleted the file.
   Future<bool> end(String key) async {
-    final transfer = files.remove(key);
+    final transfer = _files.remove(key);
     if (transfer == null) {
       zprint("⚠️ Attempted to end non-existent transfer key: $key");
       return false;
@@ -90,7 +98,7 @@ class FileTransferManager {
   /// Closes a file transfer whose socket closed unexpectedly (e.g., onDone, onError): the
   /// partial file is deleted and the transfer removed. Returns false if the transfer doesn't exist.
   Future<bool> handleSocketClosure(String key) async {
-    final transfer = files.remove(key);
+    final transfer = _files.remove(key);
     if (transfer == null) {
       zprint("⚠️ Attempted socket closure handling for non-existent key: $key");
       return false;
@@ -113,7 +121,7 @@ class FileTransferManager {
       await Directory(newPath).create(recursive: true);
       // Check if directory exists after creation attempt
       if (await Directory(newPath).exists()) {
-        downloadPath = newPath;
+        _downloadPath = newPath;
         zprint("✅ Download path updated successfully.");
         return true;
       } else {

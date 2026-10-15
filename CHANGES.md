@@ -1,5 +1,9 @@
 # Changes Log
 
+## Hide the transfer map of FileTransferManager
+
+The map of active transfers is private: callers read a transfer with `manager[key]` and count them with `activeCount`, and `downloadPath` is a getter changed only by `updateDownloadPath`. The tests no longer clear the map of a fresh manager. Tests in `test/file_transfer_manager_test.dart` (plus the loopback and server limit tests that used the map).
+
 ## Look up each transfer once in FileTransferManager
 
 `write`, `end` and `handleSocketClosure` read (or remove) the transfer once with an early return for unknown keys, and `end` no longer deletes the file a second time: `FileTransfer.end` already does it on failure. Tests in `test/file_transfer_manager_test.dart`.

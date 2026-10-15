@@ -187,7 +187,7 @@ class ReceiveService {
       return null;
     }
 
-    final fileTransfer = fileTransferManager.files[key];
+    final fileTransfer = fileTransferManager[key];
     if (fileTransfer == null) {
       zprint("ℹ️ Socket closed, but transfer not found for key $key.");
       return null;

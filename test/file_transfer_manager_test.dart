@@ -16,7 +16,6 @@ void main() {
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('woxxy_manager_');
     manager = FileTransferManager(downloadPath: tmp.path);
-    manager.files.clear();
   });
 
   tearDown(() async {
@@ -40,20 +39,40 @@ void main() {
 
   test('the transfer keeps the address of the connection, not the key', () async {
     expect(await manager.add('9.9.9.9#x', meta('x.txt', 1), sourceIp: '9.9.9.9'), isTrue);
-    expect(manager.files['9.9.9.9#x']!.sourceIp, '9.9.9.9');
+    expect(manager['9.9.9.9#x']!.sourceIp, '9.9.9.9');
     await manager.handleSocketClosure('9.9.9.9#x');
   });
 
   test('a checksum mismatch removes the transfer and its file', () async {
     final header = TransferMetadata(name: 'bad.bin', size: 3, senderUsername: 'bob', md5Checksum: md5.convert([9]).toString());
     expect(await manager.add('bad', header, sourceIp: '1.1.1.1'), isTrue);
-    final file = manager.files['bad']!.destinationFilename;
+    final file = manager['bad']!.destinationFilename;
     await manager.write('bad', [1, 2, 3]);
 
     expect(await manager.end('bad'), isFalse);
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     expect(File(file).existsSync(), isFalse);
     expect(await manager.end('bad'), isFalse);
+  });
+
+  test('the download path changes only through updateDownloadPath', () async {
+    final next = path.join(tmp.path, 'next');
+
+    expect(await manager.updateDownloadPath(''), isFalse);
+    expect(manager.downloadPath, tmp.path);
+    expect(await manager.updateDownloadPath(next), isTrue);
+    expect(manager.downloadPath, next);
+    expect(Directory(next).existsSync(), isTrue);
+  });
+
+  test('active transfers are counted and readable by key', () async {
+    expect(manager.activeCount, 0);
+    expect(await manager.add('k', meta('a.txt', 1), sourceIp: '1.1.1.1'), isTrue);
+    expect(manager.activeCount, 1);
+    expect(manager['k'], isNotNull);
+    expect(manager['other'], isNull);
+    await manager.handleSocketClosure('k');
+    expect(manager.activeCount, 0);
   });
 
   test('unknown keys are reported, not thrown', () async {
@@ -64,9 +83,9 @@ void main() {
 
   test('a duplicate key is rejected and does not replace the active transfer', () async {
     expect(await manager.add('k', meta('a.txt', 1), sourceIp: '1.1.1.1'), isTrue);
-    final original = manager.files['k'];
+    final original = manager['k'];
     expect(await manager.add('k', meta('other.txt', 1), sourceIp: '1.1.1.1'), isFalse);
-    expect(manager.files['k'], same(original));
+    expect(manager['k'], same(original));
     await manager.handleSocketClosure('k');
   });
 
@@ -76,7 +95,7 @@ void main() {
     );
     expect(results.every((r) => r), isTrue);
 
-    final paths = manager.files.values.map((t) => t.destinationFilename).toSet();
+    final paths = List.generate(10, (i) => manager['k$i']!.destinationFilename).toSet();
     expect(paths.length, 10);
     for (var i = 0; i < 10; i++) {
       await manager.handleSocketClosure('k$i');
@@ -87,7 +106,7 @@ void main() {
     final other = await Directory.systemTemp.createTemp('woxxy_avatar_');
     try {
       expect(await manager.add('av', meta('me.png', 1), sourceIp: '1.1.1.1', directory: other.path), isTrue);
-      expect(path.dirname(manager.files['av']!.destinationFilename), other.path);
+      expect(path.dirname(manager['av']!.destinationFilename), other.path);
       expect(tmp.listSync(), isEmpty);
       await manager.handleSocketClosure('av');
     } finally {

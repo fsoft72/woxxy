@@ -68,7 +68,7 @@ void main() {
     await socket.drain<void>().timeout(const Duration(seconds: 5)); // Server destroys the socket
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     final leftovers = Directory(path.join(tmp.path, 'downloads')).listSync();
     expect(leftovers, isEmpty);
     await server.dispose();
@@ -93,7 +93,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
     expect(events, 0);
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     expect(Directory(path.join(tmp.path, 'downloads')).listSync(), isEmpty);
     await server.dispose();
   });
@@ -112,7 +112,7 @@ void main() {
     socket.add(encodeMetadataFrame({'name': 'big.bin', 'size': 1000, 'senderUsername': 'x', 'transferId': 't'}));
     socket.add([1, 2, 3]);
     await socket.flush();
-    while (manager.files.isEmpty) {
+    while (manager.activeCount == 0) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
 
@@ -120,7 +120,7 @@ void main() {
 
     await socket.drain<void>().timeout(const Duration(seconds: 5)); // The receiver hung up
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     expect(Directory(path.join(tmp.path, 'downloads')).listSync(), isEmpty);
     await server.dispose();
   });
@@ -143,7 +143,7 @@ void main() {
     // The receiver closes the connection right away instead of waiting for all the bytes
     await socket.drain<void>().timeout(const Duration(seconds: 5));
     await Future<void>.delayed(const Duration(milliseconds: 100));
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     await server.dispose();
   });
 }

@@ -34,7 +34,6 @@ void main() {
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('woxxy_loopback_');
     manager = FileTransferManager(downloadPath: path.join(tmp.path, 'downloads'));
-    manager.files.clear();
     received = [];
     events = [];
     avatars = AvatarStore();
@@ -79,7 +78,7 @@ void main() {
     await waitFor(() => received.isNotEmpty);
 
     expect(File(received.single).readAsBytesSync(), bytes);
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     expect(events.single.senderUsername, 'alice');
     expect(events.single.fileSize, bytes.length);
     expect(events.single.speedMBps, greaterThan(0));
@@ -153,7 +152,7 @@ void main() {
     await done.timeout(const Duration(seconds: 5));
 
     expect(avatars.hasAvatar('127.0.0.1'), isFalse);
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
   });
 
   test('metadata and data arriving back to back are processed once and in order', () async {
@@ -189,7 +188,7 @@ void main() {
     await socket.flush();
 
     await socket.drain<void>().timeout(const Duration(seconds: 5));
-    expect(manager.files, isEmpty);
+    expect(manager.activeCount, 0);
     expect(received, isEmpty);
   });
 
@@ -218,7 +217,7 @@ void main() {
       await sendRaw(metaFor(10), List.filled(5000, 1));
 
       expect(received, isEmpty);
-      expect(manager.files, isEmpty);
+      expect(manager.activeCount, 0);
       final downloads = Directory(path.join(tmp.path, 'downloads'));
       expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
     });
@@ -228,7 +227,7 @@ void main() {
       await sendRaw(metaFor(MAX_TRANSFER_SIZE_BYTES + 1), [1, 2, 3]);
 
       expect(received, isEmpty);
-      expect(manager.files, isEmpty);
+      expect(manager.activeCount, 0);
       final downloads = Directory(path.join(tmp.path, 'downloads'));
       expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
     });
@@ -237,14 +236,14 @@ void main() {
       await sendRaw({...metaFor(3), 'size': '3'}, [1, 2, 3]);
 
       expect(received, isEmpty);
-      expect(manager.files, isEmpty);
+      expect(manager.activeCount, 0);
       final downloads = Directory(path.join(tmp.path, 'downloads'));
       expect(downloads.existsSync() ? downloads.listSync() : [], isEmpty);
     });
 
     test('an avatar above the avatar size cap is rejected', () async {
       await sendRaw(metaFor(MAX_AVATAR_SIZE_BYTES + 1, type: TRANSFER_TYPE_AVATAR), [1, 2, 3]);
-      expect(manager.files, isEmpty);
+      expect(manager.activeCount, 0);
     });
   });
   group('result byte', () {
