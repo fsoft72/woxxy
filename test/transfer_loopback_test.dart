@@ -134,6 +134,28 @@ void main() {
     expect(avatars.hasAvatar('10.9.9.9'), isFalse);
   });
 
+  test('an avatar that is not a decodable image is dropped', () async {
+    final junk = List<int>.generate(64, (i) => i);
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);
+    final answers = <int>[];
+    final done = socket.listen(answers.addAll).asFuture<void>();
+    socket.add(encodeMetadataFrame({
+      'name': 'junk.png',
+      'size': junk.length,
+      'senderUsername': 'eve',
+      'md5Checksum': md5.convert(junk).toString(),
+      'transferId': 'junk-1',
+      'type': TRANSFER_TYPE_AVATAR,
+    }));
+    socket.add(junk);
+    await socket.flush();
+    await socket.close();
+    await done.timeout(const Duration(seconds: 5));
+
+    expect(avatars.hasAvatar('127.0.0.1'), isFalse);
+    expect(manager.files, isEmpty);
+  });
+
   test('metadata and data arriving back to back are processed once and in order', () async {
     final data = List.generate(200000, (i) => (i * 13) % 256);
     final meta = {

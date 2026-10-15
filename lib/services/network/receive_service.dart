@@ -259,13 +259,7 @@ class ReceiveService {
         return;
       }
 
-      // Validate image format (basic check)
-      if (!_isValidImageData(bytes)) {
-        zprint('⚠️ Received file does not appear to be a valid image: $filePath');
-        return;
-      }
-
-      // Store avatar in memory
+      // Decoding in the store rejects anything that is not a valid image
       await avatarStore.setAvatar(senderIp, bytes, hash: md5.convert(bytes).toString());
       zprint('✅ Avatar stored for $senderIp (${bytes.length} bytes)');
     } catch (e, stackTrace) {
@@ -275,27 +269,6 @@ class ReceiveService {
       // Always attempt to clean up temporary file
       await _cleanupTempFile(tempFile, filePath);
     }
-  }
-
-  /// Basic validation to check if data looks like an image
-  bool _isValidImageData(Uint8List bytes) {
-    if (bytes.length < 4) return false;
-    
-    // Check for common image file signatures
-    // JPEG: FF D8
-    if (bytes[0] == 0xFF && bytes[1] == 0xD8) return true;
-    // PNG: 89 50 4E 47
-    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return true;
-    // GIF: 47 49 46 38
-    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38) return true;
-    // WebP: starts with "RIFF" and contains "WEBP"
-    if (bytes.length >= 12 && 
-        bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
-        bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
-      return true;
-    }
-    
-    return false;
   }
 
   /// Safely cleanup temporary avatar file

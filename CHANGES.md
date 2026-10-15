@@ -1,5 +1,9 @@
 # Changes Log
 
+## Rely on the image decoder to validate received avatars
+
+`ReceiveService._isValidImageData` (a magic-byte check that also accepted GIF and WebP) is gone: `AvatarStore.setAvatar` decodes the image and already rejects anything that is not one. Test in `test/transfer_loopback_test.dart`.
+
 ## Store received avatars under the address of the connection
 
 `ReceiveService` stores a received avatar under the source address of the socket instead of the `senderIp` written in the metadata, so a host on the LAN can no longer replace the avatar of another peer. The sender still writes `senderIp` (older receivers need it) but no longer repeats it in the avatar metadata. Test in `test/transfer_loopback_test.dart`.
