@@ -19,6 +19,21 @@ typedef SendFileFunction = Future<void> Function(
 /// Cancels an active transfer by id.
 typedef CancelTransferFunction = bool Function(String transferId);
 
+/// What the controller shows for the file being sent.
+enum SendPhase {
+  /// Nothing to show: no file is being sent
+  idle,
+
+  /// The current file is being hashed and the connection opened; no byte moved yet
+  preparing,
+
+  /// Bytes of the current file are moving
+  sending,
+
+  /// The current file arrived; the next one (if any) starts right away
+  completed,
+}
+
 /// Where a [QueuedFile] is in its life.
 enum QueuedFileStatus { waiting, completed, failed }
 
@@ -52,7 +67,7 @@ class SendQueueController extends ChangeNotifier {
 
   final Queue<QueuedFile> _queue = Queue<QueuedFile>();
   final List<QueuedFile> _completed = [];
-  bool _processing = false;
+  bool _processing = false; // A send loop is running (it can outlive a cancelAll by one file)
   int _generation = 0; // Bumped by cancelAll so a loop (or a late result) of an older run can tell it is stale
   bool _disposed = false;
   String? _activeTransferId;
@@ -60,9 +75,7 @@ class SendQueueController extends ChangeNotifier {
   String _currentFileName = '';
   double _progress = 0;
   double _speedMBps = 0;
-  bool _transferComplete = false;
-  bool _isTransferring = false;
-  bool _preparing = false;
+  SendPhase _phase = SendPhase.idle;
   int _totalCompleted = 0;
 
   SendQueueController({
@@ -86,12 +99,15 @@ class SendQueueController extends ChangeNotifier {
   /// Progress of the current file, 0 to 100.
   double get progress => _progress;
   double get speedMBps => _speedMBps;
-  bool get transferComplete => _transferComplete;
-  bool get isTransferring => _isTransferring;
 
-  /// True from the start of a file until its first progress report: the file is being hashed
-  /// and the connection opened, so no byte moved yet.
-  bool get isPreparing => _preparing;
+  /// What the current file is doing; [SendPhase.idle] when nothing is being sent.
+  SendPhase get phase => _phase;
+
+  /// True while a file is shown as being sent (any phase but [SendPhase.idle]).
+  bool get isTransferring => _phase != SendPhase.idle;
+
+  /// True from the start of a file until its first progress report.
+  bool get isPreparing => _phase == SendPhase.preparing;
   int get totalCompleted => _totalCompleted;
 
   /// True while the controller is sending a file or has files waiting.
@@ -123,11 +139,10 @@ class SendQueueController extends ChangeNotifier {
     if (skipped.isNotEmpty) onMessage?.call('Skipped (not a readable file): ${skipped.join(', ')}');
     if (accepted.isEmpty) return;
 
-    if (!_isTransferring) {
-      _isTransferring = true;
+    if (_phase == SendPhase.idle) {
+      _phase = SendPhase.preparing;
       _progress = 0;
       _speedMBps = 0;
-      _transferComplete = false;
     }
 
     final startProcessing = _queue.isEmpty && !_processing;
@@ -146,7 +161,7 @@ class SendQueueController extends ChangeNotifier {
     }
 
     _generation++;
-    _isTransferring = false;
+    _phase = SendPhase.idle;
     _queue.clear();
     _completed.clear();
     _totalCompleted = 0;
@@ -165,9 +180,7 @@ class SendQueueController extends ChangeNotifier {
       _currentFileName = item.name;
       _progress = 0;
       _speedMBps = 0;
-      _transferComplete = false;
-      _isTransferring = true;
-      _preparing = true;
+      _phase = SendPhase.preparing;
       _notify();
 
       // Started by the first progress report: hashing and connecting are not part of the speed
@@ -179,8 +192,8 @@ class SendQueueController extends ChangeNotifier {
       try {
         await _send(transferId, item.path, (totalSize, bytesSent) {
           if (stale()) return;
-          if (_preparing) stopwatch.start();
-          _preparing = false;
+          if (_phase == SendPhase.preparing) stopwatch.start();
+          _phase = SendPhase.sending;
           // Chunks arrive far faster than the UI needs; the final update is always delivered
           if (!_throttle.shouldEmit(force: bytesSent >= totalSize)) return;
           final seconds = stopwatch.elapsedMilliseconds / 1000;
@@ -198,12 +211,11 @@ class SendQueueController extends ChangeNotifier {
         _onFailure(item, e);
       } finally {
         _activeTransferId = null;
-        _preparing = false;
       }
     }
 
     _processing = false;
-    if (_queue.isEmpty) _isTransferring = false;
+    if (_queue.isEmpty) _phase = SendPhase.idle;
     _notify();
     // Files added after a cancel while this loop was still finishing need a new loop
     if (_queue.isNotEmpty && !_disposed) unawaited(_processQueue());
@@ -214,7 +226,7 @@ class SendQueueController extends ChangeNotifier {
     final speed = seconds > 0 ? item.size / seconds / BYTES_PER_MB : 0.0;
 
     _progress = 100;
-    _transferComplete = true;
+    _phase = SendPhase.completed;
     _speedMBps = speed;
     item._status = QueuedFileStatus.completed;
     _totalCompleted++;

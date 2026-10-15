@@ -28,7 +28,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Send speed includes the hashing time** - the stopwatch in `SendQueueController._processQueue` starts before `_send`, which first hashes the file, so both the live MB/s and the final "File sent successfully" speed are underestimated for large files; start timing on the first progress callback (when `_preparing` turns false).
   - File(s): `lib/services/send_queue_controller.dart`
 
-- [ ] **Send queue state is spread over five booleans** - `_processing`, `_isTransferring`, `_preparing`, `_transferComplete` and `_disposed` are set in several places (`addFiles`, `_processQueue`, `cancelAll`, `_onSuccess`) and only some combinations are valid; replace the first four with one `SendPhase` enum (`idle`, `preparing`, `sending`, `completed`) so the UI reads a single value.
+- [x] **Send queue state is spread over five booleans** - `_processing`, `_isTransferring`, `_preparing`, `_transferComplete` and `_disposed` are set in several places (`addFiles`, `_processQueue`, `cancelAll`, `_onSuccess`) and only some combinations are valid; replace the first four with one `SendPhase` enum (`idle`, `preparing`, `sending`, `completed`) so the UI reads a single value.
   - File(s): `lib/services/send_queue_controller.dart`, `lib/screens/peer_details.dart`
 
 - [x] **`sendFile` and `sendAvatar` duplicate the transfer lifecycle** - both add the id to `_liveTransfers`, validate the local IP, build metadata and remove the id in `finally`, and the class keeps two parallel collections (`_liveTransfers` and `_activeTransfers`) for one concept; extract a private `_runTransfer(id, body)` helper and merge the collections into one `Map<String, Socket?>`.

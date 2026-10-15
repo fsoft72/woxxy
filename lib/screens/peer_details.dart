@@ -128,8 +128,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
             queueLabel: queue.isEmpty ? null : 'File ${completed.length + 1} of ${completed.length + queue.length}',
             progress: _queue.progress,
             speedMBps: _queue.speedMBps,
-            complete: _queue.transferComplete,
-            preparing: _queue.isPreparing,
+            phase: _queue.phase,
             onCancel: _queue.cancelAll,
           ),
         if (queue.isNotEmpty || completed.isNotEmpty)

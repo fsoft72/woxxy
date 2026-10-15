@@ -1,5 +1,9 @@
 # Changes Log
 
+## Describe the send queue state with one SendPhase
+
+`SendQueueController` replaces `_isTransferring`, `_preparing` and `_transferComplete` with one `SendPhase` (`idle`, `preparing`, `sending`, `completed`); `isTransferring` and `isPreparing` are derived from it, `transferComplete` is gone, and `TransferProgressCard` takes the phase instead of two flags. `_processing` stays: it guards the send loop, which can outlive a `cancelAll` by one file. Tests in `test/send_queue_controller_test.dart`.
+
 ## Measure the send speed from the first byte
 
 The stopwatch of each file in `SendQueueController` starts at the first progress report instead of before `send`, so hashing and connecting no longer lower the live MB/s or the speed in the "File sent successfully" message. Test in `test/send_queue_controller_test.dart`.

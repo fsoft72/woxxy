@@ -266,16 +266,34 @@ void main() {
       onProgress(10, 10);
     });
 
+    expect(c.phase, SendPhase.idle);
     await c.addFiles([await makeFile('a.txt')]);
+    expect(c.phase, SendPhase.preparing);
     expect(c.isPreparing, isTrue);
 
     firstReport.complete();
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(c.isPreparing, isFalse);
+    expect(c.phase, SendPhase.sending);
 
+    final phases = <SendPhase>[];
+    c.addListener(() => phases.add(c.phase));
     finish.complete();
     await idle(c);
-    expect(c.isPreparing, isFalse);
+    expect(phases, containsAllInOrder([SendPhase.completed, SendPhase.idle]));
+    expect(c.isTransferring, isFalse);
+  });
+
+  test('cancelAll goes back to idle at once', () async {
+    final never = Completer<void>();
+    final c = controller((id, path, onProgress) => never.future);
+
+    await c.addFiles([await makeFile('a.txt')]);
+    c.cancelAll();
+
+    expect(c.phase, SendPhase.idle);
+    never.complete();
+    await idle(c);
+    c.dispose();
   });
 
   group('widgets', () {
@@ -303,7 +321,7 @@ void main() {
             queueLabel: 'File 1 of 2',
             progress: 42.5,
             speedMBps: 12.345,
-            complete: false,
+            phase: SendPhase.sending,
             onCancel: () => cancelledTaps++,
           ),
         ),
@@ -316,6 +334,24 @@ void main() {
       expect(cancelledTaps, 1);
     });
 
+    testWidgets('TransferProgressCard shows Completed and hides cancel when the file arrived', (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TransferProgressCard(
+            fileName: 'done.txt',
+            queueLabel: null,
+            progress: 100,
+            speedMBps: 1,
+            phase: SendPhase.completed,
+            onCancel: () {},
+          ),
+        ),
+      ));
+
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.byIcon(Icons.delete), findsNothing);
+    });
+
     testWidgets('TransferProgressCard shows Preparing while the file is hashed', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -324,8 +360,7 @@ void main() {
             queueLabel: null,
             progress: 0,
             speedMBps: 0,
-            complete: false,
-            preparing: true,
+            phase: SendPhase.preparing,
             onCancel: () {},
           ),
         ),

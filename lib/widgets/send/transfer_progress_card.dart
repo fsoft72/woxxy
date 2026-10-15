@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/send_queue_controller.dart';
+
 /// Card with the file currently being sent: name, position in the queue, progress bar and speed.
 class TransferProgressCard extends StatelessWidget {
   final String fileName;
@@ -10,11 +12,10 @@ class TransferProgressCard extends StatelessWidget {
   /// 0 to 100
   final double progress;
   final double speedMBps;
-  final bool complete;
   final VoidCallback onCancel;
 
-  /// True while the file is hashed and the connection is opened, before any byte is sent
-  final bool preparing;
+  /// What the file is doing: preparing (hashed, connecting), sending or completed
+  final SendPhase phase;
 
   const TransferProgressCard({
     super.key,
@@ -22,13 +23,14 @@ class TransferProgressCard extends StatelessWidget {
     required this.queueLabel,
     required this.progress,
     required this.speedMBps,
-    required this.complete,
+    required this.phase,
     required this.onCancel,
-    this.preparing = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final complete = phase == SendPhase.completed;
+    final preparing = phase == SendPhase.preparing;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
