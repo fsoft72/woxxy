@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
 import '../../config/network_constants.dart';
@@ -14,6 +13,8 @@ import '../../models/file_transfer_manager.dart';
 import '../../models/transfer_metadata.dart';
 import 'transfer_protocol.dart';
 
+/// Accepts incoming transfer connections: user files are written to the download folder through
+/// [FileTransferManager], avatars are collected in memory and handed to the [AvatarStore].
 class ReceiveService {
   final FileTransferManager fileTransferManager;
   final AvatarStore avatarStore;
@@ -50,55 +51,53 @@ class ReceiveService {
     final decoder = MetadataFrameDecoder();
     // A stalled sender raises a TimeoutException, handled like any other transfer error
     final iterator = StreamIterator<Uint8List>(socket.timeout(idleTimeout));
-    TransferMetadata? receivedInfo;
-    String? fileTransferKey; // Set once metadata is accepted
+    _IncomingTransfer? incoming; // Set once metadata is accepted
     var receivedBytes = 0;
     var dataExpected = 0;
     bool? outcome; // Reported to the sender; stays null when no transfer was accepted
 
+    Future<void> receive(Uint8List data) async {
+      if (data.isEmpty) return;
+      if (receivedBytes + data.length > dataExpected) {
+        throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
+      }
+      await incoming!.write(data);
+      receivedBytes += data.length;
+    }
+
     try {
       while (await iterator.moveNext()) {
-        final data = iterator.current;
-
-        if (fileTransferKey != null) {
-          if (receivedBytes + data.length > dataExpected) {
-            throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
-          }
-          await _writeOrThrow(fileTransferKey, data);
-          receivedBytes += data.length;
+        if (incoming != null) {
+          await receive(iterator.current);
           continue;
         }
 
-        final frame = decoder.add(data);
+        final frame = decoder.add(iterator.current);
         if (frame == null) continue; // Header not complete yet
 
-        receivedInfo = TransferMetadata.fromJson(frame.metadata);
-        fileTransferKey = await _acceptTransfer(socket, sourceIp, receivedInfo);
-        if (fileTransferKey == null) return; // Rejected, socket already destroyed
+        final info = TransferMetadata.fromJson(frame.metadata);
+        incoming = await _acceptTransfer(socket, sourceIp, info);
+        if (incoming == null) return; // Rejected, socket already destroyed
 
-        dataExpected = receivedInfo.size;
-        if (receivedBytes + frame.remainingData.length > dataExpected) {
-          throw ProtocolException('Peer sent more data than the declared $dataExpected bytes');
-        }
-        if (frame.remainingData.isNotEmpty) {
-          await _writeOrThrow(fileTransferKey, frame.remainingData);
-          receivedBytes += frame.remainingData.length;
-        }
+        dataExpected = info.size;
+        await receive(frame.remainingData);
       }
 
-      outcome = await _onConnectionClosed(
-        sourceIp: sourceIp,
-        key: fileTransferKey,
-        info: receivedInfo,
-        receivedBytes: receivedBytes,
-        dataExpected: dataExpected,
-        elapsed: stopwatch.elapsed,
-      );
+      zprint('📊 Socket closed after ${stopwatch.elapsedMilliseconds}ms. Received $receivedBytes/$dataExpected bytes.');
+      if (incoming == null) {
+        zprint("ℹ️ Socket closed before any metadata was accepted.");
+      } else if (receivedBytes < dataExpected) {
+        zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
+        await incoming.abort();
+        outcome = false;
+      } else {
+        outcome = await incoming.finish();
+      }
     } catch (e, s) {
       zprint('❌ Error during transfer from $sourceIp: $e\n$s');
-      if (fileTransferKey != null) {
+      if (incoming != null) {
         zprint("🧨 Cleaning up transfer due to error...");
-        await fileTransferManager.handleSocketClosure(fileTransferKey);
+        await incoming.abort();
         outcome = false;
       }
     } finally {
@@ -121,15 +120,11 @@ class ReceiveService {
     }
   }
 
-  /// Writes a chunk and aborts the transfer when the write failed (full disk, folder gone).
-  Future<void> _writeOrThrow(String key, Uint8List data) async {
-    if (await fileTransferManager.write(key, data)) return;
-    throw FileSystemException('Could not write received data for transfer $key');
-  }
-
-  /// Registers the incoming transfer and sends the ready signal.
-  /// Returns the transfer key, or null if the transfer was rejected (socket destroyed).
-  Future<String?> _acceptTransfer(Socket socket, String sourceIp, TransferMetadata info) async {
+  /// Checks the header, prepares where the bytes go and sends the ready signal.
+  /// Returns null if the transfer was rejected (the socket is then destroyed).
+  /// A received avatar belongs to [sourceIp], the address the connection really came from, never
+  /// to an address written in the metadata (any host could claim to be another peer).
+  Future<_IncomingTransfer?> _acceptTransfer(Socket socket, String sourceIp, TransferMetadata info) async {
     zprint('📄 Received metadata: $info');
 
     final maxSize = info.isAvatar ? MAX_AVATAR_SIZE_BYTES : MAX_TRANSFER_SIZE_BYTES;
@@ -139,22 +134,17 @@ class ReceiveService {
       return null;
     }
 
-    // Key by transfer id so avatars and parallel files from one IP never collide
-    final remoteTransferId = info.transferId;
-    final key = (remoteTransferId != null && remoteTransferId.isNotEmpty)
-        ? '$sourceIp#$remoteTransferId'
-        : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
-
-    final added = await fileTransferManager.add(
-      key,
-      info,
-      sourceIp: sourceIp,
-      directory: info.isAvatar ? _avatarTempDirectory() : null,
-    );
-    if (!added) {
-      zprint("❌ Failed to add transfer for ${info.name} from $sourceIp. Closing connection.");
-      socket.destroy();
-      return null;
+    final _IncomingTransfer incoming;
+    if (info.isAvatar) {
+      incoming = _IncomingAvatar(info, sourceIp, avatarStore);
+    } else {
+      final key = await _addFileTransfer(sourceIp, info);
+      if (key == null) {
+        zprint("❌ Failed to add transfer for ${info.name} from $sourceIp. Closing connection.");
+        socket.destroy();
+        return null;
+      }
+      incoming = _IncomingFile(key, fileTransferManager, onFileReceivedCallback);
     }
 
     // Ready signal for better Windows compatibility
@@ -165,113 +155,17 @@ class ReceiveService {
     } catch (e) {
       zprint("⚠️ Failed to send ready signal: $e");
     }
-    return key;
+    return incoming;
   }
 
-  /// Runs when the sender closes the connection: finalizes or cleans up the transfer.
-  /// Returns true when the file was stored and verified, false when it was not, and null when
-  /// there was no accepted transfer to report about.
-  /// A received avatar is stored under [sourceIp], the address the connection really came from,
-  /// never under an address written in the metadata (any host could claim to be another peer).
-  Future<bool?> _onConnectionClosed({
-    required String sourceIp,
-    required String? key,
-    required TransferMetadata? info,
-    required int receivedBytes,
-    required int dataExpected,
-    required Duration elapsed,
-  }) async {
-    zprint('📊 Socket closed after ${elapsed.inMilliseconds}ms. Received $receivedBytes/$dataExpected bytes.');
-    if (key == null || info == null) {
-      zprint("ℹ️ Socket closed before any metadata was accepted.");
-      return null;
-    }
-
-    final fileTransfer = fileTransferManager[key];
-    if (fileTransfer == null) {
-      zprint("ℹ️ Socket closed, but transfer not found for key $key.");
-      return null;
-    }
-
-    if (receivedBytes < dataExpected) {
-      zprint('⚠️ Transfer incomplete ($receivedBytes/$dataExpected). Cleaning up...');
-      await fileTransferManager.handleSocketClosure(key);
-      return false;
-    }
-
-    zprint('✅ Transfer complete ($receivedBytes/$dataExpected). Finalizing...');
-    final success = await fileTransferManager.end(key);
-    if (!success) {
-      zprint('❌ File transfer finalization failed (end() returned false).');
-      return false;
-    }
-
-    if (info.isAvatar) {
-      await _processReceivedAvatar(fileTransfer.destinationFilename, sourceIp);
-    } else {
-      zprint('✅ File transfer finalized successfully.');
-      onFileReceivedCallback?.call(FileReceivedEvent(
-        filePath: fileTransfer.destinationFilename,
-        senderUsername: fileTransfer.senderUsername,
-        fileSize: fileTransfer.size,
-        speedMBps: fileTransfer.getSpeedMBps(),
-      ));
-    }
-    return true;
-  }
-
-  /// Temporary directory for incoming avatar files (kept out of the user's download folder).
-  String _avatarTempDirectory() => path.join(Directory.systemTemp.path, AVATAR_TEMP_FOLDER);
-
-  /// Processes a received avatar file by loading it into memory and cleaning up
-  Future<void> _processReceivedAvatar(String filePath, String senderIp) async {
-    zprint('🖼️ Processing received avatar for $senderIp from: $filePath');
-    
-    if (senderIp.isEmpty) {
-      zprint('❌ Cannot process avatar: sender IP is empty');
-      return;
-    }
-
-    File? tempFile;
-    try {
-      tempFile = File(filePath);
-      
-      // Verify file exists
-      if (!await tempFile.exists()) {
-        zprint('❌ Avatar file not found: $filePath');
-        return;
-      }
-
-      // Read and validate file data
-      final bytes = await tempFile.readAsBytes();
-      if (bytes.isEmpty) {
-        zprint('⚠️ Received avatar file is empty: $filePath');
-        return;
-      }
-
-      // Decoding in the store rejects anything that is not a valid image
-      await avatarStore.setAvatar(senderIp, bytes, hash: md5.convert(bytes).toString());
-      zprint('✅ Avatar stored for $senderIp (${bytes.length} bytes)');
-    } catch (e, stackTrace) {
-      zprint('❌ Error processing received avatar for $senderIp: $e');
-      zprint('Stack trace: $stackTrace');
-    } finally {
-      // Always attempt to clean up temporary file
-      await _cleanupTempFile(tempFile, filePath);
-    }
-  }
-
-  /// Safely cleanup temporary avatar file
-  Future<void> _cleanupTempFile(File? tempFile, String filePath) async {
-    if (tempFile == null) return;
-    try {
-      await tempFile.delete();
-      zprint('🗑️ Cleaned up temporary avatar file: $filePath');
-    } on FileSystemException {
-      // File already deleted or doesn't exist - that's fine
-    } catch (e) {
-      zprint('⚠️ Error cleaning up temporary avatar file $filePath: $e');
-    }
+  /// Registers a user file with the manager. Returns its key, or null when it could not be created.
+  Future<String?> _addFileTransfer(String sourceIp, TransferMetadata info) async {
+    // Key by transfer id so parallel files from one IP never collide
+    final remoteTransferId = info.transferId;
+    final key = (remoteTransferId != null && remoteTransferId.isNotEmpty)
+        ? '$sourceIp#$remoteTransferId'
+        : '$sourceIp#${DateTime.now().microsecondsSinceEpoch}';
+    return await fileTransferManager.add(key, info, sourceIp: sourceIp) ? key : null;
   }
 
   Future<void> dispose() async {
@@ -282,4 +176,88 @@ class ReceiveService {
     }
     zprint('✅ ReceiveService disposed');
   }
+}
+
+/// Where the bytes of one accepted transfer go.
+abstract class _IncomingTransfer {
+  /// Stores a chunk; throws when it cannot be stored.
+  Future<void> write(Uint8List data);
+
+  /// All declared bytes arrived: verifies and delivers them. Returns true on success.
+  Future<bool> finish();
+
+  /// The transfer failed or ended early: drops what was received.
+  Future<void> abort();
+}
+
+/// A user file written to the download folder.
+class _IncomingFile implements _IncomingTransfer {
+  final String key;
+  final FileTransferManager manager;
+  final void Function(FileReceivedEvent event)? onReceived;
+
+  _IncomingFile(this.key, this.manager, this.onReceived);
+
+  @override
+  Future<void> write(Uint8List data) async {
+    // A failed write (full disk, folder gone) aborts the transfer
+    if (await manager.write(key, data)) return;
+    throw FileSystemException('Could not write received data for transfer $key');
+  }
+
+  @override
+  Future<bool> finish() async {
+    final transfer = manager[key]!;
+    if (!await manager.end(key)) {
+      zprint('❌ File transfer finalization failed (end() returned false).');
+      return false;
+    }
+    zprint('✅ File transfer finalized successfully.');
+    onReceived?.call(FileReceivedEvent(
+      filePath: transfer.destinationFilename,
+      senderUsername: transfer.senderUsername,
+      fileSize: transfer.size,
+      speedMBps: transfer.getSpeedMBps(),
+    ));
+    return true;
+  }
+
+  @override
+  Future<void> abort() => manager.handleSocketClosure(key);
+}
+
+/// An avatar (at most [MAX_AVATAR_SIZE_BYTES]) collected in memory and stored for [sourceIp].
+class _IncomingAvatar implements _IncomingTransfer {
+  final TransferMetadata info;
+  final String sourceIp;
+  final AvatarStore store;
+  final BytesBuilder _bytes = BytesBuilder(copy: false);
+
+  _IncomingAvatar(this.info, this.sourceIp, this.store);
+
+  @override
+  Future<void> write(Uint8List data) async => _bytes.add(data);
+
+  @override
+  Future<bool> finish() async {
+    final bytes = _bytes.takeBytes();
+    final hash = md5.convert(bytes).toString();
+    final expected = info.md5Checksum;
+    if (expected != null && expected.isNotEmpty && expected != LEGACY_CHECKSUM_ERROR && expected != hash) {
+      zprint('❌ Avatar from $sourceIp does not match its checksum.');
+      return false;
+    }
+
+    try {
+      // Decoding in the store rejects anything that is not a valid image
+      await store.setAvatar(sourceIp, bytes, hash: hash);
+      zprint('✅ Avatar stored for $sourceIp (${bytes.length} bytes)');
+    } catch (e) {
+      zprint('❌ Error processing received avatar for $sourceIp: $e');
+    }
+    return true;
+  }
+
+  @override
+  Future<void> abort() async => _bytes.clear();
 }

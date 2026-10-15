@@ -26,8 +26,7 @@ class FileTransferManager {
   /// Returns true if the transfer was successfully created
   /// `key` uniquely identifies the transfer (`<sourceIp>#<sender transferId>`); `sourceIp` is the address
   /// the connection came from.
-  /// `directory` overrides the download path (used for temporary avatar files).
-  Future<bool> add(String key, TransferMetadata metadata, {required String sourceIp, String? directory}) async {
+  Future<bool> add(String key, TransferMetadata metadata, {required String sourceIp}) async {
     try {
       // Check if a transfer with the same key is already active
       if (_files.containsKey(key)) {
@@ -40,7 +39,7 @@ class FileTransferManager {
         sourceIp: sourceIp,
         originalFilename: metadata.name,
         size: metadata.size,
-        downloadPath: directory ?? downloadPath,
+        downloadPath: downloadPath,
         senderUsername: metadata.senderUsername,
         expectedMd5: metadata.md5Checksum,
       );

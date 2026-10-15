@@ -101,16 +101,4 @@ void main() {
       await manager.handleSocketClosure('k$i');
     }
   });
-
-  test('directory override keeps the file out of the download path', () async {
-    final other = await Directory.systemTemp.createTemp('woxxy_avatar_');
-    try {
-      expect(await manager.add('av', meta('me.png', 1), sourceIp: '1.1.1.1', directory: other.path), isTrue);
-      expect(path.dirname(manager['av']!.destinationFilename), other.path);
-      expect(tmp.listSync(), isEmpty);
-      await manager.handleSocketClosure('av');
-    } finally {
-      await other.delete(recursive: true);
-    }
-  });
 }

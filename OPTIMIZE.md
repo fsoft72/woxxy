@@ -34,7 +34,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [ ] **`sendFile` and `sendAvatar` duplicate the transfer lifecycle** - both add the id to `_liveTransfers`, validate the local IP, build metadata and remove the id in `finally`, and the class keeps two parallel collections (`_liveTransfers` and `_activeTransfers`) for one concept; extract a private `_runTransfer(id, body)` helper and merge the collections into one `Map<String, Socket?>`.
   - File(s): `lib/services/network/send_service.dart`
 
-- [ ] **Avatars take a round trip through the disk** - incoming avatars (at most 10 MB) are written to a temp folder by `FileTransferManager`, read back with `readAsBytes`, hashed again with `md5.convert` and deleted; collect them in memory in `ReceiveService` and reuse the checksum already verified by `FileTransfer`.
+- [x] **Avatars take a round trip through the disk** - incoming avatars (at most 10 MB) are written to a temp folder by `FileTransferManager`, read back with `readAsBytes`, hashed again with `md5.convert` and deleted; collect them in memory in `ReceiveService` and reuse the checksum already verified by `FileTransfer`.
   - File(s): `lib/services/network/receive_service.dart`, `lib/models/file_transfer_manager.dart`
 
 - [x] **`FileTransferManager.files` is a public mutable map** - `ReceiveService` reads it directly and tests clear it, so any caller can bypass `add`/`end`/`handleSocketClosure`; make it private, expose `FileTransfer? operator [](String key)` and a `@visibleForTesting reset()`, and make `downloadPath` settable only through `updateDownloadPath`.

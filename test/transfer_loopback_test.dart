@@ -133,6 +133,39 @@ void main() {
     expect(avatars.hasAvatar('10.9.9.9'), isFalse);
   });
 
+  test('an avatar whose checksum does not match is reported and not stored', () async {
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);
+    final answers = <int>[];
+    final done = socket.listen(answers.addAll).asFuture<void>();
+    socket.add(encodeMetadataFrame({
+      'name': 'me.png',
+      'size': _png.length,
+      'senderUsername': 'eve',
+      'md5Checksum': '0' * 32,
+      'transferId': 'bad-avatar',
+      'type': TRANSFER_TYPE_AVATAR,
+    }));
+    socket.add(_png);
+    await socket.flush();
+    await socket.close();
+    await done.timeout(const Duration(seconds: 5));
+
+    expect(answers, [...READY_SIGNAL, RESULT_FAILED]);
+    expect(avatars.hasAvatar('127.0.0.1'), isFalse);
+  });
+
+  test('an avatar is kept in memory: no transfer and no file is created for it', () async {
+    final avatarFile = await makeFile('me.png', _png);
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1', username: 'alice', profileImagePath: avatarFile.path));
+
+    final sending = sender.sendAvatar(peer);
+    await waitFor(() => avatars.hasAvatar('127.0.0.1'));
+
+    expect(await sending, isTrue);
+    expect(manager.activeCount, 0);
+    expect(avatars.avatarHash('127.0.0.1'), md5.convert(_png).toString());
+  });
+
   test('an avatar that is not a decodable image is dropped', () async {
     final junk = List<int>.generate(64, (i) => i);
     final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);

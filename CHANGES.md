@@ -1,5 +1,9 @@
 # Changes Log
 
+## Keep received avatars in memory
+
+`ReceiveService` now routes each accepted transfer to an `_IncomingTransfer`: user files still go through `FileTransferManager`, avatars (at most 10 MB) are collected in a `BytesBuilder`, checked against their MD5 and handed to `AvatarStore` with that same hash. The temp folder, `AVATAR_TEMP_FOLDER` and the `directory` parameter of `FileTransferManager.add` are gone. A wrong avatar checksum is now reported to the sender with the failure byte. Tests in `test/transfer_loopback_test.dart`.
+
 ## Hide the transfer map of FileTransferManager
 
 The map of active transfers is private: callers read a transfer with `manager[key]` and count them with `activeCount`, and `downloadPath` is a getter changed only by `updateDownloadPath`. The tests no longer clear the map of a fresh manager. Tests in `test/file_transfer_manager_test.dart` (plus the loopback and server limit tests that used the map).
