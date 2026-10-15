@@ -95,7 +95,11 @@ class _HomePageState extends State<HomePage> {
   List<Widget> _getScreens() {
     return [
       HistoryScreen(history: widget.services.history),
-      HomeContent(networkService: _networkService, notificationManager: widget.services.notificationManager),
+      HomeContent(
+        networkService: _networkService,
+        notificationManager: widget.services.notificationManager,
+        sendQueues: widget.services.sendQueues,
+      ),
       SettingsScreen(
         user: _currentUser,
         onUserUpdated: _updateUser,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import '../services/network_service.dart';
+import '../services/send_queues.dart';
 import '../models/file_received_event.dart';
 import '../models/peer.dart';
 import '../models/notification_manager.dart';
@@ -14,10 +15,15 @@ import 'peer_details.dart';
 class HomeContent extends StatefulWidget {
   final NetworkService networkService;
   final NotificationManager notificationManager;
+
+  /// Queues the peer pages send through; they keep running when a page is closed
+  final SendQueues sendQueues;
+
   const HomeContent({
     super.key,
     required this.networkService,
     required this.notificationManager,
+    required this.sendQueues,
   });
 
   @override
@@ -94,6 +100,7 @@ class _HomeContentState extends State<HomeContent> {
                           builder: (context) => PeerDetailPage(
                             peer: peer,
                             networkService: widget.networkService,
+                            sendQueue: widget.sendQueues.forPeer(peer),
                           ),
                         ),
                       );

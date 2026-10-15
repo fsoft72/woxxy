@@ -65,6 +65,8 @@ class SendQueueController extends ChangeNotifier {
   /// Called with a short user facing message (success, failure, cancelled).
   final void Function(String message)? onMessage;
 
+  final StreamController<String> _messages = StreamController<String>.broadcast();
+
   final Queue<QueuedFile> _queue = Queue<QueuedFile>();
   final List<QueuedFile> _completed = [];
   bool _processing = false; // A send loop is running (it can outlive a cancelAll by one file)
@@ -110,13 +112,16 @@ class SendQueueController extends ChangeNotifier {
   bool get isPreparing => _phase == SendPhase.preparing;
   int get totalCompleted => _totalCompleted;
 
+  /// The same messages as [onMessage], for screens that come and go while the queue keeps running.
+  Stream<String> get messages => _messages.stream;
+
   /// True while the controller is sending a file or has files waiting.
   bool get hasWork => _queue.isNotEmpty || _processing;
 
   /// Adds files to the queue and starts sending if idle.
   ///
   /// Paths that are not readable files (a dropped folder, a file deleted meanwhile) are skipped
-  /// and reported through [onMessage]; they never leave the controller in a busy state.
+  /// and reported through [onMessage] and [messages]; they never leave the controller in a busy state.
   Future<void> addFiles(List<String> filePaths) async {
     if (filePaths.isEmpty) return;
     zprint('📁 Adding ${filePaths.length} files to queue');
@@ -136,7 +141,7 @@ class SendQueueController extends ChangeNotifier {
       }
     }
     if (_disposed) return;
-    if (skipped.isNotEmpty) onMessage?.call('Skipped (not a readable file): ${skipped.join(', ')}');
+    if (skipped.isNotEmpty) _message('Skipped (not a readable file): ${skipped.join(', ')}');
     if (accepted.isEmpty) return;
 
     if (_phase == SendPhase.idle) {
@@ -166,7 +171,7 @@ class SendQueueController extends ChangeNotifier {
     _completed.clear();
     _totalCompleted = 0;
     _notify();
-    onMessage?.call('All transfers cancelled');
+    _message('All transfers cancelled');
   }
 
   Future<void> _processQueue() async {
@@ -234,7 +239,7 @@ class SendQueueController extends ChangeNotifier {
     _completed.add(item);
     _notify();
 
-    onMessage?.call(
+    _message(
         'File sent successfully (${formatBytes(item.size)} in ${seconds.toStringAsFixed(1)}s, ${speed.toStringAsFixed(2)} MB/s)');
   }
 
@@ -244,7 +249,13 @@ class SendQueueController extends ChangeNotifier {
     _queue.removeFirst();
     _completed.add(item);
     _notify();
-    onMessage?.call('Error sending ${item.name}: $error');
+    _message('Error sending ${item.name}: $error');
+  }
+
+  /// Reports [message] to [onMessage] and to the [messages] listeners.
+  void _message(String message) {
+    onMessage?.call(message);
+    if (!_messages.isClosed) _messages.add(message);
   }
 
   void _notify() {
@@ -256,6 +267,7 @@ class SendQueueController extends ChangeNotifier {
     _disposed = true;
     final id = _activeTransferId;
     if (id != null) _cancel(id);
+    _messages.close();
     super.dispose();
   }
 }

@@ -1,5 +1,9 @@
 # Changes Log
 
+## Keep sending when the peer page is closed
+
+The new `SendQueues` (in `AppServices`, disposed when the app quits) owns one `SendQueueController` per peer id and sends every file to the newest announcement of the peer. `PeerDetailPage` receives its queue from `HomeContent`, only shows it and shows its messages through the new `SendQueueController.messages` stream, so pressing Back no longer cancels the files being sent, and reopening the page shows the running queue. Tests in `test/send_queues_test.dart` (plus the home and peer page tests).
+
 ## Describe the send queue state with one SendPhase
 
 `SendQueueController` replaces `_isTransferring`, `_preparing` and `_transferComplete` with one `SendPhase` (`idle`, `preparing`, `sending`, `completed`); `isTransferring` and `isPreparing` are derived from it, `transferComplete` is gone, and `TransferProgressCard` takes the phase instead of two flags. `_processing` stays: it guards the send loop, which can outlive a `cancelAll` by one file. Tests in `test/send_queue_controller_test.dart`.

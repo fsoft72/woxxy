@@ -5,6 +5,7 @@ import 'models/notification_manager.dart';
 import 'services/history_repository.dart';
 import 'services/network_service.dart';
 import 'services/received_files_handler.dart';
+import 'services/send_queues.dart';
 import 'services/settings_service.dart';
 
 /// The long lived objects of the app, created once in main() and passed down explicitly.
@@ -22,6 +23,9 @@ class AppServices {
   /// Records received files in the history and notifies the user, for the whole app lifetime
   final ReceivedFilesHandler receivedFiles;
 
+  /// The send queue of each peer; they outlive the peer pages
+  final SendQueues sendQueues;
+
   AppServices({
     required this.settingsService,
     required this.fileTransferManager,
@@ -31,10 +35,12 @@ class AppServices {
     required this.history,
     required this.historyRepository,
     required this.receivedFiles,
+    required this.sendQueues,
   });
 
   /// Stops everything that was started. Called once by the owner when the app really quits.
   Future<void> dispose() async {
+    sendQueues.dispose();
     await receivedFiles.dispose();
     await networkService.dispose();
     await historyRepository.flush();
@@ -68,6 +74,7 @@ class AppServices {
         history: history,
         notificationManager: notificationManager,
       ),
+      sendQueues: SendQueues(networkService),
     );
   }
 }

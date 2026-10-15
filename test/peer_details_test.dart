@@ -6,6 +6,7 @@ import 'package:woxxy/models/avatars.dart';
 import 'package:woxxy/models/peer.dart';
 import 'package:woxxy/models/peer_manager.dart';
 import 'package:woxxy/screens/peer_details.dart';
+import 'package:woxxy/services/send_queues.dart';
 
 import 'support/test_services.dart';
 
@@ -29,7 +30,7 @@ void main() {
 
   Future<void> open(WidgetTester tester) async {
     final network = testNetworkService(peerManager: peers);
-    await tester.pumpWidget(MaterialApp(home: PeerDetailPage(peer: _peer(), networkService: network)));
+    await tester.pumpWidget(MaterialApp(home: PeerDetailPage(peer: _peer(), networkService: network, sendQueue: SendQueues(network).forPeer(_peer()))));
     await settle(tester);
   }
 

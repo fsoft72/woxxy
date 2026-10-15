@@ -13,14 +13,19 @@ import '../widgets/send/send_drop_zone.dart';
 import '../widgets/send/transfer_progress_card.dart';
 
 /// Details of one peer and the place where files are chosen and sent to it.
+///
+/// The page only shows and feeds [sendQueue]: the queue belongs to the app, so leaving the page
+/// does not stop the files that are being sent.
 class PeerDetailPage extends StatefulWidget {
   final Peer peer;
   final NetworkService networkService;
+  final SendQueueController sendQueue;
 
   const PeerDetailPage({
     super.key,
     required this.peer,
     required this.networkService,
+    required this.sendQueue,
   });
 
   @override
@@ -28,8 +33,9 @@ class PeerDetailPage extends StatefulWidget {
 }
 
 class _PeerDetailPageState extends State<PeerDetailPage> {
-  late final SendQueueController _queue;
+  late final SendQueueController _queue = widget.sendQueue;
   late final StreamSubscription<List<Peer>> _peersSubscription;
+  late final StreamSubscription<String> _messagesSubscription;
 
   /// Latest announcement of the peer: its port or name may change while this page is open.
   late Peer _peer = widget.peer;
@@ -41,14 +47,9 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
   void initState() {
     super.initState();
     _peersSubscription = widget.networkService.peerStream.listen(_onPeersChanged);
-    _queue = SendQueueController(
-      send: (transferId, filePath, onProgress) =>
-          widget.networkService.sendFile(transferId, filePath, _peer, onProgress: onProgress),
-      cancel: widget.networkService.cancelTransfer,
-      onMessage: (message) {
-        if (mounted) showSnackbar(context, message);
-      },
-    );
+    _messagesSubscription = _queue.messages.listen((message) {
+      if (mounted) showSnackbar(context, message);
+    });
   }
 
   /// Follows the peer in the peer list: takes its newest address data and notices when it is gone.
@@ -63,7 +64,7 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
   @override
   void dispose() {
     _peersSubscription.cancel();
-    _queue.dispose();
+    _messagesSubscription.cancel(); // The queue itself keeps running
     super.dispose();
   }
 

@@ -8,7 +8,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 
 ## High
 
-- [ ] **Leaving the peer page silently cancels the transfers** - `SendQueueController` is created and disposed by `_PeerDetailPageState`, so pressing Back while a big file (or a queue) is being sent cancels it without any warning; move the queues into an app-level owner (for example a `SendQueues` registry keyed by peer id in `AppServices`) so the page only observes them, or at least confirm before popping while `hasWork` is true.
+- [x] **Leaving the peer page silently cancels the transfers** - `SendQueueController` is created and disposed by `_PeerDetailPageState`, so pressing Back while a big file (or a queue) is being sent cancels it without any warning; move the queues into an app-level owner (for example a `SendQueues` registry keyed by peer id in `AppServices`) so the page only observes them, or at least confirm before popping while `hasWork` is true.
   - File(s): `lib/screens/peer_details.dart`, `lib/services/send_queue_controller.dart`, `lib/app_services.dart`
 
 - [x] **Every sent file is read from disk twice** - `SendService._createFileMetadata` hashes the whole file with `md5OfFile` before the first byte is sent, so a multi-GB file spends as long in "Preparing..." as in the transfer itself; compute the MD5 while streaming (as the receiver already does in `FileTransfer.write`) and send it in a short trailer after the data, keeping the header checksum for older receivers behind a protocol version field.
