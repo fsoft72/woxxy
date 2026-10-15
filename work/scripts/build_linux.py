@@ -9,12 +9,16 @@ This scripts runs the following commands to build the Windows executable:
 - flutter build linux --release
 
 then it creates a tar.bz2 the release folder as 'woxxy-$APP_VERSION-linux-x64.tar.bz2' and moves it to the Desktop.
+Finally it copies the release bundle (executable included) to /ramdisk/.
 
 This script must be run from the root of the project.
 """
 
 import os
+import shutil
 
+RAMDISK_DIR = "/ramdisk"
+BUNDLE_DIR = "build/linux/x64/release/bundle"
 APP_VERSION = None
 FINAL_ZIP = ""
 
@@ -43,7 +47,7 @@ def build_linux():
 
 
 def zip_release_folder():
-    BASE_DIR = "build/linux/x64/release/bundle"
+    BASE_DIR = BUNDLE_DIR
 
     # save the current directory
     current_dir = os.getcwd()
@@ -65,8 +69,22 @@ def move_zip_to_desktop():
     os.rename(FINAL_ZIP, os.path.join(os.path.expanduser("~"), "Desktop", FINAL_ZIP))
 
 
+def copy_bundle_to_ramdisk():
+    """Copy the release bundle (executable, lib/ and data/) to RAMDISK_DIR."""
+    if not os.path.isdir(BUNDLE_DIR):
+        print("Release folder not found, skipping the copy to the ramdisk.")
+        exit(1)
+    if not os.path.isdir(RAMDISK_DIR):
+        print(f"{RAMDISK_DIR} not found, skipping the copy to the ramdisk.")
+        exit(1)
+
+    shutil.copytree(BUNDLE_DIR, RAMDISK_DIR, dirs_exist_ok=True)
+    print(f"Release bundle copied to {RAMDISK_DIR}")
+
+
 if __name__ == "__main__":
     get_app_version()
     build_linux()
     zip_release_folder()
     move_zip_to_desktop()
+    copy_bundle_to_ramdisk()
