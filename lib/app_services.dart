@@ -6,6 +6,7 @@ import 'services/history_repository.dart';
 import 'services/network_service.dart';
 import 'services/received_files_handler.dart';
 import 'services/send_queues.dart';
+import 'services/sent_files_handler.dart';
 import 'services/settings_service.dart';
 
 /// The long lived objects of the app, created once in main() and passed down explicitly.
@@ -74,7 +75,10 @@ class AppServices {
         history: history,
         notificationManager: notificationManager,
       ),
-      sendQueues: SendQueues(networkService),
+      sendQueues: SendQueues(
+        networkService,
+        onFileSent: SentFilesHandler(history: history, notificationManager: notificationManager).handle,
+      ),
     );
   }
 }

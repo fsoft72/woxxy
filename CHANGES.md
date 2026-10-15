@@ -1,5 +1,9 @@
 # Changes Log
 
+## Record and notify every finished or failed send
+
+A send that ended while its page was closed (or the window hidden) went unnoticed. `SendQueueController` now reports each file that was sent or failed through `onFileFinished` (files dropped by Cancel All are not reported), `SendQueues` turns it into a `FileSentEvent`, and the new app-level `SentFilesHandler` adds a history entry and shows a system notification ("File Sent" with size and speed, or "Send Failed" with the reason; clicking it opens the folder). `FileHistoryEntry` became two-way: `filePath`, `peerName`, `direction` and `errorMessage`, still reading the old `destinationPath`/`senderUsername` keys, and the History tab shows a down or up arrow, "from"/"to" and failed sends in red with their error. Tests in `test/sent_files_handler_test.dart`, `test/history_screen_test.dart`, `test/send_queues_test.dart`, `test/send_queue_controller_test.dart` and `test/file_history_test.dart`.
+
 ## Document the public classes and members
 
 The duplicated doc line of `FileHistoryEntry.speedMBps` is gone, and the public classes, typedefs and members that had no doc comment (or only a `//` line) now have one: `MyApp`, `User`, `FileHistoryEntry`, the screens, `SettingsService`, `ServerService`, `DiscoveryService`, `SendService`, `NetworkService`, `PeerManager`, `DesktopWindow` and the queue getters. Documentation only, checked by `flutter analyze` and the full test suite.

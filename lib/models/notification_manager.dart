@@ -85,6 +85,25 @@ class NotificationManager {
     return showNotification('File Received', body, payload: path.dirname(filePath));
   }
 
+  /// Shows the result of a send: "File Sent" with size and speed, or "Send Failed" with the
+  /// reason. Clicking it opens the folder that contains the file.
+  Future<void> showFileSentNotification({
+    required String filePath,
+    required String receiverName,
+    required double fileSizeMB,
+    required double speedMBps,
+    String? errorMessage,
+  }) {
+    final fileName = path.basename(filePath);
+    if (errorMessage != null) {
+      return showNotification('Send Failed', 'Could not send $fileName to $receiverName\n$errorMessage',
+          payload: path.dirname(filePath));
+    }
+    final body = 'Sent $fileName (${fileSizeMB.toStringAsFixed(2)} MB) to $receiverName\n'
+        'Speed: ${speedMBps.toStringAsFixed(2)} MB/s';
+    return showNotification('File Sent', body, payload: path.dirname(filePath));
+  }
+
   /// Opens the folder in [payload] when a notification is clicked. Ignores empty payloads.
   @visibleForTesting
   void handleNotificationClick(String? payload) {

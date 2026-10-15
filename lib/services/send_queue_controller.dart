@@ -70,6 +70,10 @@ class SendQueueController extends ChangeNotifier {
   /// Called with a short user facing message (success, failure, cancelled).
   final void Function(String message)? onMessage;
 
+  /// Called once for every file that was sent or failed, with the average speed in MB/s
+  /// (0 for a failure). Files dropped by [cancelAll] are not reported.
+  final void Function(QueuedFile file, double speedMBps)? onFileFinished;
+
   final StreamController<String> _messages = StreamController<String>.broadcast();
 
   final Queue<QueuedFile> _queue = Queue<QueuedFile>();
@@ -89,6 +93,7 @@ class SendQueueController extends ChangeNotifier {
     required SendFileFunction send,
     required CancelTransferFunction cancel,
     this.onMessage,
+    this.onFileFinished,
     ProgressThrottle? throttle,
     String Function(String filename)? idGenerator,
   })  : _send = send,
@@ -249,6 +254,7 @@ class SendQueueController extends ChangeNotifier {
 
     _message(
         'File sent successfully (${formatBytes(item.size)} in ${seconds.toStringAsFixed(1)}s, ${speed.toStringAsFixed(2)} MB/s)');
+    onFileFinished?.call(item, speed);
   }
 
   void _onFailure(QueuedFile item, Object error) {
@@ -258,6 +264,7 @@ class SendQueueController extends ChangeNotifier {
     _completed.add(item);
     _notify();
     _message('Error sending ${item.name}: $error');
+    onFileFinished?.call(item, 0);
   }
 
   /// Reports [message] to [onMessage] and to the [messages] listeners.

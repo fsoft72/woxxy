@@ -38,8 +38,8 @@ class ReceivedFilesHandler {
 
   Future<void> _handle(FileReceivedEvent event) async {
     _history.addEntry(FileHistoryEntry(
-      destinationPath: event.filePath,
-      senderUsername: event.senderUsername,
+      filePath: event.filePath,
+      peerName: event.senderUsername,
       fileSize: event.fileSize,
       speedMBps: event.speedMBps,
     ));

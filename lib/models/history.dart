@@ -7,46 +7,72 @@ import 'package:flutter/foundation.dart';
 /// Maximum number of history entries kept; the oldest are dropped first.
 const int MAX_HISTORY_ENTRIES = 500;
 
-/// One received file as shown in the History tab.
+/// Whether a history entry is a file that came in or one that went out.
+enum TransferDirection { received, sent }
+
+/// One received or sent file as shown in the History tab.
 class FileHistoryEntry {
-  final String destinationPath;
-  final String senderUsername;
+  /// Local path: where a received file was saved, or the file that was sent
+  final String filePath;
+
+  /// The other device: the sender of a received file, the receiver of a sent one
+  final String peerName;
+
   final int fileSize;
-  /// Average speed of the transfer, in MB/s
+
+  /// Average speed of the transfer, in MB/s (0 for a failed send)
   final double speedMBps;
+
   final DateTime createdAt;
 
+  final TransferDirection direction;
+
+  /// Why a send failed; null when the file arrived
+  final String? errorMessage;
+
   FileHistoryEntry({
-    required this.destinationPath,
-    required this.senderUsername,
+    required this.filePath,
+    required this.peerName,
     required this.fileSize,
     required this.speedMBps,
+    this.direction = TransferDirection.received,
+    this.errorMessage,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
+  /// True for a file this device sent.
+  bool get isSent => direction == TransferDirection.sent;
+
+  /// True when the transfer did not complete.
+  bool get failed => errorMessage != null;
+
   /// The map stored in the saved history.
   Map<String, dynamic> toJson() => {
-        'destinationPath': destinationPath,
-        'senderUsername': senderUsername,
+        'filePath': filePath,
+        'peerName': peerName,
         'fileSize': fileSize,
         'speedMBps': speedMBps,
         'createdAt': createdAt.toIso8601String(),
+        'direction': direction.name,
+        if (errorMessage != null) 'errorMessage': errorMessage,
       };
 
-  /// Reads an entry of the saved history (also the old `uploadSpeedMBps` key).
+  /// Reads an entry of the saved history. Histories saved by older versions hold only received
+  /// files and use the keys `destinationPath`, `senderUsername` and `uploadSpeedMBps`.
   factory FileHistoryEntry.fromJson(Map<String, dynamic> json) {
     return FileHistoryEntry(
-      destinationPath: json['destinationPath'] as String,
-      senderUsername: json['senderUsername'] as String,
+      filePath: (json['filePath'] ?? json['destinationPath']) as String,
+      peerName: (json['peerName'] ?? json['senderUsername']) as String,
       fileSize: (json['fileSize'] as num).toInt(),
-      // Histories saved by older versions called the key "uploadSpeedMBps"
       speedMBps: ((json['speedMBps'] ?? json['uploadSpeedMBps']) as num).toDouble(),
       createdAt: DateTime.parse(json['createdAt'] as String),
+      direction: json['direction'] == TransferDirection.sent.name ? TransferDirection.sent : TransferDirection.received,
+      errorMessage: json['errorMessage'] as String?,
     );
   }
 }
 
-/// Received files, newest first. Notifies listeners on every change so screens and the
+/// Received and sent files, newest first. Notifies listeners on every change so screens and the
 /// persistence layer can react without manual refreshes.
 class FileHistory extends ChangeNotifier {
   final List<FileHistoryEntry> _entries = [];
@@ -73,7 +99,7 @@ class FileHistory extends ChangeNotifier {
 
   /// Removes [entry] (matched by path and time).
   void removeEntry(FileHistoryEntry entry) {
-    _entries.removeWhere((e) => e.destinationPath == entry.destinationPath && e.createdAt == entry.createdAt);
+    _entries.removeWhere((e) => e.filePath == entry.filePath && e.createdAt == entry.createdAt);
     notifyListeners();
   }
 

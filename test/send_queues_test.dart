@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/models/avatars.dart';
+import 'package:woxxy/models/file_sent_event.dart';
 import 'package:woxxy/models/file_transfer_manager.dart';
 import 'package:woxxy/models/local_identity.dart';
 import 'package:woxxy/models/peer.dart';
@@ -48,6 +49,7 @@ void main() {
   late PeerManager peers;
   late NetworkService network;
   late SendQueues queues;
+  late List<FileSentEvent> sentEvents;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('woxxy_queues_');
@@ -60,7 +62,8 @@ void main() {
       peerManager: peers,
       sendService: send,
     );
-    queues = SendQueues(network);
+    sentEvents = [];
+    queues = SendQueues(network, onFileSent: sentEvents.add);
   });
 
   tearDown(() async {
@@ -106,6 +109,21 @@ void main() {
     send.release.complete();
     await tester.runAsync(idle);
     expect(queue.completed.single.isCompleted, isTrue);
+    expect(sentEvents.single.receiverName, 'bob', reason: 'reported although no page is open');
+    expect(sentEvents.single.failed, isFalse);
+  });
+
+  test('a failed send is reported with its error', () async {
+    final queue = queues.forPeer(_peer());
+    await queue.addFiles([makeFile('a.txt')]);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    send.release.completeError(Exception('peer vanished'));
+    await idle();
+
+    expect(sentEvents.single.failed, isTrue);
+    expect(sentEvents.single.errorMessage, contains('peer vanished'));
+    expect(sentEvents.single.filePath, endsWith('a.txt'));
   });
 
   test('dispose cancels what is still being sent', () async {

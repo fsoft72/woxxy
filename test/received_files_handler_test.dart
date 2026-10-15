@@ -52,8 +52,8 @@ void main() {
     controller.add(event);
     await pump();
 
-    expect(history.entries.single.destinationPath, '/tmp/a.txt');
-    expect(history.entries.single.senderUsername, 'bob');
+    expect(history.entries.single.filePath, '/tmp/a.txt');
+    expect(history.entries.single.peerName, 'bob');
     expect(backend.bodies.single, contains('a.txt'));
   });
 

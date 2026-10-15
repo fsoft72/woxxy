@@ -179,6 +179,34 @@ void main() {
     expect(messages, ['All transfers cancelled']);
   });
 
+  test('every sent or failed file is reported once; a cancelled one is not', () async {
+    final finished = <String>[];
+    final gate = Completer<void>();
+    final c = SendQueueController(
+      send: (id, path, onProgress) async {
+        if (path.endsWith('bad.txt')) throw Exception('peer vanished');
+        if (path.endsWith('slow.txt')) {
+          await gate.future;
+          throw Exception('socket destroyed');
+        }
+        onProgress(10, 10);
+      },
+      cancel: (_) => true,
+      onFileFinished: (file, speed) => finished.add('${file.name}:${file.isFailed ? file.errorMessage : 'ok'}'),
+    );
+
+    await c.addFiles([await makeFile('good.txt'), await makeFile('bad.txt')]);
+    await idle(c);
+    await c.addFiles([await makeFile('slow.txt')]);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    c.cancelAll();
+    gate.complete();
+    await idle(c);
+
+    expect(finished, ['good.txt:ok', 'bad.txt:Exception: peer vanished']);
+    c.dispose();
+  });
+
   test('files added while sending join the running queue', () async {
     final gate = Completer<void>();
     final c = controller((id, path, onProgress) async {

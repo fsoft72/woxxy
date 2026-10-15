@@ -1,3 +1,4 @@
+import '../models/file_sent_event.dart';
 import '../models/peer.dart';
 import 'network_service.dart';
 import 'send_queue_controller.dart';
@@ -8,7 +9,10 @@ class SendQueues {
   final NetworkService _network;
   final Map<String, SendQueueController> _queues = {};
 
-  SendQueues(this._network);
+  /// Called for every file that was sent or failed, whatever page is open
+  final void Function(FileSentEvent event)? onFileSent;
+
+  SendQueues(this._network, {this.onFileSent});
 
   /// The queue of [peer], created on first use. Every file goes to the newest announcement of the
   /// peer (its port may change while the queue runs), or to [peer] when it left the peer list.
@@ -19,6 +23,13 @@ class SendQueues {
         send: (transferId, filePath, onProgress) =>
             _network.sendFile(transferId, filePath, _latest(peer), onProgress: onProgress),
         cancel: _network.cancelTransfer,
+        onFileFinished: (file, speedMBps) => onFileSent?.call(FileSentEvent(
+          filePath: file.path,
+          receiverName: _latest(peer).name,
+          fileSize: file.size,
+          speedMBps: speedMBps,
+          errorMessage: file.errorMessage,
+        )),
       ),
     );
   }
