@@ -110,12 +110,7 @@ class PeerManager {
     }
 
     existing.lastSeen = _now();
-    final changed = existing.peer.name != peer.name ||
-        existing.peer.port != peer.port ||
-        existing.peer.address.address != peer.address.address ||
-        existing.peer.avatarHash != peer.avatarHash ||
-        existing.peer.transferVersion != peer.transferVersion;
-    if (changed) {
+    if (existing.peer != peer) {
       zprint('✏️ Peer updated: ${existing.peer.name} -> ${peer.name} (${peer.id})');
       existing.peer = peer;
       _emit();

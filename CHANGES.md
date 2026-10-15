@@ -1,5 +1,9 @@
 # Changes Log
 
+## Give Peer value equality and drop its JSON code
+
+`Peer` compares (and hashes) every announced value, so `PeerManager.addPeer` detects a changed announcement with `existing.peer != peer` instead of a field by field check, and the unused `toJson`/`fromJson` are gone. Tests in `test/peer_test.dart`.
+
 ## Remove the debug notification button from the peer list
 
 `HomeContent` no longer has the `kDebugMode` "Test Notification" button with its fake `/tmp/test.txt` values, so it only shows the peer list (the single-child `Column` went too) and no longer needs the `NotificationManager`. Test in `test/home_content_test.dart`.

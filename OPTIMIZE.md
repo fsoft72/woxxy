@@ -51,7 +51,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Hand-written image sniffing duplicates the real decoder check** - `ReceiveService._isValidImageData` checks magic bytes (and accepts GIF and WebP, which the settings picker never offers) right before `AvatarStore.setAvatar` decodes the image and throws on invalid data anyway; remove the sniffer and rely on the decoder.
   - File(s): `lib/services/network/receive_service.dart`
 
-- [ ] **`Peer` has no equality and carries unused JSON code** - `PeerManager.addPeer` compares name, port, address and avatarHash field by field, while `Peer.toJson`/`Peer.fromJson` are never used; add `==`/`hashCode` to `Peer`, use them in `addPeer`, and drop the dead serialization.
+- [x] **`Peer` has no equality and carries unused JSON code** - `PeerManager.addPeer` compares name, port, address and avatarHash field by field, while `Peer.toJson`/`Peer.fromJson` are never used; add `==`/`hashCode` to `Peer`, use them in `addPeer`, and drop the dead serialization.
   - File(s): `lib/models/peer.dart`, `lib/models/peer_manager.dart`
 
 - [x] **Metadata decoder copies its buffer on every chunk** - `MetadataFrameDecoder.add` calls `_buffer.toBytes()` for each incoming chunk until the header is complete, which is quadratic for headers near the 1 MB limit; read the 4-byte length once and copy only when `_length >= frameEnd`.

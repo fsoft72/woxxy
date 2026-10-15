@@ -1,5 +1,6 @@
 import 'dart:io';
 
+/// A device announced on the LAN; its [id] is its IP address.
 class Peer {
   final String name;
   final String id;
@@ -25,19 +26,18 @@ class Peer {
   /// file only once.
   bool get acceptsMd5Trailer => transferVersion >= 2;
 
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'id': id,
-    'address': address.address,
-    'port': port,
-    'avatarHash': avatarHash,
-  };
+  /// Two peers are equal when every announced value is equal, so a repeated announcement is
+  /// recognized as "nothing changed".
+  @override
+  bool operator ==(Object other) =>
+      other is Peer &&
+      other.name == name &&
+      other.id == id &&
+      other.address.address == address.address &&
+      other.port == port &&
+      other.avatarHash == avatarHash &&
+      other.transferVersion == transferVersion;
 
-  factory Peer.fromJson(Map<String, dynamic> json) => Peer(
-    name: json['name'],
-    id: json['id'],
-    address: InternetAddress(json['address']),
-    port: json['port'],
-    avatarHash: json['avatarHash'],
-  );
+  @override
+  int get hashCode => Object.hash(name, id, address.address, port, avatarHash, transferVersion);
 }
