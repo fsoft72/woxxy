@@ -1,5 +1,9 @@
 # Changes Log
 
+## Share one transfer lifecycle between file and avatar sends
+
+`SendService` keeps a single `Map<String, Socket?>` of running sends (null until connected) instead of `_liveTransfers` plus `_activeTransfers`, and both `sendFile` and `sendAvatar` run through `_runTransfer`, which registers the id, checks the local address and always forgets the transfer at the end. Tests in `test/send_cancel_test.dart`.
+
 ## Return nothing from sendFile
 
 `SendService.sendFile`, `NetworkService.sendFile` and `SendFileFunction` return `Future<void>`: they complete when the receiver has the file and throw otherwise, instead of handing back the caller's own transfer id. Tests in `test/transfer_result_test.dart` (plus the fakes in the queue, injection and loopback tests).

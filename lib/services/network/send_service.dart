@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:woxxy/funcs/debug.dart';
@@ -21,24 +22,25 @@ class SendService {
   /// Local address, name and avatar written into the metadata of every transfer
   final LocalIdentity identity;
 
-  // Sockets of the outbound transfers that are connected - destroyed on cancellation
-  final Map<String, Socket> _activeTransfers = {};
-
-  // Ids of every transfer between the start of sendFile and its end (hashing and connecting
-  // included), so a cancel is honored in every phase
-  final Set<String> _liveTransfers = {};
+  // Every transfer between the start of a send and its end, with its socket once connected (null
+  // while hashing or connecting), so a cancel is honored in every phase
+  final Map<String, Socket?> _transfers = {};
 
   SendService({LocalIdentity? identity}) : identity = identity ?? LocalIdentity();
+
+  /// Number of sends that are running, in any phase.
+  @visibleForTesting
+  int get runningTransfers => _transfers.length;
 
   /// Cancel an active file transfer
   /// Returns true if transfer was found and canceled, false otherwise
   bool cancelTransfer(String transferId) {
-    if (!_liveTransfers.remove(transferId)) {
+    if (!_transfers.containsKey(transferId)) {
       zprint("⚠️ Attempted to cancel non-existent transfer: $transferId");
       return false;
     }
     zprint('🛑 Cancelling transfer: $transferId');
-    final socket = _activeTransfers.remove(transferId); // Null while still hashing or connecting
+    final socket = _transfers.remove(transferId); // Null while still hashing or connecting
     try {
       socket?.destroy(); // Force close the socket
     } catch (e) {
@@ -49,7 +51,20 @@ class SendService {
 
   /// Throws when [transferId] was cancelled (or never started).
   void _throwIfCancelled(String transferId) {
-    if (!_liveTransfers.contains(transferId)) throw Exception('Transfer cancelled');
+    if (!_transfers.containsKey(transferId)) throw Exception('Transfer cancelled');
+  }
+
+  /// Registers [transferId] so it can be cancelled, runs [body] and forgets the transfer when
+  /// [body] ends, whatever the outcome. Fails at once when the local address is unknown.
+  Future<T> _runTransfer<T>(String transferId, Future<T> Function() body) async {
+    _transfers[transferId] = null;
+    try {
+      final ip = identity.ipAddress;
+      if (ip == null || ip.isEmpty) throw Exception('Local IP address is unknown.');
+      return await body();
+    } finally {
+      _transfers.remove(transferId);
+    }
   }
 
   /// Sends a file to a peer with progress tracking. Completes when the receiver has the file and
@@ -58,31 +73,21 @@ class SendService {
       {FileTransferProgressCallback? onProgress}) async {
     zprint('📤 Starting file transfer process for $filePath to ${receiver.name} (${receiver.id})');
     final file = File(filePath);
-    _liveTransfers.add(transferId); // From now on the transfer can be cancelled
     try {
-      if (!await file.exists()) {
-        zprint("❌ File does not exist: $filePath");
-        throw Exception('File does not exist: $filePath');
-      }
+      await _runTransfer(transferId, () async {
+        if (!await file.exists()) throw Exception('File does not exist: $filePath');
 
-      if (identity.ipAddress == null) {
-        zprint("❌ Cannot send file: Local IP address is unknown.");
-        throw Exception('Local IP address is unknown.');
-      }
+        // A receiver that accepts the trailer gets the MD5 computed while streaming: one read only
+        final metadata = await _createFileMetadata(file, transferId, md5InTrailer: receiver.acceptsMd5Trailer);
+        _throwIfCancelled(transferId);
+        zprintLazy(() => "  [Send] Generated metadata: ${json.encode(metadata)}");
 
-      // A receiver that accepts the trailer gets the MD5 computed while streaming: one read only
-      final metadata = await _createFileMetadata(file, transferId, md5InTrailer: receiver.acceptsMd5Trailer);
-      _throwIfCancelled(transferId);
-      zprintLazy(() => "  [Send] Generated metadata: ${json.encode(metadata)}");
-
-      await _sendFileWithMetadata(transferId, filePath, receiver, metadata, onProgress: onProgress);
-
+        await _sendFileWithMetadata(transferId, filePath, receiver, metadata, onProgress: onProgress);
+      });
       zprint('✅ File transfer completed successfully: $transferId');
     } catch (e, s) {
       zprint('❌ Error during sendFile process ($transferId): $e\n$s');
       rethrow;
-    } finally {
-      _liveTransfers.remove(transferId);
     }
   }
 
@@ -98,45 +103,28 @@ class SendService {
 
     final avatarFile = File(identity.profileImagePath!);
     final transferId = 'avatar_${receiver.id}_${DateTime.now().millisecondsSinceEpoch}';
-    
-    _liveTransfers.add(transferId);
     try {
-      // Validate avatar file
-      if (!await _validateAvatarFile(avatarFile)) {
-        return false;
-      }
+      return await _runTransfer(transferId, () async {
+        if (!await _validateAvatarFile(avatarFile)) return false;
 
-      // Create avatar metadata
-      final avatarMetadata = await _createAvatarMetadata(avatarFile, transferId);
-      zprint("📋 [Avatar Send] Metadata prepared for ${receiver.name}");
-      
-      // Send the avatar file
-      await _sendFileWithMetadata(transferId, identity.profileImagePath!, receiver, avatarMetadata);
-      
-      zprint('✅ Avatar sent successfully to ${receiver.name}');
-      return true;
-      
+        final avatarMetadata = await _createAvatarMetadata(avatarFile, transferId);
+        await _sendFileWithMetadata(transferId, avatarFile.path, receiver, avatarMetadata);
+        zprint('✅ Avatar sent successfully to ${receiver.name}');
+        return true;
+      });
     } catch (e, stackTrace) {
-      zprint('❌ Failed to send avatar ($transferId) to ${receiver.name}: $e');
-      zprint('Stack trace: $stackTrace');
+      zprint('❌ Failed to send avatar ($transferId) to ${receiver.name}: $e\n$stackTrace');
       return false;
-    } finally {
-      _liveTransfers.remove(transferId);
     }
   }
 
-  /// Validates prerequisites for sending an avatar
+  /// Validates prerequisites for sending an avatar (the local address is checked by [_runTransfer])
   bool _validateAvatarSendPrerequisites(Peer receiver) {
     if (identity.profileImagePath == null || identity.profileImagePath!.isEmpty) {
       zprint('🚫 Cannot send avatar: No profile image configured');
       return false;
     }
-    
-    if (identity.ipAddress == null || identity.ipAddress!.isEmpty) {
-      zprint('🚫 Cannot send avatar: Local IP address unknown');
-      return false;
-    }
-    
+
     if (receiver.id.isEmpty) {
       zprint('🚫 Cannot send avatar: Receiver ID is empty');
       return false;
@@ -258,9 +246,8 @@ class SendService {
       // Configure socket for better Windows compatibility
       socket.setOption(SocketOption.tcpNoDelay, true);
       
-      zprint("  [Send Meta] Connected. Adding to active transfers: $transferId");
-      _activeTransfers[transferId] = socket; // Add BEFORE sending data
       _throwIfCancelled(transferId); // Cancelled while connecting: the finally block closes the socket
+      _transfers[transferId] = socket; // From now on a cancel destroys the socket
 
       final frame = encodeMetadataFrame(metadata.toJson());
       zprint("  [Send Meta] Sending metadata frame (${frame.length} bytes)...");
@@ -300,7 +287,6 @@ class SendService {
     } finally {
       zprint("🧼 Final cleanup for $transferId...");
       await reader?.dispose();
-      _activeTransfers.remove(transferId);
       if (socket != null) {
         try {
           await socket.close();
@@ -319,10 +305,9 @@ class SendService {
   Future<void> dispose() async {
     zprint('🛑 Disposing SendService...');
     // Close any remaining active transfer sockets
-    for (final transferId in _liveTransfers.toList()) {
+    for (final transferId in _transfers.keys.toList()) {
       cancelTransfer(transferId); // Use cancelTransfer for consistent cleanup
     }
-    _activeTransfers.clear(); // Ensure map is empty
     zprint('✅ SendService disposed');
   }
 }

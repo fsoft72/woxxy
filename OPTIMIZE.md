@@ -31,7 +31,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [ ] **Send queue state is spread over five booleans** - `_processing`, `_isTransferring`, `_preparing`, `_transferComplete` and `_disposed` are set in several places (`addFiles`, `_processQueue`, `cancelAll`, `_onSuccess`) and only some combinations are valid; replace the first four with one `SendPhase` enum (`idle`, `preparing`, `sending`, `completed`) so the UI reads a single value.
   - File(s): `lib/services/send_queue_controller.dart`, `lib/screens/peer_details.dart`
 
-- [ ] **`sendFile` and `sendAvatar` duplicate the transfer lifecycle** - both add the id to `_liveTransfers`, validate the local IP, build metadata and remove the id in `finally`, and the class keeps two parallel collections (`_liveTransfers` and `_activeTransfers`) for one concept; extract a private `_runTransfer(id, body)` helper and merge the collections into one `Map<String, Socket?>`.
+- [x] **`sendFile` and `sendAvatar` duplicate the transfer lifecycle** - both add the id to `_liveTransfers`, validate the local IP, build metadata and remove the id in `finally`, and the class keeps two parallel collections (`_liveTransfers` and `_activeTransfers`) for one concept; extract a private `_runTransfer(id, body)` helper and merge the collections into one `Map<String, Socket?>`.
   - File(s): `lib/services/network/send_service.dart`
 
 - [x] **Avatars take a round trip through the disk** - incoming avatars (at most 10 MB) are written to a temp folder by `FileTransferManager`, read back with `readAsBytes`, hashed again with `md5.convert` and deleted; collect them in memory in `ReceiveService` and reuse the checksum already verified by `FileTransfer`.

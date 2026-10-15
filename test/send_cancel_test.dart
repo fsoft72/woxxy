@@ -42,6 +42,42 @@ void main() {
     expect(sender.cancelTransfer('prep'), isFalse, reason: 'the finished transfer is no longer known');
   });
 
+  test('a send that fails or has no local address leaves no running transfer', () async {
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1'));
+    await expectLater(sender.sendFile('missing', path.join(tmp.path, 'missing.bin'), peer), throwsA(isA<Exception>()));
+    expect(sender.runningTransfers, 0);
+
+    final file = File(path.join(tmp.path, 'b.bin'))..writeAsBytesSync([1]);
+    final offline = SendService(identity: LocalIdentity(profileImagePath: file.path));
+    await expectLater(offline.sendFile('no-ip', file.path, peer), throwsA(isA<Exception>()));
+    expect(await offline.sendAvatar(peer), isFalse);
+    expect(offline.runningTransfers, 0);
+    expect(connections, 0);
+  });
+
+  test('dispose cancels a send that is waiting for the receiver', () async {
+    final silent = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final accepted = <Socket>[];
+    silent.listen(accepted.add); // Accepts and never answers
+    final file = File(path.join(tmp.path, 'c.bin'))..writeAsBytesSync(List.filled(1000, 3));
+    final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1'));
+    final slowPeer = Peer(name: 'slow', id: '127.0.0.1', address: InternetAddress.loopbackIPv4, port: silent.port);
+
+    final done = sender.sendFile('waiting', file.path, slowPeer);
+    final failure = expectLater(done, throwsA(isA<Exception>()));
+    while (accepted.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await sender.dispose();
+    await failure;
+
+    expect(sender.runningTransfers, 0);
+    for (final socket in accepted) {
+      socket.destroy();
+    }
+    await silent.close();
+  });
+
   test('cancelling an unknown transfer returns false', () {
     final sender = SendService(identity: LocalIdentity(ipAddress: '127.0.0.1'));
     expect(sender.cancelTransfer('nope'), isFalse);
