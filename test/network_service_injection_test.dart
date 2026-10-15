@@ -86,4 +86,33 @@ void main() {
     expect(calls, containsAllInOrder(['server.start', 'discovery.start', 'send t1', 'cancel t1']));
     expect(calls, containsAll(['server.dispose', 'discovery.dispose']));
   });
+
+  test('the announced address is listenable and follows a network change', () async {
+    final calls = <String>[];
+    final identity = LocalIdentity();
+    final avatars = AvatarStore();
+    final peers = PeerManager(avatarStore: avatars);
+    final service = NetworkService(
+      fileTransferManager: FileTransferManager(downloadPath: Directory.systemTemp.path),
+      avatarStore: avatars,
+      ipResolver: () async => '192.168.1.50',
+      peerManager: peers,
+      identity: identity,
+      sendService: _FakeSend(calls, identity),
+      serverService: _FakeServer(calls),
+      discoveryService: _FakeDiscovery(calls, peers, avatars, identity),
+    );
+    final seen = <String?>[];
+    service.ipAddressListenable.addListener(() => seen.add(service.ipAddressListenable.value));
+    expect(service.ipAddressListenable.value, isNull);
+
+    await service.start(User(username: 'Ann', defaultDownloadDirectory: ''));
+    service.handleIpChanged('192.168.1.50', '10.0.0.9');
+    service.handleIpChanged('10.0.0.9', null); // Network lost: the last address stays
+
+    expect(seen, ['192.168.1.50', '10.0.0.9']);
+    expect(identity.ipAddress, '10.0.0.9');
+    expect(service.currentIpAddress, '10.0.0.9');
+    await service.dispose();
+  });
 }

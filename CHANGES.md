@@ -1,5 +1,9 @@
 # Changes Log
 
+## Update the app bar IP when the network changes
+
+`NetworkService` exposes the announced address as `ipAddressListenable` (set on start and on every IP change, disposed with the service), and `HomePage` draws the IP row in a `ValueListenableBuilder`, so a Wi-Fi switch shows the new address. The IP change handler is `@visibleForTesting handleIpChanged`. Test in `test/network_service_injection_test.dart`.
+
 ## Keep sending when the peer page is closed
 
 The new `SendQueues` (in `AppServices`, disposed when the app quits) owns one `SendQueueController` per peer id and sends every file to the newest announcement of the peer. `PeerDetailPage` receives its queue from `HomeContent`, only shows it and shows its messages through the new `SendQueueController.messages` stream, so pressing Back no longer cancels the files being sent, and reopening the page shows the running queue. Tests in `test/send_queues_test.dart` (plus the home and peer page tests).

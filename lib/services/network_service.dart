@@ -57,6 +57,9 @@ class NetworkService {
   // Peers are exposed through PeerManager
   final _fileReceivedController = StreamController<FileReceivedEvent>.broadcast();
 
+  // The announced address, for screens that show it
+  final ValueNotifier<String?> _ipAddress = ValueNotifier<String?>(null);
+
   // --- Public Streams & Getters ---
   /// Avatar cache shared with the widgets that draw peer avatars
   AvatarStore get avatarStore => _avatarStore;
@@ -64,8 +67,11 @@ class NetworkService {
   List<Peer> get currentPeers => _peerManager.currentPeers;
   /// Emits one typed event for every file that was received and verified
   Stream<FileReceivedEvent> get onFileReceived => _fileReceivedController.stream;
-  // Expose current IP address if needed externally
+  /// Address announced to the peers, null until the service started
   String? get currentIpAddress => _identity.ipAddress;
+
+  /// [currentIpAddress] as a listenable: it changes when the device moves to another network.
+  ValueListenable<String?> get ipAddressListenable => _ipAddress;
   /// Name announced to the peers
   @visibleForTesting
   String get username => _identity.username;
@@ -117,7 +123,7 @@ class NetworkService {
 
     _ipMonitor = IpMonitor(
       resolver: () => _ipResolver(),
-      onChanged: _handleIpChanged,
+      onChanged: handleIpChanged,
     );
 
     _discoveryService = discoveryService ??
@@ -141,7 +147,7 @@ class NetworkService {
         throw NetworkStartException('No local network address found. Connect to a Wi-Fi or Ethernet network and retry.');
       }
       zprint('  -> Determined IP: $ipAddress');
-      _identity.ipAddress = ipAddress;
+      _setIpAddress(ipAddress);
 
       // Announce the user's name and avatar
       _loadCurrentUserDetails(user);
@@ -176,6 +182,7 @@ class NetworkService {
     await _receiveService.dispose(); // ReceiveService dispose might be minimal
     await _sendService.dispose(); // Ensure active transfers are cancelled
     await _fileReceivedController.close(); // Close streams managed here
+    _ipAddress.dispose();
     zprint('✅ NetworkService Facade disposed');
   }
 
@@ -215,12 +222,13 @@ class NetworkService {
 
   /// Reacts to a changed local IP: announce the new address and re-bind discovery.
   /// Losing the network entirely (null) keeps the old services; they resume on the next change.
-  void _handleIpChanged(String? oldIp, String? newIp) {
+  @visibleForTesting
+  void handleIpChanged(String? oldIp, String? newIp) {
     if (newIp == null) {
       zprint('⚠️ Network lost. Waiting for a new address.');
       return;
     }
-    _identity.ipAddress = newIp;
+    _setIpAddress(newIp);
     _discoveryService.restart().catchError((Object e) => zprint('❌ Could not restart discovery after IP change: $e'));
   }
 
@@ -230,6 +238,12 @@ class NetworkService {
     zprint('🎉 Facade notified: File received from ${event.senderUsername} at ${event.filePath}');
     if (_fileReceivedController.isClosed) return;
     _fileReceivedController.add(event);
+  }
+
+  /// Stores the local address in the identity (read by the services) and tells the screens.
+  void _setIpAddress(String ip) {
+    _identity.ipAddress = ip;
+    _ipAddress.value = ip;
   }
 
   void _loadCurrentUserDetails(User user) {

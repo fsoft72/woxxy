@@ -141,20 +141,23 @@ class _HomePageState extends State<HomePage> {
                     overflow: TextOverflow.ellipsis, // Prevent title overflow
                   ),
                   const SizedBox(height: 4), // Add space between title and info row
-                  Row(children: [
-                    if (_networkService.currentIpAddress != null) // Use the public getter
-                      // Use Flexible to allow text wrapping or ellipsis for IP
-                      Flexible(
-                        child: Text(
-                          'IP: ${_networkService.currentIpAddress}', // Use the public getter
-                          style: Theme.of(context).textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
+                  // Rebuilt when the device moves to another network
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _networkService.ipAddressListenable,
+                    builder: (context, ip, _) => Row(children: [
+                      if (ip != null) ...[
+                        Flexible(
+                          child: Text(
+                            'IP: $ip',
+                            style: Theme.of(context).textTheme.bodySmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    // Add spacing only if IP is shown
-                    if (_networkService.currentIpAddress != null) const SizedBox(width: 16), // Use the public getter
-                    Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
-                  ]),
+                        const SizedBox(width: 16),
+                      ],
+                      Text('V: $APP_VERSION', style: Theme.of(context).textTheme.bodySmall),
+                    ]),
+                  ),
                 ],
               ),
             ),

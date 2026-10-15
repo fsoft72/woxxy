@@ -20,7 +20,7 @@ Nothing critical found: the analyzer is clean, transfers are size-limited, sanit
 - [x] **Transfer metadata is an untyped map with string keys spread over four files** - `'name'`, `'size'`, `'type'`, `'md5Checksum'`, `'senderUsername'`, `'senderIp'` and `'transferId'` are written in `SendService` and read with ad hoc casts and fallbacks in `ReceiveService._acceptTransfer`, `_onConnectionClosed` and `FileTransferManager.add`; introduce a `TransferMetadata` class with `toJson`/`fromJson` (validation in one place) and pass it instead of `Map<String, dynamic>`.
   - File(s): `lib/services/network/send_service.dart`, `lib/services/network/receive_service.dart`, `lib/models/file_transfer_manager.dart`, `lib/models/file_transfer.dart`
 
-- [ ] **The IP shown in the app bar never updates** - `HomePage.build` reads `_networkService.currentIpAddress` once per rebuild, but nothing rebuilds the page when `IpMonitor` reports a new address, so after a Wi-Fi switch the header shows the old IP; expose the address as a `ValueListenable<String?>` (or a stream) from `NetworkService` and wrap the header text in a `ValueListenableBuilder`.
+- [x] **The IP shown in the app bar never updates** - `HomePage.build` reads `_networkService.currentIpAddress` once per rebuild, but nothing rebuilds the page when `IpMonitor` reports a new address, so after a Wi-Fi switch the header shows the old IP; expose the address as a `ValueListenable<String?>` (or a stream) from `NetworkService` and wrap the header text in a `ValueListenableBuilder`.
   - File(s): `lib/screens/home_page.dart`, `lib/services/network_service.dart`, `lib/models/local_identity.dart`
 
 ## Medium
