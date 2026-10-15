@@ -180,11 +180,7 @@ class SendService {
     final announced = identity.profileImagePath == avatarFile.path ? identity.avatarHash : null;
     final originalMetadata = await _createFileMetadata(avatarFile, transferId, knownChecksum: announced);
     
-    return {
-      ...originalMetadata,
-      'type': TRANSFER_TYPE_AVATAR,
-      'senderIp': identity.ipAddress,
-    };
+    return {...originalMetadata, 'type': TRANSFER_TYPE_AVATAR};
   }
 
   /// Waits for the ready signal of the receiver before the file is sent.
@@ -238,7 +234,7 @@ class SendService {
       'name': filename,
       'size': fileSize,
       'senderUsername': identity.username,
-      'senderIp': identity.ipAddress,
+      'senderIp': identity.ipAddress, // Only read by older receivers, to store a received avatar
       'md5Checksum': checksum,
       'transferId': transferId,
       'type': TRANSFER_TYPE_FILE,

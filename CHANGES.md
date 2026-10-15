@@ -1,5 +1,9 @@
 # Changes Log
 
+## Store received avatars under the address of the connection
+
+`ReceiveService` stores a received avatar under the source address of the socket instead of the `senderIp` written in the metadata, so a host on the LAN can no longer replace the avatar of another peer. The sender still writes `senderIp` (older receivers need it) but no longer repeats it in the avatar metadata. Test in `test/transfer_loopback_test.dart`.
+
 ## Regenerate OPTIMIZE.md with a new code analysis
 
 The previous list was done and removed, so `OPTIMIZE.md` was rewritten from a fresh read of `lib/`. It has 0 Critical, 5 High, 7 Medium and 9 Low items (the main ones: leaving the peer page cancels the sends, every sent file is read twice for the MD5, received avatars are stored under the IP written in the metadata, untyped transfer metadata, the app bar IP never updates). No code was changed.

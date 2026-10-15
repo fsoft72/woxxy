@@ -86,6 +86,7 @@ class ReceiveService {
       }
 
       outcome = await _onConnectionClosed(
+        sourceIp: sourceIp,
         key: fileTransferKey,
         info: receivedInfo,
         receivedBytes: receivedBytes,
@@ -179,7 +180,10 @@ class ReceiveService {
   /// Runs when the sender closes the connection: finalizes or cleans up the transfer.
   /// Returns true when the file was stored and verified, false when it was not, and null when
   /// there was no accepted transfer to report about.
+  /// A received avatar is stored under [sourceIp], the address the connection really came from,
+  /// never under an address written in the metadata (any host could claim to be another peer).
   Future<bool?> _onConnectionClosed({
+    required String sourceIp,
     required String? key,
     required Map<String, dynamic>? info,
     required int receivedBytes,
@@ -213,12 +217,7 @@ class ReceiveService {
 
     final transferType = info['type'] as String? ?? TRANSFER_TYPE_FILE;
     if (transferType == TRANSFER_TYPE_AVATAR) {
-      final senderIp = info['senderIp'] as String?;
-      if (senderIp != null) {
-        await _processReceivedAvatar(fileTransfer.destinationFilename, senderIp);
-      } else {
-        zprint("⚠️ Avatar received but sender IP missing in metadata.");
-      }
+      await _processReceivedAvatar(fileTransfer.destinationFilename, sourceIp);
     } else {
       zprint('✅ File transfer finalized successfully.');
       onFileReceivedCallback?.call(FileReceivedEvent(

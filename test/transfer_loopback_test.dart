@@ -115,6 +115,25 @@ void main() {
     expect(avatars.hasAvatar('127.0.0.1'), isTrue);
   });
 
+  test('an avatar is stored under the address it came from, not the one claimed in the metadata', () async {
+    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.port);
+    socket.add(encodeMetadataFrame({
+      'name': 'fake.png',
+      'size': _png.length,
+      'senderUsername': 'mallory',
+      'senderIp': '10.9.9.9', // Pretends to be another peer
+      'md5Checksum': md5.convert(_png).toString(),
+      'transferId': 'spoof-1',
+      'type': TRANSFER_TYPE_AVATAR,
+    }));
+    socket.add(_png);
+    await socket.flush();
+    await socket.close();
+
+    await waitFor(() => avatars.hasAvatar('127.0.0.1'));
+    expect(avatars.hasAvatar('10.9.9.9'), isFalse);
+  });
+
   test('metadata and data arriving back to back are processed once and in order', () async {
     final data = List.generate(200000, (i) => (i * 13) % 256);
     final meta = {
