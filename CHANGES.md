@@ -1,5 +1,9 @@
 # Changes Log
 
+## Latest Android toolchain
+
+- Gradle 9.8.2, Android Gradle Plugin 9.5.0 and Kotlin 2.3.21 (Flutter warned that AGP 8.13 and Kotlin 2.2.20 will be dropped). Debug APK and release bundle build without warnings
+
 ## Gradle 9.1.0 and Android Gradle Plugin 8.13.0
 
 - Flutter warned that Gradle 8.14 support will be dropped: the wrapper now uses Gradle 9.1.0 and `settings.gradle` uses AGP 8.13.0
