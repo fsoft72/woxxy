@@ -1,5 +1,11 @@
 # Changes Log
 
+## Gradle 9.1.0 and Android Gradle Plugin 8.13.0
+
+- Flutter warned that Gradle 8.14 support will be dropped: the wrapper now uses Gradle 9.1.0 and `settings.gradle` uses AGP 8.13.0
+- AGP 8.13 checks the `compileSdk` of every plugin against its androidx dependencies and failed on old plugins (`desktop_drop`, `network_info_plus`), so `android/build.gradle` sets `compileSdk = 36` on all Android library subprojects
+- `flutter build apk --debug` and `flutter build appbundle --release` both build
+
 ## Target API level 36 on Android
 
 - `targetSdkVersion` goes from 35 to 36 (required by Google Play) and `versionCode` from 109 to 110 for the new upload
