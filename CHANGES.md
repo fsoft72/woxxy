@@ -1,5 +1,15 @@
 # Changes Log
 
+## Target API level 36 on Android
+
+- `targetSdkVersion` goes from 35 to 36 (required by Google Play) and `versionCode` from 109 to 110 for the new upload
+
+## Linux tray icon sent as pixels
+
+- Some Linux tray hosts (OpusDM) showed a broken icon: `tray_manager` goes through libappindicator, which only sends the icon as a file path in `IconName`
+- New `lib/bootstrap/linux_tray.dart` (`LinuxTray`) publishes a StatusNotifierItem and a dbusmenu on the session bus with the `dbus` package, sending the icon as `IconPixmap` (22, 32 and 64 px, decoded from `assets/icons/head.png`)
+- `DesktopShell` uses it on Linux (menu: Open, Quit; left click shows the window). Windows and macOS still use `tray_manager`
+
 ## Copy the Linux release bundle to /ramdisk
 
 - `work/scripts/build_linux.py` now copies the release bundle (executable, lib/ and data/) to `/ramdisk/` at the end of the build

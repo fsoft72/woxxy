@@ -9,11 +9,15 @@ import 'package:woxxy/config/desktop_constants.dart';
 import 'package:woxxy/funcs/bundled_assets.dart';
 import 'package:woxxy/funcs/debug.dart';
 
+import 'linux_tray.dart';
+
 /// Window and system tray setup for the desktop platforms.
 class DesktopShell {
   static const String _TOOLTIP = 'Woxxy';
   static const String _ICON_PNG = 'assets/icons/head.png';
   static const String _ICON_ICO = 'assets/icons/head.ico';
+
+  static LinuxTray? _linuxTray;
 
   /// True on Windows, Linux and macOS.
   static bool get isDesktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
@@ -65,44 +69,67 @@ class DesktopShell {
   /// Creates the tray icon and menu, then shows the window (also when the tray fails).
   static Future<void> _setupTrayAndShow(Future<void> Function()? onQuit) async {
     try {
-      final iconPath = await _resolveTrayIconPath();
-      zprint("🔧 Using tray icon path: $iconPath");
-
-      await trayManager.destroy(); // Ensure clean state
-      await Future.delayed(TRAY_RESET_DELAY);
-
-      final menu = Menu(items: [
-        MenuItem(
-          label: 'Open',
-          onClick: (menuItem) async {
-            await windowManager.show();
-            await windowManager.focus();
-          },
-        ),
-        MenuItem.separator(),
-        MenuItem(
-          label: 'Quit',
-          onClick: (menuItem) async {
-            zprint("🛑 Quit requested from tray menu.");
-            try {
-              await onQuit?.call();
-            } catch (e) {
-              zprint('⚠️ Error while shutting down: $e');
-            }
-            await windowManager.destroy(); // Close window properly
-            exit(0);
-          },
-        ),
-      ]);
-
-      await _applyTray(iconPath, menu);
+      if (Platform.isLinux) {
+        await _setupLinuxTray(onQuit);
+      } else {
+        await _setupPluginTray(onQuit);
+      }
       zprint("✅ Tray setup complete.");
     } catch (e) {
       zprint('❌ Error setting up tray: $e');
     }
 
+    await _showWindow();
+  }
+
+  /// Linux tray: sends the icon as pixels, because some tray hosts cannot load a file path icon.
+  static Future<void> _setupLinuxTray(Future<void> Function()? onQuit) async {
+    _linuxTray = LinuxTray(
+      title: _TOOLTIP,
+      iconAsset: _ICON_PNG,
+      onActivate: _showWindow,
+      items: [
+        const LinuxTrayItem(label: 'Open', onClick: _showWindow),
+        const LinuxTrayItem.separator(),
+        LinuxTrayItem(label: 'Quit', onClick: () => _quit(onQuit)),
+      ],
+    );
+    await _linuxTray!.start();
+  }
+
+  /// Windows and macOS tray, through the tray_manager plugin.
+  static Future<void> _setupPluginTray(Future<void> Function()? onQuit) async {
+    final iconPath = await _resolveTrayIconPath();
+    zprint("🔧 Using tray icon path: $iconPath");
+
+    await trayManager.destroy(); // Ensure clean state
+    await Future.delayed(TRAY_RESET_DELAY);
+
+    final menu = Menu(items: [
+      MenuItem(label: 'Open', onClick: (menuItem) => _showWindow()),
+      MenuItem.separator(),
+      MenuItem(label: 'Quit', onClick: (menuItem) => _quit(onQuit)),
+    ]);
+
+    await _applyTray(iconPath, menu);
+  }
+
+  /// Shows the main window and brings it to the front.
+  static Future<void> _showWindow() async {
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  /// Shuts the app down: [onQuit] first, then the window, then the process.
+  static Future<void> _quit(Future<void> Function()? onQuit) async {
+    zprint("🛑 Quit requested from tray menu.");
+    try {
+      await onQuit?.call();
+    } catch (e) {
+      zprint('⚠️ Error while shutting down: $e');
+    }
+    await windowManager.destroy(); // Close window properly
+    exit(0);
   }
 
   /// Windows prefers .ico (falling back to .png), the other platforms use the .png asset.
