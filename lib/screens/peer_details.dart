@@ -70,10 +70,10 @@ class _PeerDetailPageState extends State<PeerDetailPage> {
 
   Future<void> _pickFiles() async {
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null) return;
+      final files = await FilePicker.pickFiles();
+      if (files.isEmpty) return;
 
-      await _queue.addFiles(result.files.map((file) => file.path).whereType<String>().toList());
+      await _queue.addFiles(files.map((file) => file.path).whereType<String>().toList());
     } catch (e) {
       if (mounted) showSnackbar(context, 'Error picking files: $e');
     }

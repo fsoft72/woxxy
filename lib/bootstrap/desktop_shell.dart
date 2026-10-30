@@ -3,7 +3,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:woxxy/config/desktop_constants.dart';
 import 'package:woxxy/funcs/bundled_assets.dart';

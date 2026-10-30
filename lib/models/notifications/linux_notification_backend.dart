@@ -41,7 +41,7 @@ class LinuxNotificationBackend implements NotificationBackend {
   Future<bool> init(NotificationClickHandler onClick) async {
     final iconPath = _iconPath = _findIcon();
     final initialized = await _plugin.initialize(
-      InitializationSettings(
+      settings: InitializationSettings(
         linux: LinuxInitializationSettings(
           defaultActionName: 'Open notification',
           defaultIcon: iconPath != null ? FilePathLinuxIcon(iconPath) : null,
@@ -57,10 +57,10 @@ class LinuxNotificationBackend implements NotificationBackend {
   Future<void> show({required int id, required String title, required String body, String? payload}) async {
     _lastPayload = payload;
     await _plugin.show(
-      id,
-      title,
-      body,
-      NotificationDetails(linux: linuxNotificationDetails(_iconPath)),
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(linux: linuxNotificationDetails(_iconPath)),
     );
   }
 

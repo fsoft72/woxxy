@@ -11,7 +11,7 @@ class _RecordingPlugin implements FlutterLocalNotificationsPlugin {
   dynamic noSuchMethod(Invocation invocation) {
     if (invocation.memberName == #initialize) return Future<bool?>.value(true);
     if (invocation.memberName == #show) {
-      shown.add(invocation.positionalArguments[3] as NotificationDetails?);
+      shown.add(invocation.namedArguments[#notificationDetails] as NotificationDetails?);
       return Future<void>.value();
     }
     return super.noSuchMethod(invocation);

@@ -62,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _pickImage() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       // SVG is not offered: peers decode avatars as raster images and would reject it
       allowedExtensions: [
@@ -72,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
 
-    final pickedPath = result?.files.single.path;
+    final pickedPath = picked?.path;
     if (pickedPath == null) return;
 
     final String storedPath;
@@ -90,7 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _pickDirectory() async {
-    final selectedDirectory = await (widget.directoryPicker ?? FilePicker.platform.getDirectoryPath)();
+    final selectedDirectory = await (widget.directoryPicker ?? FilePicker.getDirectoryPath)();
     if (selectedDirectory == null || !mounted) return;
 
     setState(() {

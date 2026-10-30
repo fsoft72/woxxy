@@ -1,5 +1,12 @@
 # Changes Log
 
+## Upgrade all dependencies
+
+- Every pub dependency is on its latest version, including the majors: `file_picker` 13, `flutter_local_notifications` 22, `network_info_plus` 8, `window_manager` 0.5, `tray_manager` 0.8, `desktop_drop` 0.8, `dbus` 0.8, `rxdart` 0.28, `flutter_lints` 6
+- `file_picker` is static now (`FilePicker.pickFile`, `pickFiles` returns a list), `flutter_local_notifications` takes named `settings`, `id`, `title`, `body` and `notificationDetails`
+- `tray_manager` 0.8 moved its old API to `package:tray_manager/legacy.dart`, which Windows and macOS keep using
+- Android: `desugar_jdk_libs` 2.1.5 (needed by `flutter_local_notifications` 22). The `compileSdk = 36` override for plugins is not needed any more and was removed
+
 ## Latest Android toolchain
 
 - Gradle 9.8.2, Android Gradle Plugin 9.5.0 and Kotlin 2.3.21 (Flutter warned that AGP 8.13 and Kotlin 2.2.20 will be dropped). Debug APK and release bundle build without warnings

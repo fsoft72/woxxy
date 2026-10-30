@@ -11,7 +11,7 @@ class MacOSNotificationBackend implements NotificationBackend {
   Future<bool> init(NotificationClickHandler onClick) async {
     zprint('🍎 Requesting macOS notification permissions...');
     final initialized = await _plugin.initialize(
-      const InitializationSettings(
+      settings: const InitializationSettings(
         macOS: DarwinInitializationSettings(
           requestAlertPermission: true,
           requestBadgePermission: true,
@@ -33,6 +33,6 @@ class MacOSNotificationBackend implements NotificationBackend {
       threadIdentifier: 'file_transfer',
       interruptionLevel: InterruptionLevel.active,
     );
-    return _plugin.show(id, title, body, const NotificationDetails(macOS: details), payload: payload);
+    return _plugin.show(id: id, title: title, body: body, notificationDetails: const NotificationDetails(macOS: details), payload: payload);
   }
 }

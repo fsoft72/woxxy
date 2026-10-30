@@ -41,7 +41,7 @@ class AndroidNotificationBackend implements NotificationBackend {
     await android.createNotificationChannel(androidNotificationChannel);
 
     final initialized = await _plugin.initialize(
-      const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+      settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
       onDidReceiveNotificationResponse: (response) => onClick(response.payload),
     );
     if (!(initialized ?? false)) return false;
@@ -53,6 +53,12 @@ class AndroidNotificationBackend implements NotificationBackend {
 
   @override
   Future<void> show({required int id, required String title, required String body, String? payload}) {
-    return _plugin.show(id, title, body, const NotificationDetails(android: androidNotificationDetails), payload: payload);
+    return _plugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(android: androidNotificationDetails),
+      payload: payload,
+    );
   }
 }
