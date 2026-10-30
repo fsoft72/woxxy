@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'funcs/android_public_storage.dart';
 import 'models/avatars.dart';
 import 'models/file_transfer_manager.dart';
 import 'models/history.dart';
@@ -56,7 +59,11 @@ class AppServices {
     final settingsService = SettingsService();
     final fileTransferManager = FileTransferManager(downloadPath: downloadPath);
     final avatarStore = AvatarStore();
-    final notificationManager = NotificationManager();
+    // Android keeps received files in a public folder, so they can be opened from outside the app
+    final PublicStorage? publicStorage =
+        Platform.isAndroid ? AndroidPublicStorage() : null;
+    final notificationManager =
+        NotificationManager(publicStorage: publicStorage);
     final networkService = NetworkService(
       fileTransferManager: fileTransferManager,
       avatarStore: avatarStore,
@@ -74,10 +81,13 @@ class AppServices {
         events: networkService.onFileReceived,
         history: history,
         notificationManager: notificationManager,
+        publicStorage: publicStorage,
       ),
       sendQueues: SendQueues(
         networkService,
-        onFileSent: SentFilesHandler(history: history, notificationManager: notificationManager).handle,
+        onFileSent: SentFilesHandler(
+                history: history, notificationManager: notificationManager)
+            .handle,
       ),
     );
   }

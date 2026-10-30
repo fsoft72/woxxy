@@ -9,6 +9,12 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+// Some plugins (media_store_plus) declare a compileSdk lower than the one their androidx dependencies need
+subprojects {
+    afterEvaluate { subproject ->
+        if (subproject.plugins.hasPlugin("com.android.library")) subproject.android.compileSdk = 36
+    }
+}
 subprojects {
     project.evaluationDependsOn(":app")
 }

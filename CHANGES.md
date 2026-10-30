@@ -1,5 +1,13 @@
 # Changes Log
 
+## Open received files on Android
+
+- Received files on Android are moved to the public `Download/Woxxy` folder through MediaStore (`media_store_plus`, no storage permission needed), so other apps and the file manager can reach them. If the move fails the file stays in the private folder, as before
+- Clicking a "File Received" notification opens the file with the app chosen for its type (`android_intent_plus`, MIME type from `mime`)
+- The folder icon in the History tab opens `Download/Woxxy` in the default file manager, falling back to the Downloads list
+- New `lib/funcs/android_public_storage.dart` (`PublicStorage`, `AndroidPublicStorage`), used by `ReceivedFilesHandler`, `NotificationManager` and `openFileLocation`. Tests in `test/received_files_handler_test.dart` and `test/notification_manager_test.dart`
+- `android/build.gradle` sets `compileSdk = 36` on library subprojects again, because `media_store_plus` declares 33
+
 ## Upgrade all dependencies
 
 - Every pub dependency is on its latest version, including the majors: `file_picker` 13, `flutter_local_notifications` 22, `network_info_plus` 8, `window_manager` 0.5, `tray_manager` 0.8, `desktop_drop` 0.8, `dbus` 0.8, `rxdart` 0.28, `flutter_lints` 6

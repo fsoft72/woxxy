@@ -1,22 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:woxxy/config/transfer_constants.dart';
+import 'package:woxxy/funcs/android_public_storage.dart';
 import 'package:woxxy/funcs/debug.dart';
 import 'package:woxxy/funcs/file_opener.dart';
 
 import 'notifications/notification_backend.dart';
 import 'notifications/platform_notification_backend.dart';
 
-/// Shows system notifications through the backend of the current platform and opens the
-/// download folder when a "file received" notification is clicked.
+/// Shows system notifications through the backend of the current platform. Clicking a "file
+/// received" notification opens the download folder, or the file itself when there is a [PublicStorage]
+/// (Android).
 class NotificationManager {
   /// Creates a manager. [backend] and [directoryOpener] default to the platform implementations
-  /// and are injectable for tests.
+  /// and are injectable for tests. With a [publicStorage] the notifications carry the path of the
+  /// file and clicking one opens that file.
   NotificationManager({
     NotificationBackend? backend,
     Future<void> Function(String dirPath)? directoryOpener,
+    PublicStorage? publicStorage,
   })  : _backendOverride = backend,
-        _directoryOpener = directoryOpener;
+        _directoryOpener = directoryOpener,
+        _publicStorage = publicStorage;
+
+  final PublicStorage? _publicStorage;
 
   final NotificationBackend? _backendOverride;
 
@@ -82,7 +89,7 @@ class NotificationManager {
     final body = 'Received $fileName (${fileSizeMB.toStringAsFixed(2)} MB) from $senderUsername\n'
         'Speed: ${speedMBps.toStringAsFixed(2)} MB/s';
 
-    return showNotification('File Received', body, payload: path.dirname(filePath));
+    return showNotification('File Received', body, payload: _payloadFor(filePath));
   }
 
   /// Shows the result of a send: "File Sent" with size and speed, or "Send Failed" with the
@@ -97,18 +104,28 @@ class NotificationManager {
     final fileName = path.basename(filePath);
     if (errorMessage != null) {
       return showNotification('Send Failed', 'Could not send $fileName to $receiverName\n$errorMessage',
-          payload: path.dirname(filePath));
+          payload: _payloadFor(filePath));
     }
     final body = 'Sent $fileName (${fileSizeMB.toStringAsFixed(2)} MB) to $receiverName\n'
         'Speed: ${speedMBps.toStringAsFixed(2)} MB/s';
-    return showNotification('File Sent', body, payload: path.dirname(filePath));
+    return showNotification('File Sent', body, payload: _payloadFor(filePath));
   }
 
-  /// Opens the folder in [payload] when a notification is clicked. Ignores empty payloads.
+  /// What a click on the notification of [filePath] should open: the file with a [PublicStorage],
+  /// otherwise its folder.
+  String _payloadFor(String filePath) => _publicStorage == null ? path.dirname(filePath) : filePath;
+
+  /// Opens the file or folder in [payload] when a notification is clicked. Ignores empty payloads.
   @visibleForTesting
   void handleNotificationClick(String? payload) {
     zprint('🔔 Notification clicked, payload: $payload');
     if (payload == null || payload.isEmpty) return;
+
+    final storage = _publicStorage;
+    if (storage != null) {
+      storage.openFile(payload);
+      return;
+    }
     (_directoryOpener ?? openDirectory)(payload);
   }
 }

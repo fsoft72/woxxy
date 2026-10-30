@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:woxxy/funcs/android_public_storage.dart';
 import 'package:woxxy/funcs/debug.dart';
 
 /// Runs an external program; replaceable in tests.
@@ -36,24 +37,17 @@ Future<bool> openDirectory(String dirPath, {@visibleForTesting ProcessRunner run
 
 /// Opens the folder containing the specified file (and selects the file where the platform can).
 /// Works on Android, iOS, Windows, macOS and Linux.
-Future<void> openFileLocation(String filePath, {@visibleForTesting ProcessRunner run = Process.run}) async {
+Future<void> openFileLocation(
+  String filePath, {
+  @visibleForTesting ProcessRunner run = Process.run,
+  @visibleForTesting PublicStorage? publicStorage,
+}) async {
   if (filePath.isEmpty) return;
 
   try {
     if (Platform.isAndroid) {
-      // Android implementation using Storage Access Framework
-      final Uri fileUri = Uri.file(filePath);
-      if (!await launchUrl(
-        fileUri,
-        mode: LaunchMode.externalApplication,
-      )) {
-        // Fallback: try to open the file directly
-        await launchUrl(
-          Uri.parse(
-              'content://com.android.externalstorage.documents/document/primary:${filePath.replaceFirst(RegExp(r'^/storage/emulated/0/'), '')}'),
-          mode: LaunchMode.externalApplication,
-        );
-      }
+      // Received files live in the public Download/Woxxy folder, shown by the default file manager
+      await (publicStorage ?? AndroidPublicStorage()).openFolder();
     } else if (Platform.isIOS) {
       // iOS doesn't really support folder browsing, so just open the file
       await launchUrl(Uri.file(filePath));

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:woxxy/funcs/android_public_storage.dart';
 import 'package:woxxy/models/notification_manager.dart';
 import 'package:woxxy/models/notifications/notification_backend.dart';
 
@@ -23,6 +24,22 @@ class _FakeBackend implements NotificationBackend {
     if (showError != null) throw showError!;
     shown.add({'id': id, 'title': title, 'body': body, 'payload': payload});
   }
+}
+
+class _FakePublicStorage implements PublicStorage {
+  final List<String> opened = [];
+
+  @override
+  Future<String?> save(String privatePath) async => privatePath;
+
+  @override
+  Future<bool> openFile(String filePath) async {
+    opened.add(filePath);
+    return true;
+  }
+
+  @override
+  Future<bool> openFolder() async => true;
 }
 
 void main() {
@@ -91,5 +108,23 @@ void main() {
     backend.onClick!(null);
 
     expect(opened, ['/home/me/Downloads']);
+  });
+
+  test('with a public storage a received file notification carries the file and clicking it opens the file', () async {
+    final storage = _FakePublicStorage();
+    final publicManager =
+        NotificationManager(backend: backend, directoryOpener: (dir) async => opened.add(dir), publicStorage: storage);
+
+    await publicManager.showFileReceivedNotification(
+      filePath: '/storage/emulated/0/Download/Woxxy/a.txt',
+      senderUsername: 'bob',
+      fileSizeMB: 1,
+      speedMBps: 1,
+    );
+    expect(backend.shown.single['payload'], '/storage/emulated/0/Download/Woxxy/a.txt');
+
+    backend.onClick!(backend.shown.single['payload'] as String?);
+    expect(storage.opened, ['/storage/emulated/0/Download/Woxxy/a.txt']);
+    expect(opened, isEmpty);
   });
 }
