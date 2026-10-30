@@ -1,5 +1,10 @@
 # Changes Log
 
+## Linux AppImage
+
+- New `scripts/build_appimage.sh` builds the Linux release bundle and packages it as `build/appimage/Woxxy-<arch>.AppImage` (downloads and caches `appimagetool` in `build/appimage/`)
+- `linux/woxxy.desktop`: removed `Actions=open;`, which had no matching `[Desktop Action open]` group and made `appimagetool` reject the file
+
 ## Open received files on Android
 
 - Received files on Android are moved to the public `Download/Woxxy` folder through MediaStore (`media_store_plus`, no storage permission needed), so other apps and the file manager can reach them. If the move fails the file stays in the private folder, as before

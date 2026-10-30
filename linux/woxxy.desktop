@@ -7,4 +7,3 @@ Icon=woxxy
 Terminal=false
 Categories=Network;FileTransfer;
 X-GNOME-UsesNotifications=true
-Actions=open;
